@@ -27,7 +27,7 @@ test('core game flows work without browser errors', async ({ page }) => {
   expect(pageErrors).toEqual([]);
 });
 
-test('V4 smart coach, items, backup and account entry work', async ({ page }) => {
+test('V4 smart coach and items work without retired cloud controls', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
@@ -38,10 +38,7 @@ test('V4 smart coach, items, backup and account entry work', async ({ page }) =>
   const mixedMode = page.locator('.v4-mode[data-v4-mode="mixed"]');
   await expect(mixedMode).toBeVisible();
 
-  const downloadPromise = page.waitForEvent('download');
-  await page.locator('[data-v4-action="export"]').click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/teacher-quest-backup/);
+  await expect(page.locator('[data-v4-action="export"]')).toHaveCount(0);
 
   await mixedMode.click();
   await expect(page.locator('.v4-option')).toHaveCount(4);
@@ -50,10 +47,7 @@ test('V4 smart coach, items, backup and account entry work', async ({ page }) =>
   await page.locator('.v4-option:not(.eliminated)').first().click();
   await expect(page.locator('.v4-feedback')).toBeVisible();
 
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.locator('#cloudAccountBtn').click();
-  await expect(page.locator('#modal')).toBeVisible();
-  await expect(page.getByText('ยังต้องใส่ค่าจาก Firebase')).toBeVisible();
+  await expect(page.locator('#cloudAccountBtn')).toHaveCount(0);
 
   expect(pageErrors).toEqual([]);
 });
@@ -64,6 +58,6 @@ test('mobile layout has no horizontal overflow', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
   await expect(page.locator('.nav-list')).toBeVisible();
-  await expect(page.locator('#cloudAccountBtn')).toBeHidden();
+  await expect(page.locator('#cloudAccountBtn')).toHaveCount(0);
   await expect(page.locator('#v4CoachBtn')).toBeVisible();
 });

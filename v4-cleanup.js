@@ -2,6 +2,8 @@
   "use strict";
 
   function simplifyCoach(){
+    document.querySelector("#cloudAccountBtn")?.remove();
+
     const root = document.querySelector("#view");
     if(!root) return;
 
