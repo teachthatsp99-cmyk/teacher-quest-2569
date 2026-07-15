@@ -15,27 +15,29 @@ jobs:
         with:
           node-version: '22'
       - name: Install test dependencies
-        run: npm install --silent
+        run: npm ci --silent
       - name: Check JavaScript syntax
         run: |
           node --check data.js
           node --check app.js
           node --check v4.js
-          node --check cloud-sync.js
-          node --check firebase-config.js
           node --check scripts/validate.mjs
+          node --check tests/smoke.spec.cjs
       - name: Validate question bank and assets
         run: npm run validate
       - name: Check active V4 files are loaded
         run: |
           grep -q 'v4.css' index.html
           grep -q 'v4.js' index.html
+          test ! -e cloud-sync.js
+          test ! -e firebase-config.js
+          test ! -e v4-cleanup.js
+          test ! -e FIREBASE_SETUP.md
+          test ! -e firestore.rules
       - name: Check unwanted production copy
         run: |
           ! grep -RniE 'บันทึกความคืบหน้าอัตโนมัติในเครื่อง|เล่นได้โดยไม่ใช้อินเทอร์เน็ต|จุดที่ตรวจและแก้ไข|สิ่งที่ต่างจากไฟล์ต้นฉบับ|เว็บไซต์ PixelArt สอบครูผู้ช่วย' index.html app.js styles.css v4.js v4.css
       - name: Install Chromium
         run: npx playwright install --with-deps chromium >/dev/null 2>&1
       - name: Run browser and mobile smoke tests
-        run: |
-          python3 -m http.server 4173 >/tmp/teacher-quest-server.log 2>&1 &
-          npm run test:smoke
+        run: npm run test:smoke

@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080b1b">
 <meta name="description" content="ครูเควสต์ 2569 เกมติวสอบครูผู้ช่วยแบบ Pixel RPG พร้อมสนามฝึก ด่านบอส สนามสอบจำลอง และศูนย์ฝึกอัจฉริยะ">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ครูเควสต์ 2569 — ศึกพิชิตบรรจุ">
+<meta property="og:description" content="เกมติวสอบครูผู้ช่วยแบบ Pixel RPG พร้อมคลังข้อสอบ 400 ข้อและแหล่งอ้างอิงรายหมวด">
 <title>ครูเควสต์ 2569 — ศึกพิชิตบรรจุ</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="polish.css">
 <link rel="stylesheet" href="v4.css">
@@ -19,10 +24,10 @@
       <span><strong>ครูเควสต์ 2569</strong><small>ศึกพิชิตบรรจุ</small></span>
     </button>
     <div class="top-spacer"></div>
-    <div class="hud-chip" title="เลเวล"><span>LV</span><b id="topLevel">1</b></div>
-    <div class="hud-chip" title="เหรียญ"><span>🪙</span><b id="topCoins">0</b></div>
+    <div class="hud-chip level-chip" title="เลเวล"><span>LV</span><b id="topLevel">1</b></div>
+    <div class="hud-chip coin-chip" title="เหรียญ"><span aria-hidden="true">◉</span><b id="topCoins">0</b></div>
     <button class="top-btn" id="musicBtn" title="เปิดหรือปิดเพลง" aria-label="เปิดหรือปิดเพลง">♫</button>
-    <button class="top-btn" id="soundBtn" title="เปิดหรือปิดเสียงเอฟเฟกต์" aria-label="เปิดหรือปิดเสียงเอฟเฟกต์">🔊</button>
+    <button class="top-btn" id="soundBtn" title="เปิดหรือปิดเสียงเอฟเฟกต์" aria-label="เปิดหรือปิดเสียงเอฟเฟกต์">SFX</button>
     <button class="top-btn" id="settingsBtn" title="ตั้งค่า" aria-label="เปิดตั้งค่า">⚙</button>
   </div>
 </header>
@@ -35,16 +40,16 @@
       </div>
       <div class="meter-label"><span>EXP</span><b id="xpText">0 / 100</b></div>
       <div class="meter"><i id="xpBar"></i></div>
-      <div class="mini-stats"><span>🔥 <b id="sideStreak">0</b> คอมโบสูงสุด</span><span>⭐ <b id="sideMastery">0</b>% แม่นยำ</span></div>
+      <div class="mini-stats"><span>✦ <b id="sideStreak">0</b> คอมโบสูงสุด</span><span>★ <b id="sideMastery">0</b>% แม่นยำ</span></div>
     </section>
     <nav class="nav-list">
-      <button class="nav-btn active" data-view="home"><span>🏰</span>ฐานบัญชาการ</button>
-      <button class="nav-btn" data-view="world"><span>🗺️</span>แผนที่ภารกิจ</button>
-      <button class="nav-btn" data-view="practice"><span>⚔️</span>สนามฝึก</button>
-      <button class="nav-btn" data-view="exam"><span>⏱️</span>สนามสอบใหญ่</button>
-      <button class="nav-btn" data-view="review"><span>🧠</span>ห้องทบทวน</button>
-      <button class="nav-btn" data-view="codex"><span>📚</span>คัมภีร์ความรู้</button>
-      <button class="nav-btn" data-view="profile"><span>🏆</span>สมุดนักผจญภัย</button>
+      <button class="nav-btn active" data-view="home"><span aria-hidden="true">◆</span>ฐานบัญชาการ</button>
+      <button class="nav-btn" data-view="world"><span aria-hidden="true">◈</span>แผนที่ภารกิจ</button>
+      <button class="nav-btn" data-view="practice"><span aria-hidden="true">⚔</span>สนามฝึก</button>
+      <button class="nav-btn" data-view="exam"><span aria-hidden="true">◷</span>สนามสอบใหญ่</button>
+      <button class="nav-btn" data-view="review"><span aria-hidden="true">◎</span>ห้องทบทวน</button>
+      <button class="nav-btn" data-view="codex"><span aria-hidden="true">▤</span>คัมภีร์ความรู้</button>
+      <button class="nav-btn" data-view="profile"><span aria-hidden="true">★</span>สมุดนักผจญภัย</button>
     </nav>
     <div class="side-quest">
       <strong>ภารกิจวันนี้</strong>
@@ -67,6 +72,5 @@
 <script src="data.js"></script>
 <script src="app.js"></script>
 <script src="v4.js"></script>
-<script src="v4-cleanup.js"></script>
 </body>
 </html>

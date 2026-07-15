@@ -1,8 +1,9 @@
 {
   "name": "teacher-quest-2569",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "scripts": {
+    "test": "npm run validate && npm run test:smoke",
     "validate": "node scripts/validate.mjs",
     "test:smoke": "playwright test tests/smoke.spec.cjs --reporter=line"
   },

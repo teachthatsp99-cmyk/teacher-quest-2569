@@ -8,6 +8,7 @@ const view = $("#view");
 const modal = $("#modal");
 const modalBody = $("#modalBody");
 const toast = $("#toast");
+const modalBackground = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const STORAGE = "teacherQuest2569_v3";
 const letters = ["ก","ข","ค","ง"];
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -17,6 +18,16 @@ const clamp = (number,min,max) => Math.max(min,Math.min(max,number));
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
   "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
 })[char]);
+const questionType = question => question.category || question.type;
+const sourceMarkup = question => {
+  const verification = question.verified
+    ? ` • ตรวจข้อมูลปัจจุบัน ${esc(question.verifiedAt)}`
+    : " • มีแหล่งอ้างอิงหลักสำหรับทบทวน";
+  const link = question.sourceUrl
+    ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="เปิดแหล่งอ้างอิงของข้อ ${question.id}">เปิดต้นทาง ↗</a>`
+    : "";
+  return `แหล่งทบทวน: ${esc(question.source)}${verification}${link}`;
+};
 
 const defaults = {
   xp:0,
@@ -37,6 +48,7 @@ let examTimer = null;
 let toastTimer = null;
 let audioContext = null;
 let musicTimer = null;
+let modalPreviousFocus = null;
 
 function mergeDeep(base, incoming){
   const output = Array.isArray(base) ? base.slice() : {...base};
@@ -61,6 +73,12 @@ function loadState(){
 
 function saveState(){
   localStorage.setItem(STORAGE,JSON.stringify(state));
+  updateHud();
+}
+
+function refreshState(){
+  state = loadState();
+  resetDaily();
   updateHud();
 }
 
@@ -163,14 +181,34 @@ function showToast(message){
   toastTimer = setTimeout(() => toast.classList.remove("show"),2200);
 }
 
+function modalFocusables(){
+  return $$('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',modal)
+    .filter(element => element.offsetParent !== null);
+}
+
 function openModal(html){
+  if(modal.classList.contains("hidden")) modalPreviousFocus = document.activeElement;
   modalBody.innerHTML = html;
   modal.classList.remove("hidden");
-  setTimeout(() => $("button,input,select",modalBody)?.focus(),30);
+  modalBackground.forEach(element => {
+    element.inert = true;
+    element.setAttribute("aria-hidden","true");
+  });
+  document.body.classList.add("modal-open");
+  setTimeout(() => $("button,input,select",modalBody)?.focus() || $("#modalClose")?.focus(),30);
 }
 function closeModal(){
+  if(modal.classList.contains("hidden")) return;
   modal.classList.add("hidden");
   modalBody.innerHTML = "";
+  modalBackground.forEach(element => {
+    element.inert = false;
+    element.removeAttribute("aria-hidden");
+  });
+  document.body.classList.remove("modal-open");
+  const focusTarget = modalPreviousFocus;
+  modalPreviousFocus = null;
+  focusTarget?.focus?.();
 }
 
 function ensureAudio(){
@@ -219,12 +257,14 @@ function startMusic(){
 }
 function stopMusic(){ clearInterval(musicTimer); musicTimer = null; }
 function toggleMusic(){
+  state = loadState();
   state.settings.music = !state.settings.music;
   state.settings.music ? startMusic() : stopMusic();
   saveState();
   showToast(state.settings.music ? "เปิดเพลงแล้ว" : "ปิดเพลงแล้ว");
 }
 function toggleSound(){
+  state = loadState();
   state.settings.sound = !state.settings.sound;
   saveState();
   if(state.settings.sound) sfx.select();
@@ -272,13 +312,14 @@ function zoneHtml(item){
 
 function renderHome(){
   const stats = totalStats();
-  const strongest = [...D.modules].sort((a,b) => moduleStats(b.id).accuracy - moduleStats(a.id).accuracy)[0];
+  const explored = D.modules.filter(item => moduleStats(item.id).done > 0);
+  const strongest = [...explored].sort((a,b) => moduleStats(b.id).accuracy - moduleStats(a.id).accuracy)[0];
   view.innerHTML = `
     <section class="hero pixel-box"><div class="hero-grid"><div>
       <div class="eyebrow">MISSION 2569 • READY FOR THE EXAM</div>
       <h1>ฝึกให้แม่น<br><span>สู้ให้ติด</span></h1>
       <p>ออกเดินทางผ่านศาสตร์การสอน กฎหมาย วิชาชีพ และสถานการณ์การศึกษา ฝึกตอบแบบต่อสู้ เก็บคอมโบ แล้วพิชิตสนามสอบใหญ่</p>
-      <div class="hero-actions"><button class="btn" id="quickStart">⚔ เริ่มภารกิจทันที</button><button class="btn mint" data-go="world">🗺️ เลือกดินแดน</button><button class="btn dark" data-go="exam">⏱️ สนามสอบใหญ่</button></div>
+      <div class="hero-actions"><button class="btn" id="quickStart">⚔ เริ่มภารกิจทันที</button><button class="btn mint" data-go="world">◈ เลือกดินแดน</button><button class="btn dark" data-go="exam">◷ สนามสอบใหญ่</button></div>
     </div>${heroArt()}</div></section>
     <div class="section-head"><div><h2>สถานะการเดินทาง</h2><p>ดูจุดแข็งและภารกิจที่รออยู่</p></div></div>
     <section class="dashboard">
@@ -289,9 +330,9 @@ function renderHome(){
     </section>
     <div class="section-head"><div><h2>ทางลัดนักผจญภัย</h2><p>เลือกสนามให้ตรงกับเป้าหมายวันนี้</p></div></div>
     <section class="quest-strip">
-      <button class="quest-card pixel-box" id="weakStart"><span class="quest-ico">🧠</span><span><h3>ล่าจุดอ่อน</h3><p>ระบบเลือกข้อที่ยังไม่แม่น</p></span><b>+EXP</b></button>
-      <button class="quest-card pixel-box" id="lawStart"><span class="quest-ico">⚖️</span><span><h3>ศึกกฎหมาย</h3><p>รวมกฎหมายและวิชาชีพฉบับตรวจทาน</p></span><b>BOSS</b></button>
-      <button class="quest-card pixel-box" data-go="codex"><span class="quest-ico">📚</span><span><h3>เปิดคัมภีร์</h3><p>สูตรจำและแหล่งอ้างอิงทางการ</p></span><b>READ</b></button>
+      <button class="quest-card pixel-box" id="weakStart"><span class="quest-ico">◎</span><span><h3>ล่าจุดอ่อน</h3><p>ระบบเลือกข้อที่ยังไม่แม่น</p></span><b>+EXP</b></button>
+      <button class="quest-card pixel-box" id="lawStart"><span class="quest-ico">⚖</span><span><h3>ศึกกฎหมาย</h3><p>รวมกฎหมายและวิชาชีพฉบับตรวจทาน</p></span><b>BOSS</b></button>
+      <button class="quest-card pixel-box" data-go="codex"><span class="quest-ico">▤</span><span><h3>เปิดคัมภีร์</h3><p>สูตรจำและแหล่งอ้างอิงทางการ</p></span><b>READ</b></button>
     </section>
     <div class="section-head"><div><h2>ดินแดนแนะนำ</h2><p>${strongest ? `ดินแดนที่คุณทำได้ดีที่สุด: ${esc(strongest.title)}` : "เริ่มด่านแรกเพื่อเปิดสถิติ"}</p></div><button class="btn small dark" data-go="world">ดูทั้งหมด</button></div>
     <section class="world-map">${D.modules.slice(0,4).map(zoneHtml).join("")}</section>
@@ -311,14 +352,14 @@ function renderWorld(){
 function openZone(id){
   const item = moduleById(id);
   const stats = moduleStats(id);
-  openModal(`<h2 id="modalTitle">${item.icon} ${esc(item.title)}</h2><p>${esc(item.summary)}</p><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.total}</b><span>ข้อในด่าน</span></div><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นยำ</span></div></div><h3>บอสประจำด่าน</h3><p>👾 ${esc(item.boss)}</p><div class="hero-actions"><button class="btn" id="zoneNormal">เริ่มด่าน 10 ข้อ</button><button class="btn pink" id="zoneBoss">ท้าบอส 15 ข้อ</button></div>`);
+  openModal(`<h2 id="modalTitle">${item.icon} ${esc(item.title)}</h2><p>${esc(item.summary)}</p><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.total}</b><span>ข้อในด่าน</span></div><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นยำ</span></div></div><h3>บอสประจำด่าน</h3><p>◆ ${esc(item.boss)}</p><div class="hero-actions"><button class="btn" id="zoneNormal">เริ่มด่าน 10 ข้อ</button><button class="btn pink" id="zoneBoss">ท้าบอส 15 ข้อ</button></div>`);
   $("#zoneNormal").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:10}); };
   $("#zoneBoss").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:15,boss:true}); };
 }
 
 function renderPractice(options={}){
   if(options.start){ startBattle(options.start); return; }
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกวิธีฝึก แล้วเปลี่ยนความรู้เป็นพลังโจมตี</small></div></div><div class="filter-row"><select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${item.icon} ${esc(item.title)}</option>`).join("")}</select></div><div class="mode-grid"><button class="mode-card" data-mode="normal"><div class="mode-icon">⚔️</div><h3>ศึกมาตรฐาน</h3><p>สุ่ม 10 ข้อ ตอบถูกโจมตี ตอบผิดถูกสวนกลับ</p><span class="tag">10 QUESTIONS</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon">👾</div><h3>ล่าบอส</h3><p>15 ข้อ ระดับกลางและยาก บอสพลังชีวิตสูง</p><span class="tag">HARD MODE</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon">🧠</div><h3>ห้องล้างแค้น</h3><p>ระบบเลือกข้อที่เคยผิดหรือยังไม่เคยทำ</p><span class="tag">SMART REVIEW</span></button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกวิธีฝึก แล้วเปลี่ยนความรู้เป็นพลังโจมตี</small></div></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${item.icon} ${esc(item.title)}</option>`).join("")}</select></label></div><div class="mode-grid"><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p>สุ่ม 10 ข้อ ตอบถูกโจมตี ตอบผิดถูกสวนกลับ</p><span class="tag">10 QUESTIONS</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p>15 ข้อ ระดับกลางและยาก บอสพลังชีวิตสูง</p><span class="tag">HARD MODE</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p>ระบบเลือกข้อที่เคยผิดหรือยังไม่เคยทำ</p><span class="tag">SMART REVIEW</span></button></div></section>`;
   $$('.mode-card').forEach(button => button.onclick = () => {
     const selected = $("#practiceModule").value;
     state.lastModule = selected;
@@ -360,7 +401,7 @@ function renderBattle(){
   if(!battle || battle.index >= battle.pool.length){ finishBattle(); return; }
   const question = battle.pool[battle.index];
   const item = moduleById(question.module);
-  view.innerHTML = `<section class="battle-shell pixel-box"><div class="battle-hud"><div><div class="fighter-name">🧙 ครูนักผจญภัย</div><div class="hpbar"><i style="width:${battle.playerHp}%"></i></div></div><div class="battle-center"><strong>${battle.index+1} / ${battle.pool.length}</strong><small>COMBO ×${battle.combo}</small></div><div><div class="fighter-name right">${esc(battle.boss ? item.boss : "มอนสเตอร์ความสับสน")} 👾</div><div class="hpbar enemy-hp"><i style="width:${battle.enemyHp / battle.enemyMax * 100}%"></i></div></div></div><div class="arena"><div class="fighter player" id="playerFighter">${fighterArt()}</div><div class="fighter enemy" id="enemyFighter">${fighterArt()}</div></div><div class="question-panel"><div class="question-meta"><span class="chip gold">${item.icon} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(question.type)}</span>${question.verified ? `<span class="chip mint">ตรวจ ${esc(question.verifiedAt)}</span>` : ""}</div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${battle.selected === index ? "selected" : ""}" data-answer="${index}" ${battle.locked || battle.hidden.includes(index) ? "disabled" : ""} style="${battle.hidden.includes(index) ? "visibility:hidden" : ""}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><div class="skills"><button class="skill" data-skill="fifty" ${!battle.skills.fifty || battle.locked ? "disabled" : ""}>✂ 50:50</button><button class="skill" data-skill="shield" ${!battle.skills.shield || battle.locked ? "disabled" : ""}>🛡 โล่</button><button class="skill" data-skill="heal" ${!battle.skills.heal || battle.locked ? "disabled" : ""}>💚 ฟื้นพลัง</button><button class="skill" data-skill="hint" ${!battle.skills.hint || battle.locked ? "disabled" : ""}>💡 คำใบ้</button></div><button class="btn" id="attackBtn" ${battle.selected === null || battle.locked ? "disabled" : ""}>โจมตี!</button></div><div id="feedbackSlot"></div></div></section>`;
+  view.innerHTML = `<section class="battle-shell pixel-box"><div class="battle-hud"><div><div class="fighter-name">◆ ครูนักผจญภัย</div><div class="hpbar"><i style="width:${battle.playerHp}%"></i></div></div><div class="battle-center"><strong>${battle.index+1} / ${battle.pool.length}</strong><small>COMBO ×${battle.combo}</small></div><div><div class="fighter-name right">${esc(battle.boss ? item.boss : "มอนสเตอร์ความสับสน")} ◆</div><div class="hpbar enemy-hp"><i style="width:${battle.enemyHp / battle.enemyMax * 100}%"></i></div></div></div><div class="arena"><div class="fighter player" id="playerFighter">${fighterArt()}</div><div class="fighter enemy" id="enemyFighter">${fighterArt()}</div></div><div class="question-panel"><div class="question-meta"><span class="chip gold">${item.icon} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span>${question.verified ? `<span class="chip mint">ตรวจ ${esc(question.verifiedAt)}</span>` : `<span class="chip">อ้างอิงต้นทาง</span>`}</div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${battle.selected === index ? "selected" : ""}" data-answer="${index}" ${battle.locked || battle.hidden.includes(index) ? "disabled" : ""} style="${battle.hidden.includes(index) ? "visibility:hidden" : ""}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><div class="skills"><button class="skill" data-skill="fifty" ${!battle.skills.fifty || battle.locked ? "disabled" : ""}>✂ 50:50</button><button class="skill" data-skill="shield" ${!battle.skills.shield || battle.locked ? "disabled" : ""}>◈ โล่</button><button class="skill" data-skill="heal" ${!battle.skills.heal || battle.locked ? "disabled" : ""}>+ ฟื้นพลัง</button><button class="skill" data-skill="hint" ${!battle.skills.hint || battle.locked ? "disabled" : ""}>◉ คำใบ้</button></div><button class="btn" id="attackBtn" ${battle.selected === null || battle.locked ? "disabled" : ""}>โจมตี!</button></div><div id="feedbackSlot"></div></div></section>`;
   $$('.option').forEach(button => button.onclick = () => {
     if(battle.locked) return;
     battle.selected = Number(button.dataset.answer);
@@ -389,7 +430,7 @@ function useSkill(skill){
   }
   if(skill === "hint"){
     const hint = question.explanation.split(" ").slice(0,12).join(" ");
-    openModal(`<h2 id="modalTitle">💡 คำใบ้</h2><p>จับคำสำคัญในโจทย์: <strong>${esc(question.type)}</strong></p><p>${esc(hint)}…</p>`);
+    openModal(`<h2 id="modalTitle">◉ คำใบ้</h2><p>จับคำสำคัญในโจทย์: <strong>${esc(questionType(question))}</strong></p><p>${esc(hint)}…</p>`);
   }
   renderBattle();
 }
@@ -457,7 +498,7 @@ function submitBattle(){
     if(index === battle.selected && !isCorrect) button.classList.add("wrong");
   });
   const slot = $("#feedbackSlot");
-  slot.innerHTML = `<div class="feedback ${isCorrect ? "" : "bad"}"><h3>${isCorrect ? "โจมตีสำเร็จ!" : "ถูกสวนกลับ!"}</h3><p><strong>คำตอบ: ${letters[question.answer]}. ${esc(question.options[question.answer])}</strong></p><p>${esc(question.explanation)}</p><div class="source">แหล่งทบทวน: ${esc(question.source)}${question.verified ? ` • ตรวจ ${esc(question.verifiedAt)}` : ""}</div><div class="hero-actions"><button class="btn small ${battle.playerHp <= 0 ? "red" : "mint"}" id="nextBattle">${battle.playerHp <= 0 ? "กลับฐาน" : "ข้อต่อไป"}</button><button class="btn small dark" id="bookmarkBtn">${state.bookmarks.includes(question.id) ? "★ เก็บแล้ว" : "☆ เก็บทบทวน"}</button></div></div>`;
+  slot.innerHTML = `<div class="feedback ${isCorrect ? "" : "bad"}"><h3>${isCorrect ? "โจมตีสำเร็จ!" : "ถูกสวนกลับ!"}</h3><p><strong>คำตอบ: ${letters[question.answer]}. ${esc(question.options[question.answer])}</strong></p><p>${esc(question.explanation)}</p><div class="source">${sourceMarkup(question)}</div><div class="hero-actions"><button class="btn small ${battle.playerHp <= 0 ? "red" : "mint"}" id="nextBattle">${battle.playerHp <= 0 ? "กลับฐาน" : "ข้อต่อไป"}</button><button class="btn small dark" id="bookmarkBtn">${state.bookmarks.includes(question.id) ? "★ เก็บแล้ว" : "☆ เก็บทบทวน"}</button></div></div>`;
   $("#bookmarkBtn").onclick = event => toggleBookmark(question.id,event.currentTarget);
   $("#nextBattle").onclick = () => {
     if(battle.playerHp <= 0){ finishBattle(true); return; }
@@ -487,7 +528,23 @@ function finishBattle(defeat=false){
 }
 
 function renderExamLobby(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามสอบใหญ่</h2><small>เลือกจำนวนข้อ เวลา และขอบเขตก่อนเปิดประตูสนาม</small></div></div><div class="filter-row"><label>ขอบเขต <select id="examModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}">${item.icon} ${esc(item.title)}</option>`).join("")}</select></label><label>จำนวนข้อ <select id="examCount"><option>30</option><option selected>60</option><option>100</option></select></label><label>เวลา <select id="examMinutes"><option value="30">30 นาที</option><option value="60" selected>60 นาที</option><option value="90">90 นาที</option></select></label></div><div class="mode-grid"><button class="mode-card" id="startExam"><div class="mode-icon">⏱️</div><h3>เริ่มสนามสอบ</h3><p>ซ่อนเฉลยจนกว่าจะส่งข้อสอบ เปลี่ยนคำตอบและข้ามข้อได้</p><span class="tag">EXAM MODE</span></button><button class="mode-card" id="quickExam"><div class="mode-icon">⚡</div><h3>ด่านด่วน 20 ข้อ</h3><p>จับเวลา 20 นาที เหมาะกับการซ้อมทุกวัน</p><span class="tag">SPEED RUN</span></button><button class="mode-card" id="bossExam"><div class="mode-icon">👑</div><h3>ศึกบอส 80 ข้อ</h3><p>คัดระดับกลางและยากจากทุกดินแดน</p><span class="tag">FINAL BOSS</span></button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามสอบใหญ่</h2><small>เลือกจำนวนข้อ เวลา และขอบเขตก่อนเปิดประตูสนาม</small></div></div><div class="filter-row"><label>ขอบเขต <select id="examModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}">${item.icon} ${esc(item.title)}</option>`).join("")}</select></label><label>จำนวนข้อ <select id="examCount"></select></label><label>เวลา <select id="examMinutes"><option value="30">30 นาที</option><option value="60" selected>60 นาที</option><option value="90">90 นาที</option></select></label></div><p class="exam-availability" id="examAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" id="startExam"><div class="mode-icon">◷</div><h3>เริ่มสนามสอบ</h3><p>ซ่อนเฉลยจนกว่าจะส่งข้อสอบ เปลี่ยนคำตอบและข้ามข้อได้</p><span class="tag">EXAM MODE</span></button><button class="mode-card" id="quickExam"><div class="mode-icon">⚡</div><h3>ด่านด่วน 20 ข้อ</h3><p>จับเวลา 20 นาที เหมาะกับการซ้อมทุกวัน</p><span class="tag">SPEED RUN</span></button><button class="mode-card" id="bossExam"><div class="mode-icon">♜</div><h3>ศึกบอส 80 ข้อ</h3><p>คัดระดับกลางและยากจากทุกดินแดน</p><span class="tag">FINAL BOSS</span></button></div></section>`;
+  const syncExamAvailability = () => {
+    const moduleId = $("#examModule").value;
+    const available = D.questions.filter(question => moduleId === "all" || question.module === moduleId).length;
+    const preferred = moduleId === "all" ? [30,60,100] : [10,20,30,60,100].filter(count => count <= available);
+    if(!preferred.includes(available) && moduleId !== "all") preferred.push(available);
+    const previous = Number($("#examCount").value) || 60;
+    $("#examCount").innerHTML = preferred.map(count => `<option value="${count}">${count}</option>`).join("");
+    const selected = preferred.filter(count => count <= Math.min(previous,available)).pop() || preferred[0];
+    $("#examCount").value = String(selected);
+    const item = moduleId === "all" ? null : moduleById(moduleId);
+    $("#examAvailability").textContent = item
+      ? `${item.icon} ${item.title} มี ${available} ข้อ — ระบบแสดงเฉพาะจำนวนที่ทำได้จริง`
+      : `คลังรวมมี ${available} ข้อ`;
+  };
+  $("#examModule").onchange = syncExamAvailability;
+  syncExamAvailability();
   $("#startExam").onclick = () => beginExam(Number($("#examCount").value),Number($("#examMinutes").value),$("#examModule").value,false);
   $("#quickExam").onclick = () => beginExam(20,20,"all",false);
   $("#bossExam").onclick = () => beginExam(80,100,"all",true);
@@ -496,6 +553,8 @@ function renderExamLobby(){
 function beginExam(count,minutes,moduleId,boss){
   let pool = D.questions.filter(question => moduleId === "all" || question.module === moduleId);
   if(boss) pool = pool.filter(question => question.difficulty !== "ง่าย");
+  if(!pool.length){ showToast("ไม่พบข้อสอบในขอบเขตนี้"); return; }
+  if(count > pool.length) showToast(`ขอบเขตนี้มี ${pool.length} ข้อ ระบบปรับจำนวนให้อัตโนมัติ`);
   pool = shuffle(pool).slice(0,Math.min(count,pool.length));
   exam = {pool,answers:Array(pool.length).fill(null),index:0,end:Date.now()+minutes*60000,minutes};
   renderExam();
@@ -506,7 +565,7 @@ function beginExam(count,minutes,moduleId,boss){
 function renderExam(){
   const question = exam.pool[exam.index];
   const item = moduleById(question.module);
-  view.innerHTML = `<div class="exam-layout"><section class="panel pixel-box"><div class="panel-title"><div><h2>ข้อ ${exam.index+1} จาก ${exam.pool.length}</h2><small>${item.icon} ${esc(item.title)}</small></div><div class="timer" id="timerText">--:--</div></div><div class="question-meta"><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(question.type)}</span></div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${exam.answers[exam.index] === index ? "selected" : ""}" data-exam-answer="${index}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><button class="btn small dark" id="prevExam" ${exam.index === 0 ? "disabled" : ""}>← ก่อนหน้า</button><div><button class="btn small" id="nextExam">${exam.index === exam.pool.length-1 ? "ตรวจรายการ" : "ข้อต่อไป →"}</button> <button class="btn small red" id="submitExam">ส่งข้อสอบ</button></div></div></section><aside class="panel pixel-box exam-side"><div class="panel-title"><div><h2>กระดาษคำตอบ</h2><small>${exam.answers.filter(value => value !== null).length} / ${exam.pool.length} ข้อ</small></div></div><div class="question-grid">${exam.pool.map((_,index) => `<button data-qnav="${index}" class="${exam.answers[index] !== null ? "answered" : ""} ${index === exam.index ? "current" : ""}">${index+1}</button>`).join("")}</div></aside></div>`;
+  view.innerHTML = `<div class="exam-layout"><section class="panel pixel-box"><div class="panel-title"><div><h2>ข้อ ${exam.index+1} จาก ${exam.pool.length}</h2><small>${item.icon} ${esc(item.title)}</small></div><div class="timer" id="timerText">--:--</div></div><div class="question-meta"><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span></div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${exam.answers[exam.index] === index ? "selected" : ""}" data-exam-answer="${index}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><button class="btn small dark" id="prevExam" ${exam.index === 0 ? "disabled" : ""}>← ก่อนหน้า</button><div><button class="btn small" id="nextExam">${exam.index === exam.pool.length-1 ? "ตรวจรายการ" : "ข้อต่อไป →"}</button> <button class="btn small red" id="submitExam">ส่งข้อสอบ</button></div></div></section><aside class="panel pixel-box exam-side"><div class="panel-title"><div><h2>กระดาษคำตอบ</h2><small>${exam.answers.filter(value => value !== null).length} / ${exam.pool.length} ข้อ</small></div></div><div class="question-grid">${exam.pool.map((_,index) => `<button data-qnav="${index}" class="${exam.answers[index] !== null ? "answered" : ""} ${index === exam.index ? "current" : ""}" aria-label="ไปข้อ ${index+1}${exam.answers[index] !== null ? " ตอบแล้ว" : " ยังไม่ตอบ"}">${index+1}</button>`).join("")}</div></aside></div>`;
   $$('[data-exam-answer]').forEach(button => button.onclick = () => {
     exam.answers[exam.index] = Number(button.dataset.examAnswer);
     sfx.select();
@@ -579,25 +638,27 @@ function finishExam(){
 function weakQuestions(){
   return D.questions.filter(question => {
     const record = state.records[question.id];
-    return state.bookmarks.includes(question.id) || !record || record.lastWrong || record.correct / record.attempts < .7;
+    return state.bookmarks.includes(question.id) || Boolean(record && (record.lastWrong || record.correct / record.attempts < .7));
   });
 }
 
-function renderReview(){
+function renderReview(limit=60){
   const questions = weakQuestions();
+  const visible = questions.slice(0,limit);
   const list = questions.length
-    ? `<div class="review-list">${questions.slice(0,60).map(question => {
+    ? `<p class="review-count">แสดง ${visible.length} จาก ${questions.length} ข้อที่ควรทบทวน</p><div class="review-list">${visible.map(question => {
         const record = state.records[question.id];
         const accuracy = record ? Math.round(record.correct / record.attempts * 100) : 0;
         return `<article class="review-card pixel-box"><div><h3>${moduleById(question.module).icon} ${esc(question.question)}</h3><p>${esc(moduleById(question.module).title)} • ความแม่น ${accuracy}% ${state.bookmarks.includes(question.id) ? "• ★ เก็บไว้" : ""}</p></div><button class="btn small dark" data-one="${question.id}">ฝึกข้อนี้</button></article>`;
-      }).join("")}</div>`
-    : '<div class="empty">🎉 ไม่มีข้อค้างทบทวนในตอนนี้</div>';
+      }).join("")}</div>${visible.length < questions.length ? `<p><button class="btn small dark" id="moreReview">ดูเพิ่มอีก ${Math.min(60,questions.length-visible.length)} ข้อ</button></p>` : ""}`
+    : '<div class="empty">✦ ไม่มีข้อค้างทบทวนในตอนนี้</div>';
   view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>ห้องทบทวน</h2><small>รวมข้อที่เก็บไว้ เคยตอบผิด หรือยังไม่แม่น</small></div><button class="btn small" id="reviewBattle" ${questions.length ? "" : "disabled"}>ฝึกชุดนี้</button></div>${list}</section>`;
   $("#reviewBattle")?.addEventListener("click",() => startCustomBattle(shuffle(questions).slice(0,15),110));
   $$('[data-one]').forEach(button => button.onclick = () => {
     const question = D.questions.find(item => item.id === Number(button.dataset.one));
     startCustomBattle([question],40);
   });
+  $("#moreReview")?.addEventListener("click",() => renderReview(limit+60));
 }
 
 function startCustomBattle(pool,hp){
@@ -606,24 +667,25 @@ function startCustomBattle(pool,hp){
 }
 
 function renderCodex(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>เปิดต้นทางเมื่อต้องตรวจข้อมูลกฎหมาย นโยบาย หรือบุคคลปัจจุบัน</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><div class="source-links"><a href="${source.url}" target="_blank" rel="noopener">เปิดแหล่งทางการ ↗</a></div></article>`).join("")}</div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>เปิดต้นทางเมื่อต้องตรวจข้อมูลกฎหมาย นโยบาย หรือบุคคลปัจจุบัน</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><div class="source-links"><a href="${source.url}" target="_blank" rel="noopener" aria-label="เปิดแหล่งทางการ: ${esc(source.title)}">เปิด ${esc(source.title)} ↗</a></div></article>`).join("")}</div></section>`;
 }
 
 function renderProfile(){
   const stats = totalStats();
   const achievements = [
-    {icon:"⚔️",name:"ก้าวแรก",desc:"ตอบข้อสอบครั้งแรก",ok:stats.attempted >= 1},
-    {icon:"🔥",name:"คอมโบ 10",desc:"ตอบถูกต่อเนื่อง 10 ข้อ",ok:state.maxCombo >= 10},
-    {icon:"📚",name:"นักสำรวจ",desc:"ทำข้อสอบอย่างน้อย 8 ดินแดน",ok:D.modules.filter(item => moduleStats(item.id).done > 0).length >= 8},
-    {icon:"👑",name:"ผู้พิชิต",desc:"ได้คะแนนสนามสอบอย่างน้อย 80%",ok:state.examHistory.some(item => item.pct >= 80)},
-    {icon:"💎",name:"คลังสมบัติ",desc:"สะสม 300 เหรียญ",ok:state.coins >= 300},
-    {icon:"🌟",name:"ปรมาจารย์",desc:"ขึ้นถึงเลเวล 20",ok:level() >= 20}
+    {icon:"⚔",name:"ก้าวแรก",desc:"ตอบข้อสอบครั้งแรก",ok:stats.attempted >= 1},
+    {icon:"✦",name:"คอมโบ 10",desc:"ตอบถูกต่อเนื่อง 10 ข้อ",ok:state.maxCombo >= 10},
+    {icon:"▤",name:"นักสำรวจ",desc:"ทำข้อสอบอย่างน้อย 8 ดินแดน",ok:D.modules.filter(item => moduleStats(item.id).done > 0).length >= 8},
+    {icon:"♜",name:"ผู้พิชิต",desc:"ได้คะแนนสนามสอบอย่างน้อย 80%",ok:state.examHistory.some(item => item.pct >= 80)},
+    {icon:"◆",name:"คลังสมบัติ",desc:"สะสม 300 เหรียญ",ok:state.coins >= 300},
+    {icon:"★",name:"ปรมาจารย์",desc:"ขึ้นถึงเลเวล 20",ok:level() >= 20}
   ];
   view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สมุดนักผจญภัย</h2><small>เลเวล ${level()} • ${rankName()}</small></div></div><div class="profile-grid"><div><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นรวม</span></div><div class="stat-card pixel-box"><b>${stats.attempts}</b><span>จำนวนครั้งที่ตอบ</span></div><div class="stat-card pixel-box"><b>${state.examHistory.length}</b><span>รอบสนามสอบ</span></div><div class="stat-card pixel-box"><b>${state.bookmarks.length}</b><span>ข้อที่เก็บไว้</span></div></div><div class="section-head"><div><h2>พลังรายดินแดน</h2></div></div>${D.modules.map(item => { const stats = moduleStats(item.id); return `<div class="chart-row"><span>${item.icon} ${esc(item.title)}</span><div class="bar"><i style="width:${stats.accuracy}%"></i></div><b>${stats.accuracy}%</b></div>`; }).join("")}</div><div><div class="section-head"><div><h2>เหรียญตรา</h2></div></div><div class="achievement-grid">${achievements.map(item => `<article class="achievement pixel-box ${item.ok ? "unlocked" : ""}"><span class="medal">${item.icon}</span><span><h3>${esc(item.name)}</h3><p>${esc(item.desc)}</p></span></article>`).join("")}</div><div class="section-head"><div><h2>ประวัติสนามสอบ</h2></div></div>${state.examHistory.length ? state.examHistory.slice(0,8).map(item => `<div class="review-card pixel-box"><div><h3>${item.pct}% • ${item.score}/${item.total}</h3><p>${esc(item.date)}</p></div></div>`).join("") : '<div class="empty">ยังไม่มีประวัติสนามสอบ</div>'}</div></div></section>`;
 }
 
 function openSettings(){
-  openModal(`<h2 id="modalTitle">⚙ ตั้งค่าเกม</h2><div class="setting-row"><span>เพลงประกอบ</span><button class="btn small ${state.settings.music ? "mint" : "dark"}" id="setMusic">${state.settings.music ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><span>เสียงเอฟเฟกต์</span><button class="btn small ${state.settings.sound ? "mint" : "dark"}" id="setSound">${state.settings.sound ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><span>ระดับเสียง</span><input id="volume" type="range" min="0" max="1" step="0.05" value="${state.settings.volume}"></div><div class="setting-row"><span>ลดการเคลื่อนไหว</span><input id="reduce" type="checkbox" ${state.settings.reduced ? "checked" : ""}></div><div class="setting-row"><span>เวอร์ชันคัมภีร์</span><b>${D.version} • ${D.questions.length} ข้อ</b></div><p><button class="btn small red" id="resetData">เริ่มความคืบหน้าใหม่</button></p>`);
+  state = loadState();
+  openModal(`<h2 id="modalTitle">⚙ ตั้งค่าเกม</h2><div class="setting-row"><span id="musicSettingLabel">เพลงประกอบ</span><button class="btn small ${state.settings.music ? "mint" : "dark"}" id="setMusic" aria-label="เพลงประกอบ: ${state.settings.music ? "เปิดอยู่ กดเพื่อปิด" : "ปิดอยู่ กดเพื่อเปิด"}">${state.settings.music ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><span id="soundSettingLabel">เสียงเอฟเฟกต์</span><button class="btn small ${state.settings.sound ? "mint" : "dark"}" id="setSound" aria-label="เสียงเอฟเฟกต์: ${state.settings.sound ? "เปิดอยู่ กดเพื่อปิด" : "ปิดอยู่ กดเพื่อเปิด"}">${state.settings.sound ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><label for="volume">ระดับเสียง</label><input id="volume" type="range" min="0" max="1" step="0.05" value="${state.settings.volume}"></div><div class="setting-row"><label for="reduce">ลดการเคลื่อนไหว</label><input id="reduce" type="checkbox" ${state.settings.reduced ? "checked" : ""}></div><div class="setting-row"><span>เวอร์ชันคัมภีร์</span><b>${D.version} • ${D.questions.length} ข้อ</b></div><p><button class="btn small red" id="resetData">เริ่มความคืบหน้าใหม่</button></p>`);
   $("#setMusic").onclick = () => { toggleMusic(); openSettings(); };
   $("#setSound").onclick = () => { toggleSound(); openSettings(); };
   $("#volume").oninput = event => { state.settings.volume = Number(event.target.value); saveState(); };
@@ -648,13 +710,35 @@ function bindGlobal(){
   $("#modalClose").onclick = closeModal;
   modal.addEventListener("click",event => { if(event.target === modal) closeModal(); });
   document.addEventListener("keydown",event => {
-    if(event.key === "Escape") closeModal();
+    if(!modal.classList.contains("hidden")){
+      if(event.key === "Escape"){
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+      if(event.key === "Tab"){
+        const focusables = modalFocusables();
+        if(!focusables.length){ event.preventDefault(); return; }
+        const first = focusables[0];
+        const last = focusables[focusables.length-1];
+        if(event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))){
+          event.preventDefault();
+          last.focus();
+        }else if(!event.shiftKey && document.activeElement === last){
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      return;
+    }
     if(battle && !battle.locked && ["1","2","3","4"].includes(event.key)){
       battle.selected = Number(event.key) - 1;
       renderBattle();
     }
     if(battle && event.key === "Enter" && battle.selected !== null && !battle.locked) submitBattle();
   });
+  window.addEventListener("storage",event => { if(event.key === STORAGE) refreshState(); });
+  window.addEventListener("teacherquest:local-state",refreshState);
   document.addEventListener("pointerdown",() => { if(state.settings.music) startMusic(); },{once:true});
 }
 
