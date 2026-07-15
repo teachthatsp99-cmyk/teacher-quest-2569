@@ -9,7 +9,6 @@ const RETURN_KEY = "teacherQuestV4Return";
 const letters = ["ก","ข","ค","ง"];
 const view = document.querySelector("#view");
 const navList = document.querySelector(".nav-list");
-const topInner = document.querySelector(".top-inner");
 let active = false;
 let drill = null;
 let cards = null;
@@ -36,10 +35,10 @@ function readState(){
 }
 
 function writeState(state,{touch=true}={}){
-  if(touch) state.cloudUpdatedAt = Date.now();
+  if(touch) state.localUpdatedAt = Date.now();
   localStorage.setItem(STORAGE,JSON.stringify(state));
   updateHud(state);
-  window.dispatchEvent(new CustomEvent("teacherquest:local-state",{detail:{updatedAt:state.cloudUpdatedAt || 0}}));
+  window.dispatchEvent(new CustomEvent("teacherquest:local-state",{detail:{updatedAt:state.localUpdatedAt || 0}}));
 }
 
 function updateHud(state=readState()){
@@ -96,16 +95,6 @@ function overall(state=readState()){
   return {attempts,correct,accuracy:attempts?Math.round(correct/attempts*100):0,unseen,weak};
 }
 
-function cloudLabel(){
-  const cloud = window.TeacherQuestCloud;
-  if(!cloud) return {className:"warn",text:"กำลังเตรียมระบบบัญชี"};
-  const status = cloud.getStatus?.() || {};
-  if(!status.configured) return {className:"warn",text:"พร้อมเชื่อม Firebase ฟรี เมื่อใส่ค่าตั้งค่า"};
-  if(status.user) return {className:"online",text:`เชื่อมแล้ว: ${status.user.email || "บัญชีผู้ใช้"}`};
-  if(status.loading) return {className:"warn",text:"กำลังเชื่อมต่อ Firebase"};
-  return {className:"",text:"ยังไม่ได้เข้าสู่ระบบออนไลน์"};
-}
-
 function activate(){
   active = true;
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.remove("active"));
@@ -121,7 +110,7 @@ function renderCoach(){
   const total = overall(state);
   const reports = moduleReport(state);
   const weakReports = reports.slice(0,6);
-  const cloud = cloudLabel();
+  const bookmarkCount = state.bookmarks.length;
   view.className = "view v4-view";
   view.innerHTML = `
     <section class="hero pixel-box">
@@ -129,14 +118,14 @@ function renderCoach(){
         <div>
           <div class="eyebrow">SMART TRAINING • V4</div>
           <h1>ศูนย์ฝึก<br><span>อัจฉริยะ</span></h1>
-          <p>วิเคราะห์ข้อที่ยังไม่แม่น จัดชุดฝึกเฉพาะจุด ใช้ไอเทมช่วยคิด และสำรองความคืบหน้าได้โดยไม่เสียค่าใช้จ่าย</p>
+          <p>วิเคราะห์ข้อที่ยังไม่แม่น จัดชุดฝึกเฉพาะจุด ใช้ไอเทมช่วยคิด และฝึกซ้ำอย่างเป็นระบบ</p>
           <div class="hero-actions">
-            <button class="btn mint" data-v4-mode="weak">ฝึกแก้จุดอ่อน</button>
+            <button class="btn mint" data-v4-mode="weak" ${total.weak ? "" : "disabled"}>ฝึกแก้จุดอ่อน</button>
             <button class="btn sky" data-v4-mode="mixed">ชุดแนะนำอัตโนมัติ</button>
             <button class="btn dark" data-v4-action="flash">เปิดแฟลชการ์ด</button>
           </div>
         </div>
-        <div class="hero-art"><div class="portal"></div><div class="teacher-sprite"><i class="hair"></i><i class="face"></i><i class="body"></i><i class="book"></i><i class="legs"></i></div><div class="float-badge one">V4 COACH</div><div class="float-badge two">FREE SYNC</div></div>
+        <div class="hero-art"><div class="portal"></div><div class="teacher-sprite"><i class="hair"></i><i class="face"></i><i class="body"></i><i class="book"></i><i class="legs"></i></div><div class="float-badge one">V4 COACH</div><div class="float-badge two">SMART DRILL</div></div>
       </div>
     </section>
 
@@ -149,29 +138,34 @@ function renderCoach(){
 
     <div class="section-head"><div><h2>เลือกภารกิจฝึก</h2><p>ระบบจะสุ่มไม่เกิน 10 ข้อต่อรอบ</p></div></div>
     <section class="v4-mode-grid">
-      ${modeCard("weak","🩹","แก้จุดอ่อน","เน้นข้อที่เคยผิดและหมวดที่คะแนนต่ำ","แนะนำ")}
-      ${modeCard("unseen","🔭","สำรวจข้อใหม่","เลือกเฉพาะข้อที่ยังไม่เคยตอบ","เปิดแผนที่")}
-      ${modeCard("hard","👑","ด่านยาก","คัดเฉพาะโจทย์ระดับยากและข้อหลอก","ท้าทาย")}
-      ${modeCard("scenario","🎭","สถานการณ์จริง","ฝึกตัดสินใจและประยุกต์ใช้หลักการ","คิดวิเคราะห์")}
-      ${modeCard("bookmarks","🔖","ข้อที่บันทึกไว้","ทบทวนรายการโปรดจากห้องฝึกเดิม","เฉพาะคุณ")}
-      ${modeCard("mixed","⚗️","ชุดผสมอัจฉริยะ","ผสมข้ออ่อน ข้อใหม่ ข้อยาก และสถานการณ์","สมดุล")}
+      ${modeCard("weak","+","แก้จุดอ่อน","เน้นข้อที่เคยผิดและหมวดที่คะแนนต่ำ",`${total.weak} ข้อ`,!total.weak)}
+      ${modeCard("unseen","◉","สำรวจข้อใหม่","เลือกเฉพาะข้อที่ยังไม่เคยตอบ",`${total.unseen} ข้อ`,!total.unseen)}
+      ${modeCard("hard","♜","ด่านยาก","คัดเฉพาะโจทย์ระดับยากและข้อหลอก","ท้าทาย")}
+      ${modeCard("scenario","◇","สถานการณ์จริง","กระจายสถานการณ์จากทุกดินแดนอย่างสมดุล","คิดวิเคราะห์")}
+      ${modeCard("bookmarks","▤","ข้อที่บันทึกไว้","ทบทวนรายการโปรดจากห้องฝึกเดิม",`${bookmarkCount} ข้อ`,!bookmarkCount)}
+      ${modeCard("mixed","⚗","ชุดผสมอัจฉริยะ","ผสมข้ออ่อน ข้อใหม่ ข้อยาก และสถานการณ์","สมดุล")}
     </section>
 
     <div class="section-head"><div><h2>เรดาร์จุดอ่อนรายดินแดน</h2><p>หมวดที่ยังไม่เคยทำจะแสดง 0% เพื่อชวนเริ่มสำรวจ</p></div></div>
     <section class="panel pixel-box"><div class="v4-weak-list">
       ${weakReports.map(item => `<div class="v4-weak-row"><span>${item.icon} ${esc(item.title)}</span><div class="meter"><i style="width:${item.accuracy}%"></i></div><b>${item.accuracy}%</b></div>`).join("")}
-    </div></section>
-
-    <div class="section-head"><div><h2>สำรองข้อมูลและบัญชีฟรี</h2><p>ใช้ไฟล์สำรองได้ทันที ส่วนซิงก์ออนไลน์ใช้ Firebase Spark โดยไม่ใช้ระบบชำระเงิน</p></div></div>
-    <section class="v4-grid two">
-      <article class="v4-card"><h3>📦 สำรองในไฟล์</h3><p>ย้ายคะแนน เลเวล เหรียญ บุ๊กมาร์ก และประวัติไปเครื่องอื่นได้</p><div class="v4-actions"><button class="v4-btn sky" data-v4-action="export">ส่งออกข้อมูล</button><button class="v4-btn dark" data-v4-action="import">นำเข้าข้อมูล</button><input id="v4ImportFile" class="v4-file" type="file" accept="application/json,.json"></div></article>
-      <article class="v4-card"><h3>☁️ ซิงก์ออนไลน์</h3><p>สมัครด้วยอีเมลและรหัสผ่าน แล้วเลือกอัปโหลดหรือดึงข้อมูลด้วยตัวเอง</p><div class="v4-status"><span class="v4-dot ${cloud.className}"></span><span id="v4CloudText">${esc(cloud.text)}</span></div><div class="v4-actions"><button class="v4-btn mint" data-v4-action="account">จัดการบัญชี</button></div></article>
-    </section>`;
+    </div></section>`;
   bindCoach();
 }
 
-function modeCard(mode,icon,title,description,tag){
-  return `<button class="v4-mode" data-v4-mode="${mode}"><span>${icon}</span><h3>${title}</h3><p>${description}</p><small>${tag}</small></button>`;
+function modeCard(mode,icon,title,description,tag,disabled=false){
+  return `<button class="v4-mode" data-v4-mode="${mode}" ${disabled ? "disabled" : ""}><span aria-hidden="true">${icon}</span><h3>${title}</h3><p>${description}</p><small>${tag}</small></button>`;
+}
+
+function balancedSample(items,limit=10){
+  const groups = DATA.modules.map(module => shuffle(items.filter(question => question.module === module.id)));
+  const selected = [];
+  while(selected.length < limit && groups.some(group => group.length)){
+    for(const group of groups){
+      if(group.length && selected.length < limit) selected.push(group.shift());
+    }
+  }
+  return selected;
 }
 
 function selectQuestions(mode,state){
@@ -181,13 +175,15 @@ function selectQuestions(mode,state){
   });
   const unseen = DATA.questions.filter(question => !state.records[question.id]);
   const hard = DATA.questions.filter(question => question.difficulty === "ยาก");
-  const scenario = DATA.questions.filter(question => /สถานการณ์|ประยุกต์|วิเคราะห์/.test(question.type || ""));
+  const scenario = DATA.questions.filter(question => question.category === "สถานการณ์");
   const bookmarks = DATA.questions.filter(question => state.bookmarks.map(Number).includes(Number(question.id)));
   const map = {weak,unseen,hard,scenario,bookmarks};
   let pool;
-  if(mode === "mixed") pool = unique([...shuffle(weak).slice(0,4),...shuffle(unseen).slice(0,3),...shuffle(hard).slice(0,2),...shuffle(scenario).slice(0,2)]);
+  if(mode === "mixed") pool = unique([...balancedSample(weak,4),...balancedSample(unseen,3),...balancedSample(hard,2),...balancedSample(scenario,2)]);
+  else if(mode === "scenario") pool = balancedSample(scenario,10);
+  else if(mode === "hard") pool = balancedSample(hard,10);
   else pool = map[mode] || DATA.questions;
-  if(pool.length < 5) pool = unique([...pool,...shuffle(DATA.questions)]);
+  if(!["weak","bookmarks"].includes(mode) && pool.length < 5) pool = unique([...pool,...balancedSample(DATA.questions,10)]);
   return shuffle(pool).slice(0,Math.min(10,pool.length));
 }
 
@@ -205,15 +201,15 @@ function renderDrill(){
   const answer = drill.selected;
   view.innerHTML = `
     <section class="panel pixel-box">
-      <div class="v4-drill-head"><div><div class="eyebrow">SMART DRILL • ${esc(drill.mode.toUpperCase())}</div><h2 style="margin:4px 0">ภารกิจข้อ ${drill.index+1} / ${drill.questions.length}</h2><div class="v4-drill-meta"><span class="v4-chip gold">${esc(question.difficulty)}</span><span class="v4-chip">${esc(question.type)}</span><span class="v4-chip">${esc(DATA.modules.find(item=>item.id===question.module)?.title || question.module)}</span></div></div><div class="v4-combo">🔥 ${drill.combo}</div></div>
+      <div class="v4-drill-head"><div><div class="eyebrow">SMART DRILL • ${esc(drill.mode.toUpperCase())}</div><h2 style="margin:4px 0">ภารกิจข้อ ${drill.index+1} / ${drill.questions.length}</h2><div class="v4-drill-meta"><span class="v4-chip gold">${esc(question.difficulty)}</span><span class="v4-chip">${esc(question.category || question.type)}</span><span class="v4-chip">${esc(DATA.modules.find(item=>item.id===question.module)?.title || question.module)}</span></div></div><div class="v4-combo">✦ ${drill.combo}</div></div>
       <div class="meter" style="margin-bottom:14px"><i style="width:${progress}%"></i></div>
       <article class="v4-question">
         <h2>${esc(question.question)}</h2>
         <div class="v4-options">${question.options.map((option,index) => optionHtml(question,option,index,answer)).join("")}</div>
         <div class="v4-items">
-          ${itemButton("eliminate","✂️","ตัดตัวเลือก",drill.items.eliminate)}
-          ${itemButton("shield","🛡️",drill.shield?"เปิดโล่แล้ว":"โล่คอมโบ",drill.items.shield,drill.shield)}
-          ${itemButton("hint","💡","คำใบ้",drill.items.hint)}
+          ${itemButton("eliminate","✂","ตัดตัวเลือก",drill.items.eliminate)}
+          ${itemButton("shield","◈",drill.shield?"เปิดโล่แล้ว":"โล่คอมโบ",drill.items.shield,drill.shield)}
+          ${itemButton("hint","◉","คำใบ้",drill.items.hint)}
         </div>
         <div id="v4Hint"></div>
         ${drill.answered ? feedbackHtml(question) : ""}
@@ -237,7 +233,8 @@ function itemButton(item,icon,label,count,on=false){
 
 function feedbackHtml(question){
   const correct = drill.selected === question.answer;
-  return `<div class="v4-feedback ${correct?"good":"bad"}"><h3>${correct?"✅ ตอบถูก":"❌ ยังไม่ถูก"}</h3><p>${esc(question.explanation)}</p><small>แหล่งเนื้อหา: ${esc(question.source || "คลังความรู้ครูเควสต์")}</small></div>`;
+  const link = question.sourceUrl ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="เปิดแหล่งอ้างอิงของข้อ ${question.id}">เปิดต้นทาง ↗</a>` : "";
+  return `<div class="v4-feedback ${correct?"good":"bad"}"><h3>${correct?"✓ ตอบถูก":"× ยังไม่ถูก"}</h3><p>${esc(question.explanation)}</p><small>แหล่งเนื้อหา: ${esc(question.source || "คลังความรู้ครูเควสต์")}${question.verified ? ` • ตรวจ ${esc(question.verifiedAt)}` : " • อ้างอิงต้นทาง"}${link}</small></div>`;
 }
 
 function answerQuestion(index){
@@ -277,7 +274,7 @@ function useItem(item){
   if(item === "shield") drill.shield = true;
   if(item === "hint"){
     const module = DATA.modules.find(entry=>entry.id===question.module);
-    const hint = `คำใบ้: อยู่ในหมวด “${module?.title || question.module}” ประเภท ${question.type} — มองหาตัวเลือกที่สอดคล้องกับหลักการมากที่สุด ไม่ใช่คำตอบที่ดูเด็ดขาดเกินจริง`;
+    const hint = `คำใบ้: อยู่ในหมวด “${module?.title || question.module}” ประเภท ${question.category || question.type} — เปรียบเทียบหลักฐาน เงื่อนไข และผลกระทบของทุกตัวเลือก`;
     const box = document.querySelector("#v4Hint");
     if(box) box.innerHTML = `<div class="v4-alert" style="margin-top:12px">${esc(hint)}</div>`;
   }
@@ -317,7 +314,8 @@ function startFlashcards(){
 function renderFlashcard(){
   const question = cards.questions[cards.index];
   const answer = question.options[question.answer];
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แฟลชการ์ดแก้จุดอ่อน</h2><small>ใบที่ ${cards.index+1} / ${cards.questions.length}</small></div><span class="v4-chip gold">${esc(question.difficulty)}</span></div><button class="v4-card-face" id="v4CardFace">${cards.revealed?`<div class="back"><strong>${letters[question.answer]}. ${esc(answer)}</strong><p>${esc(question.explanation)}</p><small>${esc(question.source || "คลังความรู้ครูเควสต์")}</small></div>`:`<div class="front">${esc(question.question)}<div style="font-size:12px;color:var(--gold);margin-top:20px">แตะเพื่อเปิดคำตอบ</div></div>`}</button><div class="v4-actions"><button class="v4-btn dark" data-card="prev">ก่อนหน้า</button><button class="v4-btn sky" data-card="shuffle">สุ่มใหม่</button><button class="v4-btn mint" data-card="next">ถัดไป</button><button class="v4-btn dark" data-card="close">กลับศูนย์ฝึก</button></div></section>`;
+  const sourceLink = question.sourceUrl ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener">เปิดต้นทาง ↗</a>` : "";
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แฟลชการ์ดแก้จุดอ่อน</h2><small>ใบที่ ${cards.index+1} / ${cards.questions.length}</small></div><span class="v4-chip gold">${esc(question.difficulty)}</span></div><button class="v4-card-face" id="v4CardFace">${cards.revealed?`<div class="back"><strong>${letters[question.answer]}. ${esc(answer)}</strong><p>${esc(question.explanation)}</p><small>${esc(question.source || "คลังความรู้ครูเควสต์")}${sourceLink}</small></div>`:`<div class="front">${esc(question.question)}<div style="font-size:12px;color:var(--gold);margin-top:20px">แตะเพื่อเปิดคำตอบ</div></div>`}</button><div class="v4-actions"><button class="v4-btn dark" data-card="prev">ก่อนหน้า</button><button class="v4-btn sky" data-card="shuffle">สุ่มใหม่</button><button class="v4-btn mint" data-card="next">ถัดไป</button><button class="v4-btn dark" data-card="close">กลับศูนย์ฝึก</button></div></section>`;
   document.querySelector("#v4CardFace").onclick=()=>{cards.revealed=!cards.revealed;renderFlashcard();};
   document.querySelector('[data-card="prev"]').onclick=()=>{cards.index=(cards.index-1+cards.questions.length)%cards.questions.length;cards.revealed=false;renderFlashcard();};
   document.querySelector('[data-card="next"]').onclick=()=>{cards.index=(cards.index+1)%cards.questions.length;cards.revealed=false;renderFlashcard();};
@@ -325,47 +323,9 @@ function renderFlashcard(){
   document.querySelector('[data-card="close"]').onclick=renderCoach;
 }
 
-function exportProgress(){
-  const payload = {app:"teacher-quest-2569",schema:4,exportedAt:new Date().toISOString(),state:readState()};
-  const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href=url;
-  link.download=`teacher-quest-backup-${today()}.json`;
-  link.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-
-function importProgress(file){
-  const reader = new FileReader();
-  reader.onload=()=>{
-    try{
-      const payload=JSON.parse(reader.result);
-      const incoming=payload.state || payload;
-      if(!incoming || typeof incoming!=="object" || !incoming.records) throw new Error("รูปแบบไม่ถูกต้อง");
-      if(!confirm("นำเข้าข้อมูลนี้แทนความคืบหน้าในเครื่องหรือไม่?")) return;
-      incoming.cloudUpdatedAt=Date.now();
-      writeState(incoming);
-      alert("นำเข้าสำเร็จ ระบบจะโหลดหน้าใหม่");
-      location.reload();
-    }catch(error){ alert(`นำเข้าไม่สำเร็จ: ${error.message}`); }
-  };
-  reader.readAsText(file);
-}
-
-function openAccount(){
-  const cloud=window.TeacherQuestCloud;
-  if(cloud?.openAccountDialog) cloud.openAccountDialog();
-  else alert("ระบบบัญชีกำลังโหลด กรุณาลองอีกครั้ง");
-}
-
 function bindCoach(){
   document.querySelectorAll("[data-v4-mode]").forEach(button=>button.onclick=()=>startDrill(button.dataset.v4Mode));
   document.querySelector('[data-v4-action="flash"]')?.addEventListener("click",startFlashcards);
-  document.querySelector('[data-v4-action="export"]')?.addEventListener("click",exportProgress);
-  document.querySelector('[data-v4-action="import"]')?.addEventListener("click",()=>document.querySelector("#v4ImportFile")?.click());
-  document.querySelector("#v4ImportFile")?.addEventListener("change",event=>{const file=event.target.files?.[0];if(file) importProgress(file);});
-  document.querySelector('[data-v4-action="account"]')?.addEventListener("click",openAccount);
 }
 
 function bindDrill(){
@@ -385,20 +345,10 @@ function installControls(){
     const button=document.createElement("button");
     button.className="nav-btn v4-nav";
     button.id="v4CoachBtn";
-    button.innerHTML="<span>🧭</span>ศูนย์ฝึกอัจฉริยะ";
+    button.innerHTML='<span aria-hidden="true">◈</span>ศูนย์ฝึกอัจฉริยะ';
     navList?.appendChild(button);
   }
-  if(!document.querySelector("#cloudAccountBtn")){
-    const button=document.createElement("button");
-    button.className="top-btn";
-    button.id="cloudAccountBtn";
-    button.title="บัญชีและซิงก์ออนไลน์";
-    button.setAttribute("aria-label","บัญชีและซิงก์ออนไลน์");
-    button.textContent="☁";
-    topInner?.insertBefore(button,document.querySelector("#settingsBtn"));
-  }
   document.querySelector("#v4CoachBtn")?.addEventListener("click",activate);
-  document.querySelector("#cloudAccountBtn")?.addEventListener("click",openAccount);
   document.addEventListener("click",event=>{
     const target=event.target.closest?.("[data-view]");
     if(active && target){
@@ -409,14 +359,6 @@ function installControls(){
   },true);
   document.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>{if(!active) document.querySelector("#v4CoachBtn")?.classList.remove("active");}));
 }
-
-window.addEventListener("teacherquest:cloud-status",()=>{
-  const label=cloudLabel();
-  const text=document.querySelector("#v4CloudText");
-  const dot=document.querySelector(".v4-status .v4-dot");
-  if(text) text.textContent=label.text;
-  if(dot) dot.className=`v4-dot ${label.className}`;
-});
 
 window.TeacherQuestV4={readState,writeState,renderCoach,activate};
 installControls();
