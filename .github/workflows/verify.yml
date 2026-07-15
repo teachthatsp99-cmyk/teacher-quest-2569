@@ -1,0 +1,24 @@
+name: Verify website
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check data.js
+          node --check app.js
+          node --check scripts/validate.mjs
+      - name: Validate question bank and assets
+        run: node scripts/validate.mjs
+      - name: Check unwanted production copy
+        run: |
+          ! grep -RniE 'บันทึกความคืบหน้าอัตโนมัติในเครื่อง|เล่นได้โดยไม่ใช้อินเทอร์เน็ต|จุดที่ตรวจและแก้ไข|สิ่งที่ต่างจากไฟล์ต้นฉบับ|เว็บไซต์ PixelArt สอบครูผู้ช่วย' index.html app.js styles.css
