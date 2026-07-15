@@ -35,14 +35,15 @@ test('V4 smart coach, items, backup and account entry work', async ({ page }) =>
   await expect(page.locator('#v4CoachBtn')).toBeVisible();
   await page.locator('#v4CoachBtn').click();
   await expect(page.getByText('ศูนย์ฝึก', { exact: false }).first()).toBeVisible();
-  await expect(page.locator('[data-v4-mode="mixed"]')).toBeVisible();
+  const mixedMode = page.locator('.v4-mode[data-v4-mode="mixed"]');
+  await expect(mixedMode).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-v4-action="export"]').click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/teacher-quest-backup/);
 
-  await page.locator('[data-v4-mode="mixed"]').click();
+  await mixedMode.click();
   await expect(page.locator('.v4-option')).toHaveCount(4);
   await page.locator('[data-v4-item="eliminate"]').click();
   await expect(page.locator('.v4-option.eliminated')).toHaveCount(1);
