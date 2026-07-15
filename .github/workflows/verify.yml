@@ -12,11 +12,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: JavaScript syntax
-        run: |
-          node --check data.js
-          node --check app.js
-          node --check scripts/validate.mjs
+      - name: Check data.js syntax
+        run: node --check data.js
+      - name: Check app.js syntax
+        run: node --check app.js
+      - name: Check validator syntax
+        run: node --check scripts/validate.mjs
       - name: Validate question bank and assets
         run: node scripts/validate.mjs
       - name: Check unwanted production copy
