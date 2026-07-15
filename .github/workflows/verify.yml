@@ -1,0 +1,33 @@
+name: Verify website
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies
+        run: npm install
+      - name: Check data.js syntax
+        run: node --check data.js
+      - name: Check app.js syntax
+        run: node --check app.js
+      - name: Check validator syntax
+        run: node --check scripts/validate.mjs
+      - name: Validate question bank and assets
+        run: npm run validate
+      - name: Check unwanted production copy
+        run: |
+          ! grep -RniE 'บันทึกความคืบหน้าอัตโนมัติในเครื่อง|เล่นได้โดยไม่ใช้อินเทอร์เน็ต|จุดที่ตรวจและแก้ไข|สิ่งที่ต่างจากไฟล์ต้นฉบับ|เว็บไซต์ PixelArt สอบครูผู้ช่วย' index.html app.js styles.css
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser and mobile smoke tests
+        run: |
+          python3 -m http.server 4173 >/tmp/teacher-quest-server.log 2>&1 &
+          npm run test:smoke
