@@ -23,3 +23,9 @@ jobs:
       - name: Check unwanted production copy
         run: |
           ! grep -RniE 'บันทึกความคืบหน้าอัตโนมัติในเครื่อง|เล่นได้โดยไม่ใช้อินเทอร์เน็ต|จุดที่ตรวจและแก้ไข|สิ่งที่ต่างจากไฟล์ต้นฉบับ|เว็บไซต์ PixelArt สอบครูผู้ช่วย' index.html app.js styles.css
+      - name: Install browser test runtime
+        run: npx --yes @playwright/test@1.54.1 install --with-deps chromium
+      - name: Run browser and mobile smoke tests
+        run: |
+          python3 -m http.server 4173 >/tmp/teacher-quest-server.log 2>&1 &
+          npx --yes @playwright/test@1.54.1 test tests/smoke.spec.cjs --reporter=line
