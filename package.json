@@ -1,0 +1,12 @@
+{
+  "name": "teacher-quest-2569",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "test:smoke": "playwright test tests/smoke.spec.cjs --reporter=line"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.54.1"
+  }
+}
