@@ -1,6 +1,6 @@
 {
   "name": "teacher-quest-2569",
-  "version": "4.1.1",
+  "version": "4.2.0",
   "private": true,
   "scripts": {
     "test": "npm run validate && npm run test:smoke",

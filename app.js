@@ -11,7 +11,7 @@ const toast = $("#toast");
 const modalBackground = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const STORAGE = "teacherQuest2569_v3";
 const letters = ["ก","ข","ค","ง"];
-const ROUND_COUNTS = Object.freeze({quick:10,zone:10,boss:15,all:15,law:12,weak:10});
+const ROUND_COUNTS = Object.freeze({quick:10,zone:10,boss:15,all:15,law:12,weak:10,complete:20});
 const clone = value => JSON.parse(JSON.stringify(value));
 const today = () => new Date().toLocaleDateString("sv-SE");
 const shuffle = items => items.slice().sort(() => Math.random() - 0.5);
@@ -35,7 +35,11 @@ const MODULE_PIXEL_ART = Object.freeze({
   ksp:["00011000","10011001","01122110","00122100","11222211","00122100","01000010","00000000"],
   voclaw:["01000010","00100100","00011000","01111110","01222210","00111100","00100100","01000010"],
   culture:["00011000","00122100","01222210","12211221","01222210","00122100","00011000","00100100"],
-  policy:["01100000","01210000","01221000","01222100","01221000","01210000","01100000","01000000"]
+  policy:["01100000","01210000","01221000","01222100","01221000","01210000","01100000","01000000"],
+  student:["00011000","00122100","01222210","12211221","01222210","00122100","01111110","01000010"],
+  admin:["01111110","01022010","01022010","01111110","01211210","01211210","01111110","11000011"],
+  quality:["11111111","10000001","10222201","10211201","10222201","10000001","11111111","00111100"],
+  current:["00122100","12222221","01211210","12222221","01211210","00122100","00011000","00100100"]
 });
 
 function moduleIconMarkup(item,className=""){
@@ -52,7 +56,8 @@ const sourceMarkup = question => {
   const link = question.sourceUrl
     ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="เปิดแหล่งอ้างอิงของข้อ ${question.id}">เปิดต้นทาง ↗</a>`
     : "";
-  return `แหล่งทบทวน: ${esc(question.source)}${verification}${link}`;
+  const document = question.sourceDocument ? `<br>เอกสารชุดอ้างอิง: ${esc(question.sourceDocument)}` : "";
+  return `แหล่งทบทวน: ${esc(question.source)}${verification}${document}${link}`;
 };
 
 const defaults = {
@@ -347,7 +352,7 @@ function zoneHtml(item){
   const progress = Math.round(stats.done / stats.total * 100);
   const stars = stats.accuracy >= 85 ? "★★★" : stats.accuracy >= 70 ? "★★☆" : stats.done ? "★☆☆" : "☆☆☆";
   const roundCount = Math.min(ROUND_COUNTS.zone,stats.total);
-  return `<button class="zone ${stats.accuracy >= 80 ? "mastered" : ""}" data-module="${item.id}"><span class="stars">${stars}</span><span class="zone-no">ZONE ${String(D.modules.indexOf(item)+1).padStart(2,"0")}</span><div class="zone-icon">${moduleIconMarkup(item,"large")}</div><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><div class="zone-session">คลัง ${stats.total} ข้อ • รอบละ ${roundCount} ข้อ</div><div class="zone-meta"><span>เคยทำ ${stats.done}/${stats.total}</span><span>แม่น ${stats.accuracy}%</span></div><div class="meter"><i style="width:${progress}%"></i></div></button>`;
+  return `<button class="zone ${stats.accuracy >= 80 ? "mastered" : ""}" data-module="${item.id}"><span class="stars">${stars}</span><span class="zone-no">ZONE ${String(D.modules.indexOf(item)+1).padStart(2,"0")}</span><div class="zone-icon">${moduleIconMarkup(item,"large")}</div><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><div class="zone-session">ภารกิจหลักครบ ${stats.total} ข้อ • ฝึกด่วน ${roundCount} ข้อ</div><div class="zone-meta"><span>เคยทำ ${stats.done}/${stats.total}</span><span>แม่น ${stats.accuracy}%</span></div><div class="meter"><i style="width:${progress}%"></i></div></button>`;
 }
 
 function renderHome(){
@@ -384,7 +389,7 @@ function renderHome(){
 }
 
 function renderWorld(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แผนที่ภารกิจ</h2><small>ตัวเลข “คลัง” คือข้อทั้งหมด ส่วน “รอบละ” คือจำนวนที่สุ่มมาฝึกแต่ละครั้ง</small></div><button class="btn small" id="allRandom">สุ่มรวม ${ROUND_COUNTS.all} ข้อ</button></div><div class="world-map">${D.modules.map(zoneHtml).join("")}</div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แผนที่ภารกิจ</h2><small>ภารกิจหลักทำครบทุกข้อในด่าน ส่วนโหมดด่วนและบอสเป็นชุดฝึกเสริม</small></div><button class="btn small" id="allRandom">สุ่มรวม ${ROUND_COUNTS.all} ข้อ</button></div><div class="world-map">${D.modules.map(zoneHtml).join("")}</div></section>`;
   $$('[data-module]').forEach(button => button.onclick = () => openZone(button.dataset.module));
   $("#allRandom").onclick = () => startBattle({mode:"random",count:ROUND_COUNTS.all});
 }
@@ -395,14 +400,15 @@ function openZone(id){
   const pools = questionPoolSummary(id);
   const normalCount = Math.min(ROUND_COUNTS.zone,pools.total);
   const bossCount = Math.min(ROUND_COUNTS.boss,pools.boss);
-  openModal(`<h2 id="modalTitle" class="module-heading">${moduleIconMarkup(item,"heading")}<span>${esc(item.title)}</span></h2><p>${esc(item.summary)}</p><p class="round-note"><strong>คลังด่านนี้มี ${pools.total} ข้อ</strong> ระบบจะสุ่มชุดใหม่ต่อรอบ จึงไม่ต้องทำทั้งหมดในครั้งเดียว</p><div class="dashboard zone-dashboard"><div class="stat-card pixel-box"><b>${pools.total}</b><span>ข้อทั้งหมดในคลัง</span></div><div class="stat-card pixel-box"><b>${stats.done}</b><span>ข้อที่เคยทำแล้ว</span></div><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นยำ</span></div></div><h3>บอสประจำด่าน</h3><p>◆ ${esc(item.boss)}</p><div class="hero-actions zone-actions"><button class="btn round-choice" id="zoneNormal"><strong>ฝึกรอบปกติ ${normalCount} ข้อ</strong><small>สุ่มจากคลัง ${pools.total} ข้อ</small></button><button class="btn pink round-choice" id="zoneBoss"><strong>ท้าบอส ${bossCount} ข้อ</strong><small>สุ่มจากโจทย์กลาง–ยาก ${pools.boss} ข้อ</small></button></div>`);
+  openModal(`<h2 id="modalTitle" class="module-heading">${moduleIconMarkup(item,"heading")}<span>${esc(item.title)}</span></h2><p>${esc(item.summary)}</p><p class="round-note"><strong>คลังด่านนี้มี ${pools.total} ข้อ</strong> เลือก “พิชิตครบทั้งคลัง” เพื่อทำครบทุกข้อโดยไม่ซ้ำในภารกิจนี้ หรือเลือกชุดฝึกสั้นได้ตามเวลา</p><div class="dashboard zone-dashboard"><div class="stat-card pixel-box"><b>${pools.total}</b><span>ข้อทั้งหมดในคลัง</span></div><div class="stat-card pixel-box"><b>${stats.done}</b><span>ข้อที่เคยทำแล้ว</span></div><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นยำ</span></div></div><h3>บอสประจำด่าน</h3><p>◆ ${esc(item.boss)}</p><div class="hero-actions zone-actions"><button class="btn mint round-choice primary-quest" id="zoneComplete"><strong>พิชิตครบทั้งคลัง ${pools.total} ข้อ</strong><small>ครบทุกข้อ • ไม่ซ้ำในภารกิจนี้</small></button><button class="btn round-choice" id="zoneNormal"><strong>ฝึกด่วน ${normalCount} ข้อ</strong><small>สุ่มจากคลัง ${pools.total} ข้อ</small></button><button class="btn pink round-choice" id="zoneBoss"><strong>ท้าบอส ${bossCount} ข้อ</strong><small>สุ่มจากโจทย์กลาง–ยาก ${pools.boss} ข้อ</small></button></div>`);
+  $("#zoneComplete").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:pools.total,complete:true}); };
   $("#zoneNormal").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:normalCount}); };
   $("#zoneBoss").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:bossCount,boss:true}); };
 }
 
 function renderPractice(options={}){
   if(options.start){ startBattle(options.start); return; }
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกดินแดน แล้วดูจำนวนในคลังเทียบกับจำนวนที่สุ่มต่อรอบ</small></div></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select></label></div><p class="practice-availability" id="practiceAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p id="normalPoolText"></p><span class="tag">NORMAL ROUND</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p id="bossPoolText"></p><span class="tag">HARD ROUND</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p id="weakPoolText"></p><span class="tag">SMART REVIEW</span></button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกดินแดน แล้วเลือกทำครบคลังหรือฝึกเป็นชุดสั้น</small></div></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select></label></div><p class="practice-availability" id="practiceAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" data-mode="complete"><div class="mode-icon" aria-hidden="true">✦</div><h3>พิชิตครบทั้งคลัง</h3><p id="completePoolText"></p><span class="tag">COMPLETE QUEST</span></button><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p id="normalPoolText"></p><span class="tag">NORMAL ROUND</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p id="bossPoolText"></p><span class="tag">HARD ROUND</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p id="weakPoolText"></p><span class="tag">SMART REVIEW</span></button></div></section>`;
   const syncAvailability = () => {
     const selected = $("#practiceModule").value;
     const item = selected === "all" ? null : moduleById(selected);
@@ -411,6 +417,8 @@ function renderPractice(options={}){
     const bossCount = Math.min(ROUND_COUNTS.boss,pools.boss);
     const weakCount = Math.min(ROUND_COUNTS.weak,pools.weak);
     $("#practiceAvailability").innerHTML = item ? `${moduleIconMarkup(item,"tiny")}<strong>${esc(item.title)}</strong>: คลังทั้งหมด ${pools.total} ข้อ • กลาง–ยาก ${pools.boss} ข้อ • ควรฝึก ${pools.weak} ข้อ` : `ทุกดินแดน: คลังทั้งหมด ${pools.total} ข้อ • กลาง–ยาก ${pools.boss} ข้อ • ควรฝึก ${pools.weak} ข้อ`;
+    $("#completePoolText").textContent = item ? `ทำครบ ${pools.total} ข้อโดยไม่ซ้ำในภารกิจนี้` : "เลือกดินแดนก่อนเพื่อเริ่มทำครบคลัง";
+    $('[data-mode="complete"]').disabled = !item;
     $("#normalPoolText").textContent = `สุ่ม ${normalCount} จากคลัง ${pools.total} ข้อ • ตอบถูกโจมตี`;
     $("#bossPoolText").textContent = `สุ่ม ${bossCount} จากโจทย์กลาง–ยาก ${pools.boss} ข้อ`;
     $("#weakPoolText").textContent = pools.weak ? `สุ่มสูงสุด ${weakCount} จาก ${pools.weak} ข้อที่ยังไม่แม่น` : "ไม่มีข้อที่ต้องแก้มือในดินแดนนี้";
@@ -422,7 +430,8 @@ function renderPractice(options={}){
     const selected = $("#practiceModule").value;
     state.lastModule = selected;
     saveState();
-    if(button.dataset.mode === "weak") startBattle({mode:"weak",module:selected === "all" ? null : selected,count:ROUND_COUNTS.weak});
+    if(button.dataset.mode === "complete") startBattle({mode:"module",module:selected,count:D.questions.filter(question => question.module === selected).length,complete:true});
+    else if(button.dataset.mode === "weak") startBattle({mode:"weak",module:selected === "all" ? null : selected,count:ROUND_COUNTS.weak});
     else startBattle({mode:selected === "all" ? "random" : "module",module:selected === "all" ? null : selected,count:button.dataset.mode === "boss" ? ROUND_COUNTS.boss : ROUND_COUNTS.zone,boss:button.dataset.mode === "boss"});
   });
 }
@@ -434,6 +443,11 @@ function pickPool(config){
   if(config.module) pool = pool.filter(question => question.module === config.module);
   if(config.mode === "weak") pool = pool.filter(needsPractice);
   if(config.boss) pool = pool.filter(question => question.difficulty !== "ง่าย");
+  if(config.complete){
+    const unseen = pool.filter(question => !state.records[question.id]);
+    const seen = pool.filter(question => state.records[question.id]);
+    return [...shuffle(unseen),...shuffle(seen)];
+  }
   return shuffle(pool).slice(0,config.count || 10);
 }
 
