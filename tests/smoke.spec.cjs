@@ -33,6 +33,7 @@ test('core battle flow renders graphics, feedback and a source link',async({page
   await page.locator('#attackBtn').click();
   await expect(page.locator('.feedback')).toBeVisible();
   await expect(page.locator('.feedback .source a')).toHaveAttribute('href',/^https:\/\//);
+  await expect(page.locator('.feedback .source')).toContainText('เอกสารชุดอ้างอิง:');
   await expect(page.locator('#nextBattle')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
@@ -98,33 +99,54 @@ test('exam count follows the selected module availability',async({page})=>{
   await expect(page.locator('.question-grid button.answered')).toHaveCount(1);
 });
 
-test('all 16 zones distinguish bank size from randomized round size and use pixel icons',async({page})=>{
+test('all 20 zones show complete-bank and optional short modes with unique pixel icons',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   const modules = await page.evaluate(()=>window.GAME_DATA.modules.map(module=>{
     const questions=window.GAME_DATA.questions.filter(question=>question.module===module.id);
     return {id:module.id,total:questions.length,boss:questions.filter(question=>question.difficulty!=="ง่าย").length};
   }));
   await page.locator('[data-view="world"]').click();
-  await expect(page.locator('.zone')).toHaveCount(16);
+  await expect(page.locator('.zone')).toHaveCount(20);
   const iconIds = await page.locator('.zone [data-module-icon]').evaluateAll(icons=>icons.map(icon=>icon.dataset.moduleIcon));
   const iconPatterns = await page.locator('.zone [data-module-icon]').evaluateAll(icons=>icons.map(icon=>icon.innerHTML));
-  expect(new Set(iconIds).size).toBe(16);
-  expect(new Set(iconPatterns).size).toBe(16);
+  expect(new Set(iconIds).size).toBe(20);
+  expect(new Set(iconPatterns).size).toBe(20);
   expect(iconIds).toContain('disability');
   await expect(page.locator('body')).not.toContainText('♿');
 
   for(const module of modules){
     const zone=page.locator(`.zone[data-module="${module.id}"]`);
-    await expect(zone.locator('.zone-session')).toHaveText(`คลัง ${module.total} ข้อ • รอบละ ${Math.min(10,module.total)} ข้อ`);
+    await expect(zone.locator('.zone-session')).toHaveText(`ภารกิจหลักครบ ${module.total} ข้อ • ฝึกด่วน ${Math.min(10,module.total)} ข้อ`);
     await zone.click();
     await expect(page.locator('#modalBody')).toContainText(`คลังด่านนี้มี ${module.total} ข้อ`);
-    await expect(page.locator('#zoneNormal')).toContainText(`ฝึกรอบปกติ ${Math.min(10,module.total)} ข้อ`);
+    await expect(page.locator('#zoneComplete')).toContainText(`พิชิตครบทั้งคลัง ${module.total} ข้อ`);
+    await expect(page.locator('#zoneComplete')).toContainText('ครบทุกข้อ • ไม่ซ้ำในภารกิจนี้');
+    await expect(page.locator('#zoneNormal')).toContainText(`ฝึกด่วน ${Math.min(10,module.total)} ข้อ`);
     await expect(page.locator('#zoneNormal')).toContainText(`สุ่มจากคลัง ${module.total} ข้อ`);
     await expect(page.locator('#zoneBoss')).toContainText(`ท้าบอส ${Math.min(15,module.boss)} ข้อ`);
     await expect(page.locator('#zoneBoss')).toContainText(`สุ่มจากโจทย์กลาง–ยาก ${module.boss} ข้อ`);
     await expect(page.locator('#modalTitle [data-module-icon]')).toHaveAttribute('data-module-icon',module.id);
     await page.locator('#modalClose').click();
   }
+});
+
+test('complete quest serves every question in a zone exactly once',async({page})=>{
+  test.setTimeout(60000);
+  await page.goto(url,{waitUntil:'networkidle'});
+  await page.locator('[data-view="world"]').click();
+  await page.locator('.zone[data-module="research"]').click();
+  await page.locator('#zoneComplete').click();
+  await expect(page.locator('.battle-center strong')).toHaveText('1 / 20');
+  const stems=[];
+  for(let turn=0;turn<20;turn++){
+    stems.push((await page.locator('.question-text').textContent()).trim());
+    await submitCurrentBattleAnswer(page,{correct:true});
+    await expect(page.locator('.feedback')).toBeVisible();
+    await page.locator('#nextBattle').click();
+  }
+  expect(new Set(stems).size).toBe(20);
+  await expect(page.locator('[data-result-action="victory"]')).toBeVisible();
+  await expect(page.locator('.result-hero')).toContainText('20/20');
 });
 
 test('practice availability is scoped and never fills a short module set from other zones',async({page})=>{
@@ -226,7 +248,8 @@ test('mobile navigation is a usable 4 by 2 grid with no horizontal overflow',asy
     return box.left>=0 && box.right<=window.innerWidth && box.width<=window.innerWidth;
   });
   expect(modalFits).toBe(true);
-  await expect(page.locator('#zoneNormal')).toContainText('สุ่มจากคลัง 25 ข้อ');
+  await expect(page.locator('#zoneComplete')).toContainText('พิชิตครบทั้งคลัง 20 ข้อ');
+  await expect(page.locator('#zoneNormal')).toContainText('สุ่มจากคลัง 20 ข้อ');
   await page.locator('#modalClose').click();
   await page.locator('[data-view="home"]').first().click();
   await page.locator('#quickStart').click();
