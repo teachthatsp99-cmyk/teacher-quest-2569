@@ -11,6 +11,7 @@ const toast = $("#toast");
 const modalBackground = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const STORAGE = "teacherQuest2569_v3";
 const letters = ["ก","ข","ค","ง"];
+const ROUND_COUNTS = Object.freeze({quick:10,zone:10,boss:15,all:15,law:12,weak:10});
 const clone = value => JSON.parse(JSON.stringify(value));
 const today = () => new Date().toLocaleDateString("sv-SE");
 const shuffle = items => items.slice().sort(() => Math.random() - 0.5);
@@ -18,6 +19,31 @@ const clamp = (number,min,max) => Math.max(min,Math.min(max,number));
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
   "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
 })[char]);
+const MODULE_PIXEL_ART = Object.freeze({
+  learn:["01100110","12211221","12211221","12211221","12211221","12211221","01111110","00011000"],
+  curriculum:["01111110","01222210","01100110","01222210","01100110","01222210","01111110","00000000"],
+  measure:["00000000","01111110","01212110","01111110","00001100","00011000","00110000","00000000"],
+  research:["00111000","01000100","01020100","01000100","00111000","00011000","00101100","01000110"],
+  psych:["00111100","01211210","12122121","12211221","01222210","00111100","00011000","00100100"],
+  media:["01111110","01000010","01222210","01212210","01222210","01000010","01111110","00100100"],
+  classroom:["00111100","01111110","01011010","01011010","01111110","01222210","01200210","01111110"],
+  profession:["00011000","01111110","00111100","01011010","10011001","01111110","00111100","00011000"],
+  eduact:["00111100","01111110","01011010","01011010","01011010","01111110","12222221","11111111"],
+  child:["00100100","01211210","12222221","12222221","01222210","00122100","00011000","00000000"],
+  disability:["00011000","00122100","00011000","01111110","00122100","00122100","01000010","10000001"],
+  civil:["00111100","01111110","01011010","01011010","01111110","00111100","01111110","11000011"],
+  ksp:["00011000","10011001","01122110","00122100","11222211","00122100","01000010","00000000"],
+  voclaw:["01000010","00100100","00011000","01111110","01222210","00111100","00100100","01000010"],
+  culture:["00011000","00122100","01222210","12211221","01222210","00122100","00011000","00100100"],
+  policy:["01100000","01210000","01221000","01222100","01221000","01210000","01100000","01000000"]
+});
+
+function moduleIconMarkup(item,className=""){
+  const pattern = MODULE_PIXEL_ART[item?.id] || MODULE_PIXEL_ART.learn;
+  const pixels = pattern.flatMap((row,y) => [...row].map((value,x) => value === "0" ? "" : `<rect class="pixel-tone-${value}" x="${x}" y="${y}" width="1" height="1"/>`)).join("");
+  return `<svg class="pixel-module-icon ${className}" data-module-icon="${esc(item?.id || "learn")}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true" focusable="false">${pixels}</svg>`;
+}
+window.teacherQuestModuleIcon = moduleIconMarkup;
 const questionType = question => question.category || question.type;
 const sourceMarkup = question => {
   const verification = question.verified
@@ -99,10 +125,7 @@ function totalStats(){
   const records = Object.values(state.records);
   const attempts = records.reduce((sum,item) => sum + item.attempts,0);
   const correct = records.reduce((sum,item) => sum + item.correct,0);
-  const weak = D.questions.filter(question => {
-    const record = state.records[question.id];
-    return !record || record.correct / record.attempts < .7;
-  }).length;
+  const weak = D.questions.filter(needsPractice).length;
   return {
     attempted:records.length,
     attempts,
@@ -127,6 +150,22 @@ function moduleStats(id){
     }
   });
   return {total:questions.length,done,accuracy:attempts ? Math.round(correct / attempts * 100) : 0};
+}
+
+function needsPractice(question){
+  const record = state.records[question.id];
+  if(!record) return true;
+  const attempts = Number(record.attempts) || 0;
+  return !attempts || Boolean(record.lastWrong) || (Number(record.correct) || 0) / attempts < .7;
+}
+
+function questionPoolSummary(moduleId="all"){
+  const pool = moduleId === "all" ? D.questions : D.questions.filter(question => question.module === moduleId);
+  return {
+    total:pool.length,
+    boss:pool.filter(question => question.difficulty !== "ง่าย").length,
+    weak:pool.filter(needsPractice).length
+  };
 }
 
 function recordAnswer(question,isCorrect){
@@ -307,7 +346,8 @@ function zoneHtml(item){
   const stats = moduleStats(item.id);
   const progress = Math.round(stats.done / stats.total * 100);
   const stars = stats.accuracy >= 85 ? "★★★" : stats.accuracy >= 70 ? "★★☆" : stats.done ? "★☆☆" : "☆☆☆";
-  return `<button class="zone ${stats.accuracy >= 80 ? "mastered" : ""}" data-module="${item.id}"><span class="stars">${stars}</span><span class="zone-no">ZONE ${String(D.modules.indexOf(item)+1).padStart(2,"0")}</span><div class="zone-icon">${item.icon}</div><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><div class="zone-meta"><span>${stats.done}/${stats.total} ข้อ</span><span>${stats.accuracy}%</span></div><div class="meter"><i style="width:${progress}%"></i></div></button>`;
+  const roundCount = Math.min(ROUND_COUNTS.zone,stats.total);
+  return `<button class="zone ${stats.accuracy >= 80 ? "mastered" : ""}" data-module="${item.id}"><span class="stars">${stars}</span><span class="zone-no">ZONE ${String(D.modules.indexOf(item)+1).padStart(2,"0")}</span><div class="zone-icon">${moduleIconMarkup(item,"large")}</div><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><div class="zone-session">คลัง ${stats.total} ข้อ • รอบละ ${roundCount} ข้อ</div><div class="zone-meta"><span>เคยทำ ${stats.done}/${stats.total}</span><span>แม่น ${stats.accuracy}%</span></div><div class="meter"><i style="width:${progress}%"></i></div></button>`;
 }
 
 function renderHome(){
@@ -319,7 +359,7 @@ function renderHome(){
       <div class="eyebrow">MISSION 2569 • READY FOR THE EXAM</div>
       <h1>ฝึกให้แม่น<br><span>สู้ให้ติด</span></h1>
       <p>ออกเดินทางผ่านศาสตร์การสอน กฎหมาย วิชาชีพ และสถานการณ์การศึกษา ฝึกตอบแบบต่อสู้ เก็บคอมโบ แล้วพิชิตสนามสอบใหญ่</p>
-      <div class="hero-actions"><button class="btn" id="quickStart">⚔ เริ่มภารกิจทันที</button><button class="btn mint" data-go="world">◈ เลือกดินแดน</button><button class="btn dark" data-go="exam">◷ สนามสอบใหญ่</button></div>
+      <div class="hero-actions"><button class="btn" id="quickStart">⚔ ภารกิจด่วน ${ROUND_COUNTS.quick} ข้อ</button><button class="btn mint" data-go="world">◈ เลือกดินแดน</button><button class="btn dark" data-go="exam">◷ สนามสอบใหญ่</button></div>
     </div>${heroArt()}</div></section>
     <div class="section-head"><div><h2>สถานะการเดินทาง</h2><p>ดูจุดแข็งและภารกิจที่รออยู่</p></div></div>
     <section class="dashboard">
@@ -338,34 +378,52 @@ function renderHome(){
     <section class="world-map">${D.modules.slice(0,4).map(zoneHtml).join("")}</section>
     <div class="footer-note">ครูเควสต์ • คลังความรู้ฉบับ ${D.version} • ตรวจข้อมูลผันแปรล่าสุด ${D.verifiedAt}</div>`;
   bindCommon();
-  $("#quickStart").onclick = () => startBattle({mode:"random",count:10});
-  $("#weakStart").onclick = () => startBattle({mode:"weak",count:10});
-  $("#lawStart").onclick = () => startBattle({mode:"modules",modules:["eduact","child","disability","civil","ksp","voclaw"],count:12});
+  $("#quickStart").onclick = () => startBattle({mode:"random",count:ROUND_COUNTS.quick});
+  $("#weakStart").onclick = () => startBattle({mode:"weak",count:ROUND_COUNTS.weak});
+  $("#lawStart").onclick = () => startBattle({mode:"modules",modules:["eduact","child","disability","civil","ksp","voclaw"],count:ROUND_COUNTS.law});
 }
 
 function renderWorld(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แผนที่ภารกิจ</h2><small>เลือกดินแดนเพื่อท้าทายบอสประจำศาสตร์</small></div><button class="btn small" id="allRandom">สุ่มทุกดินแดน</button></div><div class="world-map">${D.modules.map(zoneHtml).join("")}</div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แผนที่ภารกิจ</h2><small>ตัวเลข “คลัง” คือข้อทั้งหมด ส่วน “รอบละ” คือจำนวนที่สุ่มมาฝึกแต่ละครั้ง</small></div><button class="btn small" id="allRandom">สุ่มรวม ${ROUND_COUNTS.all} ข้อ</button></div><div class="world-map">${D.modules.map(zoneHtml).join("")}</div></section>`;
   $$('[data-module]').forEach(button => button.onclick = () => openZone(button.dataset.module));
-  $("#allRandom").onclick = () => startBattle({mode:"random",count:15});
+  $("#allRandom").onclick = () => startBattle({mode:"random",count:ROUND_COUNTS.all});
 }
 
 function openZone(id){
   const item = moduleById(id);
   const stats = moduleStats(id);
-  openModal(`<h2 id="modalTitle">${item.icon} ${esc(item.title)}</h2><p>${esc(item.summary)}</p><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.total}</b><span>ข้อในด่าน</span></div><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นยำ</span></div></div><h3>บอสประจำด่าน</h3><p>◆ ${esc(item.boss)}</p><div class="hero-actions"><button class="btn" id="zoneNormal">เริ่มด่าน 10 ข้อ</button><button class="btn pink" id="zoneBoss">ท้าบอส 15 ข้อ</button></div>`);
-  $("#zoneNormal").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:10}); };
-  $("#zoneBoss").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:15,boss:true}); };
+  const pools = questionPoolSummary(id);
+  const normalCount = Math.min(ROUND_COUNTS.zone,pools.total);
+  const bossCount = Math.min(ROUND_COUNTS.boss,pools.boss);
+  openModal(`<h2 id="modalTitle" class="module-heading">${moduleIconMarkup(item,"heading")}<span>${esc(item.title)}</span></h2><p>${esc(item.summary)}</p><p class="round-note"><strong>คลังด่านนี้มี ${pools.total} ข้อ</strong> ระบบจะสุ่มชุดใหม่ต่อรอบ จึงไม่ต้องทำทั้งหมดในครั้งเดียว</p><div class="dashboard zone-dashboard"><div class="stat-card pixel-box"><b>${pools.total}</b><span>ข้อทั้งหมดในคลัง</span></div><div class="stat-card pixel-box"><b>${stats.done}</b><span>ข้อที่เคยทำแล้ว</span></div><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นยำ</span></div></div><h3>บอสประจำด่าน</h3><p>◆ ${esc(item.boss)}</p><div class="hero-actions zone-actions"><button class="btn round-choice" id="zoneNormal"><strong>ฝึกรอบปกติ ${normalCount} ข้อ</strong><small>สุ่มจากคลัง ${pools.total} ข้อ</small></button><button class="btn pink round-choice" id="zoneBoss"><strong>ท้าบอส ${bossCount} ข้อ</strong><small>สุ่มจากโจทย์กลาง–ยาก ${pools.boss} ข้อ</small></button></div>`);
+  $("#zoneNormal").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:normalCount}); };
+  $("#zoneBoss").onclick = () => { closeModal(); startBattle({mode:"module",module:id,count:bossCount,boss:true}); };
 }
 
 function renderPractice(options={}){
   if(options.start){ startBattle(options.start); return; }
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกวิธีฝึก แล้วเปลี่ยนความรู้เป็นพลังโจมตี</small></div></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${item.icon} ${esc(item.title)}</option>`).join("")}</select></label></div><div class="mode-grid"><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p>สุ่ม 10 ข้อ ตอบถูกโจมตี ตอบผิดถูกสวนกลับ</p><span class="tag">10 QUESTIONS</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p>15 ข้อ ระดับกลางและยาก บอสพลังชีวิตสูง</p><span class="tag">HARD MODE</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p>ระบบเลือกข้อที่เคยผิดหรือยังไม่เคยทำ</p><span class="tag">SMART REVIEW</span></button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกดินแดน แล้วดูจำนวนในคลังเทียบกับจำนวนที่สุ่มต่อรอบ</small></div></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select></label></div><p class="practice-availability" id="practiceAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p id="normalPoolText"></p><span class="tag">NORMAL ROUND</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p id="bossPoolText"></p><span class="tag">HARD ROUND</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p id="weakPoolText"></p><span class="tag">SMART REVIEW</span></button></div></section>`;
+  const syncAvailability = () => {
+    const selected = $("#practiceModule").value;
+    const item = selected === "all" ? null : moduleById(selected);
+    const pools = questionPoolSummary(selected);
+    const normalCount = Math.min(ROUND_COUNTS.zone,pools.total);
+    const bossCount = Math.min(ROUND_COUNTS.boss,pools.boss);
+    const weakCount = Math.min(ROUND_COUNTS.weak,pools.weak);
+    $("#practiceAvailability").innerHTML = item ? `${moduleIconMarkup(item,"tiny")}<strong>${esc(item.title)}</strong>: คลังทั้งหมด ${pools.total} ข้อ • กลาง–ยาก ${pools.boss} ข้อ • ควรฝึก ${pools.weak} ข้อ` : `ทุกดินแดน: คลังทั้งหมด ${pools.total} ข้อ • กลาง–ยาก ${pools.boss} ข้อ • ควรฝึก ${pools.weak} ข้อ`;
+    $("#normalPoolText").textContent = `สุ่ม ${normalCount} จากคลัง ${pools.total} ข้อ • ตอบถูกโจมตี`;
+    $("#bossPoolText").textContent = `สุ่ม ${bossCount} จากโจทย์กลาง–ยาก ${pools.boss} ข้อ`;
+    $("#weakPoolText").textContent = pools.weak ? `สุ่มสูงสุด ${weakCount} จาก ${pools.weak} ข้อที่ยังไม่แม่น` : "ไม่มีข้อที่ต้องแก้มือในดินแดนนี้";
+    $('[data-mode="weak"]').disabled = !pools.weak;
+  };
+  $("#practiceModule").onchange = syncAvailability;
+  syncAvailability();
   $$('.mode-card').forEach(button => button.onclick = () => {
     const selected = $("#practiceModule").value;
     state.lastModule = selected;
     saveState();
-    if(button.dataset.mode === "weak") startBattle({mode:"weak",module:selected === "all" ? null : selected,count:10});
-    else startBattle({mode:selected === "all" ? "random" : "module",module:selected === "all" ? null : selected,count:button.dataset.mode === "boss" ? 15 : 10,boss:button.dataset.mode === "boss"});
+    if(button.dataset.mode === "weak") startBattle({mode:"weak",module:selected === "all" ? null : selected,count:ROUND_COUNTS.weak});
+    else startBattle({mode:selected === "all" ? "random" : "module",module:selected === "all" ? null : selected,count:button.dataset.mode === "boss" ? ROUND_COUNTS.boss : ROUND_COUNTS.zone,boss:button.dataset.mode === "boss"});
   });
 }
 
@@ -374,20 +432,19 @@ function pickPool(config){
   if(config.mode === "module") pool = pool.filter(question => question.module === config.module);
   if(config.mode === "modules") pool = pool.filter(question => config.modules.includes(question.module));
   if(config.module) pool = pool.filter(question => question.module === config.module);
-  if(config.mode === "weak") pool = pool.filter(question => {
-    const record = state.records[question.id];
-    return !record || record.lastWrong || record.correct / record.attempts < .7;
-  });
+  if(config.mode === "weak") pool = pool.filter(needsPractice);
   if(config.boss) pool = pool.filter(question => question.difficulty !== "ง่าย");
-  if(pool.length < (config.count || 10)){
-    pool = pool.concat(shuffle(D.questions.filter(question => !pool.includes(question))));
-  }
   return shuffle(pool).slice(0,config.count || 10);
 }
 
 function startBattle(config){
+  const pool = pickPool(config);
+  if(!pool.length){
+    showToast("ไม่มีข้อที่ตรงเงื่อนไขในขณะนี้ ลองเลือกดินแดนหรือโหมดอื่น");
+    return;
+  }
   battle = {
-    pool:pickPool(config),index:0,playerHp:100,
+    pool,index:0,playerHp:100,
     enemyHp:config.boss ? 150 : 100,enemyMax:config.boss ? 150 : 100,
     combo:0,selected:null,locked:false,hidden:[],shield:false,
     skills:{fifty:1,heal:1,shield:1,hint:1},boss:Boolean(config.boss),correct:0
@@ -401,7 +458,7 @@ function renderBattle(){
   if(!battle || battle.index >= battle.pool.length){ finishBattle(); return; }
   const question = battle.pool[battle.index];
   const item = moduleById(question.module);
-  view.innerHTML = `<section class="battle-shell pixel-box"><div class="battle-hud"><div><div class="fighter-name">◆ ครูนักผจญภัย</div><div class="hpbar"><i style="width:${battle.playerHp}%"></i></div></div><div class="battle-center"><strong>${battle.index+1} / ${battle.pool.length}</strong><small>COMBO ×${battle.combo}</small></div><div><div class="fighter-name right">${esc(battle.boss ? item.boss : "มอนสเตอร์ความสับสน")} ◆</div><div class="hpbar enemy-hp"><i style="width:${battle.enemyHp / battle.enemyMax * 100}%"></i></div></div></div><div class="arena"><div class="fighter player" id="playerFighter">${fighterArt()}</div><div class="fighter enemy" id="enemyFighter">${fighterArt()}</div></div><div class="question-panel"><div class="question-meta"><span class="chip gold">${item.icon} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span>${question.verified ? `<span class="chip mint">ตรวจ ${esc(question.verifiedAt)}</span>` : `<span class="chip">อ้างอิงต้นทาง</span>`}</div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${battle.selected === index ? "selected" : ""}" data-answer="${index}" ${battle.locked || battle.hidden.includes(index) ? "disabled" : ""} style="${battle.hidden.includes(index) ? "visibility:hidden" : ""}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><div class="skills"><button class="skill" data-skill="fifty" ${!battle.skills.fifty || battle.locked ? "disabled" : ""}>✂ 50:50</button><button class="skill" data-skill="shield" ${!battle.skills.shield || battle.locked ? "disabled" : ""}>◈ โล่</button><button class="skill" data-skill="heal" ${!battle.skills.heal || battle.locked ? "disabled" : ""}>+ ฟื้นพลัง</button><button class="skill" data-skill="hint" ${!battle.skills.hint || battle.locked ? "disabled" : ""}>◉ คำใบ้</button></div><button class="btn" id="attackBtn" ${battle.selected === null || battle.locked ? "disabled" : ""}>โจมตี!</button></div><div id="feedbackSlot"></div></div></section>`;
+  view.innerHTML = `<section class="battle-shell pixel-box"><div class="battle-hud"><div><div class="fighter-name">◆ ครูนักผจญภัย</div><div class="hpbar"><i style="width:${battle.playerHp}%"></i></div></div><div class="battle-center"><strong>${battle.index+1} / ${battle.pool.length}</strong><small>COMBO ×${battle.combo}</small></div><div><div class="fighter-name right">${esc(battle.boss ? item.boss : "มอนสเตอร์ความสับสน")} ◆</div><div class="hpbar enemy-hp"><i style="width:${battle.enemyHp / battle.enemyMax * 100}%"></i></div></div></div><div class="arena" id="battleArena" data-battle-action="idle"><div class="battle-action-label" id="battleAction" role="status" aria-live="polite"></div><div class="battle-slash" aria-hidden="true"></div><div class="battle-shield-fx" aria-hidden="true"></div><div class="fighter player" id="playerFighter">${fighterArt()}</div><div class="fighter enemy" id="enemyFighter">${fighterArt()}</div></div><div class="question-panel"><div class="question-meta"><span class="chip gold">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span>${question.verified ? `<span class="chip mint">ตรวจ ${esc(question.verifiedAt)}</span>` : `<span class="chip">อ้างอิงต้นทาง</span>`}</div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${battle.selected === index ? "selected" : ""}" data-answer="${index}" ${battle.locked || battle.hidden.includes(index) ? "disabled" : ""} style="${battle.hidden.includes(index) ? "visibility:hidden" : ""}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><div class="skills"><button class="skill" data-skill="fifty" ${!battle.skills.fifty || battle.locked ? "disabled" : ""}>✂ 50:50</button><button class="skill" data-skill="shield" ${!battle.skills.shield || battle.locked ? "disabled" : ""}>◈ โล่</button><button class="skill" data-skill="heal" ${!battle.skills.heal || battle.locked ? "disabled" : ""}>+ ฟื้นพลัง</button><button class="skill" data-skill="hint" ${!battle.skills.hint || battle.locked ? "disabled" : ""}>◉ คำใบ้</button></div><button class="btn attack-button" id="attackBtn" ${battle.selected === null || battle.locked ? "disabled" : ""}>⚔ โจมตี!</button></div><div id="feedbackSlot"></div></div></section>`;
   $$('.option').forEach(button => button.onclick = () => {
     if(battle.locked) return;
     battle.selected = Number(button.dataset.answer);
@@ -446,17 +503,41 @@ function damagePop(element,text){
   setTimeout(() => pop.remove(),1000);
 }
 
-function animateAttack(damage){
+function animateAttack(damage,finisher=false){
   const player = $("#playerFighter");
   const enemy = $("#enemyFighter");
+  const arena = $("#battleArena");
+  const label = $("#battleAction");
+  if(arena) arena.dataset.battleAction = finisher ? "finisher" : "attack";
+  if(label) label.textContent = finisher ? "FINISHING STRIKE!" : "KNOWLEDGE STRIKE!";
   player?.classList.add("attack");
-  setTimeout(() => enemy?.classList.add("hit"),150);
-  damagePop(enemy,`-${damage}`);
+  setTimeout(() => {
+    arena?.classList.add("impact");
+    enemy?.classList.add("hit");
+    damagePop(enemy,`-${damage}`);
+  },180);
+  if(finisher){
+    setTimeout(() => {
+      enemy?.classList.add("defeated");
+      player?.classList.add("victor");
+      arena?.classList.add("victory");
+      if(label) label.textContent = "VICTORY! ปราบศัตรูสำเร็จ";
+    },520);
+  }
 }
 function animateHurt(damage){
   const player = $("#playerFighter");
-  player?.classList.add("hurt");
-  damagePop(player,damage ? `-${damage}` : "BLOCK");
+  const enemy = $("#enemyFighter");
+  const arena = $("#battleArena");
+  const label = $("#battleAction");
+  if(arena) arena.dataset.battleAction = damage ? "counter" : "block";
+  if(label) label.textContent = damage ? "ENEMY COUNTER!" : "SHIELD BLOCK!";
+  enemy?.classList.add("counter");
+  if(!damage) arena?.classList.add("blocked");
+  setTimeout(() => {
+    player?.classList.add(damage ? "hurt" : "block");
+    damagePop(player,damage ? `-${damage}` : "BLOCK");
+  },180);
 }
 
 function toggleBookmark(id,button=null){
@@ -482,7 +563,7 @@ function submitBattle(){
     damage = 22 + Math.min(battle.combo * 3,18);
     battle.enemyHp = clamp(battle.enemyHp - damage,0,battle.enemyMax);
     sfx.correct();
-    animateAttack(damage);
+    animateAttack(damage,battle.enemyHp <= 0);
   }else{
     battle.combo = 0;
     damage = battle.shield ? 0 : 18;
@@ -498,7 +579,8 @@ function submitBattle(){
     if(index === battle.selected && !isCorrect) button.classList.add("wrong");
   });
   const slot = $("#feedbackSlot");
-  slot.innerHTML = `<div class="feedback ${isCorrect ? "" : "bad"}"><h3>${isCorrect ? "โจมตีสำเร็จ!" : "ถูกสวนกลับ!"}</h3><p><strong>คำตอบ: ${letters[question.answer]}. ${esc(question.options[question.answer])}</strong></p><p>${esc(question.explanation)}</p><div class="source">${sourceMarkup(question)}</div><div class="hero-actions"><button class="btn small ${battle.playerHp <= 0 ? "red" : "mint"}" id="nextBattle">${battle.playerHp <= 0 ? "กลับฐาน" : "ข้อต่อไป"}</button><button class="btn small dark" id="bookmarkBtn">${state.bookmarks.includes(question.id) ? "★ เก็บแล้ว" : "☆ เก็บทบทวน"}</button></div></div>`;
+  const nextLabel = battle.playerHp <= 0 ? "กลับฐาน" : battle.enemyHp <= 0 ? "รับชัยชนะ +10 เหรียญ" : battle.index >= battle.pool.length-1 ? "ดูผลภารกิจ" : "ข้อต่อไป";
+  slot.innerHTML = `<div class="feedback ${isCorrect ? "" : "bad"}"><h3>${isCorrect ? battle.enemyHp <= 0 ? "ท่าปิดฉากสำเร็จ!" : "โจมตีสำเร็จ!" : damage ? "ถูกสวนกลับ!" : "โล่ป้องกันสำเร็จ!"}</h3><p><strong>คำตอบ: ${letters[question.answer]}. ${esc(question.options[question.answer])}</strong></p><p>${esc(question.explanation)}</p><div class="source">${sourceMarkup(question)}</div><div class="hero-actions"><button class="btn small ${battle.playerHp <= 0 ? "red" : "mint"}" id="nextBattle">${nextLabel}</button><button class="btn small dark" id="bookmarkBtn">${state.bookmarks.includes(question.id) ? "★ เก็บแล้ว" : "☆ เก็บทบทวน"}</button></div></div>`;
   $("#bookmarkBtn").onclick = event => toggleBookmark(question.id,event.currentTarget);
   $("#nextBattle").onclick = () => {
     if(battle.playerHp <= 0){ finishBattle(true); return; }
@@ -521,14 +603,15 @@ function finishBattle(defeat=false){
   const result = battle;
   const score = result ? result.correct : 0;
   const total = result ? result.pool.length : 0;
-  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box"><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p></div><div class="hero-actions"><button class="btn" id="againBattle">ฝึกอีกชุด</button><button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
+  if(!defeat) sfx.win();
+  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box ${defeat ? "retreat" : "mission-victory"}"><div class="result-battle-stage" data-result-action="${defeat ? "retreat" : "victory"}"><div class="victory-burst" aria-hidden="true"></div><div class="fighter result-fighter ${defeat ? "retreating" : "celebrating"}">${fighterArt()}</div><div class="victory-banner">${defeat ? "TRY AGAIN" : "VICTORY!"}</div></div><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p></div><div class="hero-actions"><button class="btn" id="againBattle">ฝึกอีกชุด</button><button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   battle = null;
   bindCommon();
   $("#againBattle").onclick = () => go("practice");
 }
 
 function renderExamLobby(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามสอบใหญ่</h2><small>เลือกจำนวนข้อ เวลา และขอบเขตก่อนเปิดประตูสนาม</small></div></div><div class="filter-row"><label>ขอบเขต <select id="examModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}">${item.icon} ${esc(item.title)}</option>`).join("")}</select></label><label>จำนวนข้อ <select id="examCount"></select></label><label>เวลา <select id="examMinutes"><option value="30">30 นาที</option><option value="60" selected>60 นาที</option><option value="90">90 นาที</option></select></label></div><p class="exam-availability" id="examAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" id="startExam"><div class="mode-icon">◷</div><h3>เริ่มสนามสอบ</h3><p>ซ่อนเฉลยจนกว่าจะส่งข้อสอบ เปลี่ยนคำตอบและข้ามข้อได้</p><span class="tag">EXAM MODE</span></button><button class="mode-card" id="quickExam"><div class="mode-icon">⚡</div><h3>ด่านด่วน 20 ข้อ</h3><p>จับเวลา 20 นาที เหมาะกับการซ้อมทุกวัน</p><span class="tag">SPEED RUN</span></button><button class="mode-card" id="bossExam"><div class="mode-icon">♜</div><h3>ศึกบอส 80 ข้อ</h3><p>คัดระดับกลางและยากจากทุกดินแดน</p><span class="tag">FINAL BOSS</span></button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามสอบใหญ่</h2><small>เลือกจำนวนข้อ เวลา และขอบเขตก่อนเปิดประตูสนาม</small></div></div><div class="filter-row"><label>ขอบเขต <select id="examModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}">${esc(item.title)}</option>`).join("")}</select></label><label>จำนวนข้อ <select id="examCount"></select></label><label>เวลา <select id="examMinutes"><option value="30">30 นาที</option><option value="60" selected>60 นาที</option><option value="90">90 นาที</option></select></label></div><p class="exam-availability" id="examAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" id="startExam"><div class="mode-icon">◷</div><h3>เริ่มสนามสอบ</h3><p>ซ่อนเฉลยจนกว่าจะส่งข้อสอบ เปลี่ยนคำตอบและข้ามข้อได้</p><span class="tag">EXAM MODE</span></button><button class="mode-card" id="quickExam"><div class="mode-icon">⚡</div><h3>ด่านด่วน 20 ข้อ</h3><p>จับเวลา 20 นาที เหมาะกับการซ้อมทุกวัน</p><span class="tag">SPEED RUN</span></button><button class="mode-card" id="bossExam"><div class="mode-icon">♜</div><h3>ศึกบอส 80 ข้อ</h3><p>คัดระดับกลางและยากจากทุกดินแดน</p><span class="tag">FINAL BOSS</span></button></div></section>`;
   const syncExamAvailability = () => {
     const moduleId = $("#examModule").value;
     const available = D.questions.filter(question => moduleId === "all" || question.module === moduleId).length;
@@ -539,8 +622,8 @@ function renderExamLobby(){
     const selected = preferred.filter(count => count <= Math.min(previous,available)).pop() || preferred[0];
     $("#examCount").value = String(selected);
     const item = moduleId === "all" ? null : moduleById(moduleId);
-    $("#examAvailability").textContent = item
-      ? `${item.icon} ${item.title} มี ${available} ข้อ — ระบบแสดงเฉพาะจำนวนที่ทำได้จริง`
+    $("#examAvailability").innerHTML = item
+      ? `${moduleIconMarkup(item,"tiny")}<strong>${esc(item.title)}</strong> มี ${available} ข้อ — ระบบแสดงเฉพาะจำนวนที่ทำได้จริง`
       : `คลังรวมมี ${available} ข้อ`;
   };
   $("#examModule").onchange = syncExamAvailability;
@@ -565,7 +648,7 @@ function beginExam(count,minutes,moduleId,boss){
 function renderExam(){
   const question = exam.pool[exam.index];
   const item = moduleById(question.module);
-  view.innerHTML = `<div class="exam-layout"><section class="panel pixel-box"><div class="panel-title"><div><h2>ข้อ ${exam.index+1} จาก ${exam.pool.length}</h2><small>${item.icon} ${esc(item.title)}</small></div><div class="timer" id="timerText">--:--</div></div><div class="question-meta"><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span></div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${exam.answers[exam.index] === index ? "selected" : ""}" data-exam-answer="${index}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><button class="btn small dark" id="prevExam" ${exam.index === 0 ? "disabled" : ""}>← ก่อนหน้า</button><div><button class="btn small" id="nextExam">${exam.index === exam.pool.length-1 ? "ตรวจรายการ" : "ข้อต่อไป →"}</button> <button class="btn small red" id="submitExam">ส่งข้อสอบ</button></div></div></section><aside class="panel pixel-box exam-side"><div class="panel-title"><div><h2>กระดาษคำตอบ</h2><small>${exam.answers.filter(value => value !== null).length} / ${exam.pool.length} ข้อ</small></div></div><div class="question-grid">${exam.pool.map((_,index) => `<button data-qnav="${index}" class="${exam.answers[index] !== null ? "answered" : ""} ${index === exam.index ? "current" : ""}" aria-label="ไปข้อ ${index+1}${exam.answers[index] !== null ? " ตอบแล้ว" : " ยังไม่ตอบ"}">${index+1}</button>`).join("")}</div></aside></div>`;
+  view.innerHTML = `<div class="exam-layout"><section class="panel pixel-box"><div class="panel-title"><div><h2>ข้อ ${exam.index+1} จาก ${exam.pool.length}</h2><small class="inline-module-label">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</small></div><div class="timer" id="timerText">--:--</div></div><div class="question-meta"><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span></div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${exam.answers[exam.index] === index ? "selected" : ""}" data-exam-answer="${index}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><button class="btn small dark" id="prevExam" ${exam.index === 0 ? "disabled" : ""}>← ก่อนหน้า</button><div><button class="btn small" id="nextExam">${exam.index === exam.pool.length-1 ? "ตรวจรายการ" : "ข้อต่อไป →"}</button> <button class="btn small red" id="submitExam">ส่งข้อสอบ</button></div></div></section><aside class="panel pixel-box exam-side"><div class="panel-title"><div><h2>กระดาษคำตอบ</h2><small>${exam.answers.filter(value => value !== null).length} / ${exam.pool.length} ข้อ</small></div></div><div class="question-grid">${exam.pool.map((_,index) => `<button data-qnav="${index}" class="${exam.answers[index] !== null ? "answered" : ""} ${index === exam.index ? "current" : ""}" aria-label="ไปข้อ ${index+1}${exam.answers[index] !== null ? " ตอบแล้ว" : " ยังไม่ตอบ"}">${index+1}</button>`).join("")}</div></aside></div>`;
   $$('[data-exam-answer]').forEach(button => button.onclick = () => {
     exam.answers[exam.index] = Number(button.dataset.examAnswer);
     sfx.select();
@@ -631,7 +714,7 @@ function finishExam(){
   const result = exam;
   exam = null;
   sfx.win();
-  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box"><div class="eyebrow">EXAM RESULT</div><b>${percent}%</b><h2>${percent >= 80 ? "ผ่านด่านอย่างสง่างาม" : percent >= 60 ? "ใกล้ถึงเป้าหมาย" : "กลับไปเก็บเลเวลอีกนิด"}</h2><p>${score} คะแนน จาก ${result.pool.length} ข้อ</p></div><div class="section-head"><div><h2>ผลรายดินแดน</h2><p>ใช้เลือกด่านที่จะฝึกต่อ</p></div></div><div class="breakdown">${Object.entries(breakdown).map(([id,item]) => `<div class="break-card pixel-box"><strong>${moduleById(id).icon} ${esc(moduleById(id).title)}</strong><b>${item.correct}/${item.total}</b><small>${Math.round(item.correct/item.total*100)}%</small></div>`).join("")}</div><div class="hero-actions"><button class="btn" data-go="exam">สอบใหม่</button><button class="btn mint" data-go="review">ทบทวนข้อผิด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box"><div class="eyebrow">EXAM RESULT</div><b>${percent}%</b><h2>${percent >= 80 ? "ผ่านด่านอย่างสง่างาม" : percent >= 60 ? "ใกล้ถึงเป้าหมาย" : "กลับไปเก็บเลเวลอีกนิด"}</h2><p>${score} คะแนน จาก ${result.pool.length} ข้อ</p></div><div class="section-head"><div><h2>ผลรายดินแดน</h2><p>ใช้เลือกด่านที่จะฝึกต่อ</p></div></div><div class="breakdown">${Object.entries(breakdown).map(([id,item]) => { const module=moduleById(id); return `<div class="break-card pixel-box"><strong class="inline-module-label">${moduleIconMarkup(module,"tiny")} ${esc(module.title)}</strong><b>${item.correct}/${item.total}</b><small>${Math.round(item.correct/item.total*100)}%</small></div>`; }).join("")}</div><div class="hero-actions"><button class="btn" data-go="exam">สอบใหม่</button><button class="btn mint" data-go="review">ทบทวนข้อผิด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   bindCommon();
 }
 
@@ -649,7 +732,8 @@ function renderReview(limit=60){
     ? `<p class="review-count">แสดง ${visible.length} จาก ${questions.length} ข้อที่ควรทบทวน</p><div class="review-list">${visible.map(question => {
         const record = state.records[question.id];
         const accuracy = record ? Math.round(record.correct / record.attempts * 100) : 0;
-        return `<article class="review-card pixel-box"><div><h3>${moduleById(question.module).icon} ${esc(question.question)}</h3><p>${esc(moduleById(question.module).title)} • ความแม่น ${accuracy}% ${state.bookmarks.includes(question.id) ? "• ★ เก็บไว้" : ""}</p></div><button class="btn small dark" data-one="${question.id}">ฝึกข้อนี้</button></article>`;
+        const module = moduleById(question.module);
+        return `<article class="review-card pixel-box"><div><h3 class="inline-module-label">${moduleIconMarkup(module,"tiny")}<span>${esc(question.question)}</span></h3><p>${esc(module.title)} • ความแม่น ${accuracy}% ${state.bookmarks.includes(question.id) ? "• ★ เก็บไว้" : ""}</p></div><button class="btn small dark" data-one="${question.id}">ฝึกข้อนี้</button></article>`;
       }).join("")}</div>${visible.length < questions.length ? `<p><button class="btn small dark" id="moreReview">ดูเพิ่มอีก ${Math.min(60,questions.length-visible.length)} ข้อ</button></p>` : ""}`
     : '<div class="empty">✦ ไม่มีข้อค้างทบทวนในตอนนี้</div>';
   view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>ห้องทบทวน</h2><small>รวมข้อที่เก็บไว้ เคยตอบผิด หรือยังไม่แม่น</small></div><button class="btn small" id="reviewBattle" ${questions.length ? "" : "disabled"}>ฝึกชุดนี้</button></div>${list}</section>`;
@@ -680,7 +764,7 @@ function renderProfile(){
     {icon:"◆",name:"คลังสมบัติ",desc:"สะสม 300 เหรียญ",ok:state.coins >= 300},
     {icon:"★",name:"ปรมาจารย์",desc:"ขึ้นถึงเลเวล 20",ok:level() >= 20}
   ];
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สมุดนักผจญภัย</h2><small>เลเวล ${level()} • ${rankName()}</small></div></div><div class="profile-grid"><div><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นรวม</span></div><div class="stat-card pixel-box"><b>${stats.attempts}</b><span>จำนวนครั้งที่ตอบ</span></div><div class="stat-card pixel-box"><b>${state.examHistory.length}</b><span>รอบสนามสอบ</span></div><div class="stat-card pixel-box"><b>${state.bookmarks.length}</b><span>ข้อที่เก็บไว้</span></div></div><div class="section-head"><div><h2>พลังรายดินแดน</h2></div></div>${D.modules.map(item => { const stats = moduleStats(item.id); return `<div class="chart-row"><span>${item.icon} ${esc(item.title)}</span><div class="bar"><i style="width:${stats.accuracy}%"></i></div><b>${stats.accuracy}%</b></div>`; }).join("")}</div><div><div class="section-head"><div><h2>เหรียญตรา</h2></div></div><div class="achievement-grid">${achievements.map(item => `<article class="achievement pixel-box ${item.ok ? "unlocked" : ""}"><span class="medal">${item.icon}</span><span><h3>${esc(item.name)}</h3><p>${esc(item.desc)}</p></span></article>`).join("")}</div><div class="section-head"><div><h2>ประวัติสนามสอบ</h2></div></div>${state.examHistory.length ? state.examHistory.slice(0,8).map(item => `<div class="review-card pixel-box"><div><h3>${item.pct}% • ${item.score}/${item.total}</h3><p>${esc(item.date)}</p></div></div>`).join("") : '<div class="empty">ยังไม่มีประวัติสนามสอบ</div>'}</div></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สมุดนักผจญภัย</h2><small>เลเวล ${level()} • ${rankName()}</small></div></div><div class="profile-grid"><div><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นรวม</span></div><div class="stat-card pixel-box"><b>${stats.attempts}</b><span>จำนวนครั้งที่ตอบ</span></div><div class="stat-card pixel-box"><b>${state.examHistory.length}</b><span>รอบสนามสอบ</span></div><div class="stat-card pixel-box"><b>${state.bookmarks.length}</b><span>ข้อที่เก็บไว้</span></div></div><div class="section-head"><div><h2>พลังรายดินแดน</h2></div></div>${D.modules.map(item => { const stats = moduleStats(item.id); return `<div class="chart-row"><span class="inline-module-label">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><div class="bar"><i style="width:${stats.accuracy}%"></i></div><b>${stats.accuracy}%</b></div>`; }).join("")}</div><div><div class="section-head"><div><h2>เหรียญตรา</h2></div></div><div class="achievement-grid">${achievements.map(item => `<article class="achievement pixel-box ${item.ok ? "unlocked" : ""}"><span class="medal">${item.icon}</span><span><h3>${esc(item.name)}</h3><p>${esc(item.desc)}</p></span></article>`).join("")}</div><div class="section-head"><div><h2>ประวัติสนามสอบ</h2></div></div>${state.examHistory.length ? state.examHistory.slice(0,8).map(item => `<div class="review-card pixel-box"><div><h3>${item.pct}% • ${item.score}/${item.total}</h3><p>${esc(item.date)}</p></div></div>`).join("") : '<div class="empty">ยังไม่มีประวัติสนามสอบ</div>'}</div></div></section>`;
 }
 
 function openSettings(){

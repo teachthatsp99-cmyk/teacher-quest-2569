@@ -14,6 +14,7 @@ let drill = null;
 let cards = null;
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g,char => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[char]);
+const moduleIconMarkup = item => typeof window.teacherQuestModuleIcon === "function" ? window.teacherQuestModuleIcon(item,"tiny") : "";
 const shuffle = items => items.slice().sort(() => Math.random() - .5);
 const unique = items => [...new Map(items.map(item => [item.id,item])).values()];
 const today = () => new Date().toLocaleDateString("sv-SE");
@@ -111,6 +112,8 @@ function renderCoach(){
   const reports = moduleReport(state);
   const weakReports = reports.slice(0,6);
   const bookmarkCount = state.bookmarks.length;
+  const hardCount = DATA.questions.filter(question => question.difficulty === "ยาก").length;
+  const scenarioCount = DATA.questions.filter(question => question.category === "สถานการณ์").length;
   view.className = "view v4-view";
   view.innerHTML = `
     <section class="hero pixel-box">
@@ -136,19 +139,19 @@ function renderCoach(){
       <article class="v4-card"><span class="big">${total.unseen}</span><h3>ข้อที่ยังไม่เคยพบ</h3><p>ใช้โหมดสำรวจข้อใหม่เพื่อเปิดพื้นที่ความรู้</p></article>
     </section>
 
-    <div class="section-head"><div><h2>เลือกภารกิจฝึก</h2><p>ระบบจะสุ่มไม่เกิน 10 ข้อต่อรอบ</p></div></div>
+    <div class="section-head"><div><h2>เลือกภารกิจฝึก</h2><p>ตัวเลข “คลัง” คือข้อที่เข้าเงื่อนไขทั้งหมด แต่ละรอบสุ่มสูงสุด 10 ข้อ</p></div></div>
     <section class="v4-mode-grid">
-      ${modeCard("weak","+","แก้จุดอ่อน","เน้นข้อที่เคยผิดและหมวดที่คะแนนต่ำ",`${total.weak} ข้อ`,!total.weak)}
-      ${modeCard("unseen","◉","สำรวจข้อใหม่","เลือกเฉพาะข้อที่ยังไม่เคยตอบ",`${total.unseen} ข้อ`,!total.unseen)}
-      ${modeCard("hard","♜","ด่านยาก","คัดเฉพาะโจทย์ระดับยากและข้อหลอก","ท้าทาย")}
-      ${modeCard("scenario","◇","สถานการณ์จริง","กระจายสถานการณ์จากทุกดินแดนอย่างสมดุล","คิดวิเคราะห์")}
-      ${modeCard("bookmarks","▤","ข้อที่บันทึกไว้","ทบทวนรายการโปรดจากห้องฝึกเดิม",`${bookmarkCount} ข้อ`,!bookmarkCount)}
-      ${modeCard("mixed","⚗","ชุดผสมอัจฉริยะ","ผสมข้ออ่อน ข้อใหม่ ข้อยาก และสถานการณ์","สมดุล")}
+      ${modeCard("weak","+","แก้จุดอ่อน","เน้นข้อที่เคยผิดและหมวดที่คะแนนต่ำ",`คลัง ${total.weak} • รอบ ≤10`,!total.weak)}
+      ${modeCard("unseen","◉","สำรวจข้อใหม่","เลือกเฉพาะข้อที่ยังไม่เคยตอบ",`คลัง ${total.unseen} • รอบ ≤10`,!total.unseen)}
+      ${modeCard("hard","♜","ด่านยาก","คัดเฉพาะโจทย์ระดับยากและข้อหลอก",`คลัง ${hardCount} • รอบ 10`)}
+      ${modeCard("scenario","◇","สถานการณ์จริง","กระจายสถานการณ์จากทุกดินแดนอย่างสมดุล",`คลัง ${scenarioCount} • รอบ 10`)}
+      ${modeCard("bookmarks","▤","ข้อที่บันทึกไว้","ทบทวนรายการโปรดจากห้องฝึกเดิม",`คลัง ${bookmarkCount} • รอบ ≤10`,!bookmarkCount)}
+      ${modeCard("mixed","⚗","ชุดผสมอัจฉริยะ","ผสมข้ออ่อน ข้อใหม่ ข้อยาก และสถานการณ์",`คลังรวม ${DATA.questions.length} • รอบ ≤10`)}
     </section>
 
     <div class="section-head"><div><h2>เรดาร์จุดอ่อนรายดินแดน</h2><p>หมวดที่ยังไม่เคยทำจะแสดง 0% เพื่อชวนเริ่มสำรวจ</p></div></div>
     <section class="panel pixel-box"><div class="v4-weak-list">
-      ${weakReports.map(item => `<div class="v4-weak-row"><span>${item.icon} ${esc(item.title)}</span><div class="meter"><i style="width:${item.accuracy}%"></i></div><b>${item.accuracy}%</b></div>`).join("")}
+      ${weakReports.map(item => `<div class="v4-weak-row"><span class="inline-module-label">${moduleIconMarkup(item)} ${esc(item.title)}</span><div class="meter"><i style="width:${item.accuracy}%"></i></div><b>${item.accuracy}%</b></div>`).join("")}
     </div></section>`;
   bindCoach();
 }
