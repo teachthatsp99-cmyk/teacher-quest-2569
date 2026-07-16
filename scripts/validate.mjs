@@ -13,13 +13,14 @@ vm.runInContext(dataSource,context,{filename:'data.js'});
 const data = context.window.GAME_DATA;
 
 if(!data) fail('GAME_DATA was not created');
-if(data?.version !== '4.1.0') fail(`expected data version 4.1.0, got ${data?.version}`);
+if(data?.version !== '4.1.1') fail(`expected data version 4.1.1, got ${data?.version}`);
 if(!Array.isArray(data?.modules) || data.modules.length !== 16) fail(`expected 16 modules, got ${data?.modules?.length}`);
 if(!Array.isArray(data?.questions) || data.questions.length !== 400) fail(`expected exactly 400 questions, got ${data?.questions?.length}`);
 
 const modules = data?.modules || [];
 const questions = data?.questions || [];
 const moduleIds = new Set(modules.map(module => module.id));
+const moduleIcons = new Set(modules.map(module => module.icon));
 const categories = new Set(['สถานการณ์','ความรู้และหลักการ','วิเคราะห์และประเมิน','ข้อมูลปัจจุบันและดิจิทัล','กฎหมายและวิชาชีพ']);
 const difficulties = new Set(['ง่าย','กลาง','ยาก']);
 const ids = new Set();
@@ -38,6 +39,8 @@ for(const module of modules){
   if(!module.id || !module.title || !module.summary || !module.boss) fail(`module ${module.id || '(missing id)'} is incomplete`);
   if(!/^https:\/\//.test(module.official || '')) fail(`module ${module.id} has no HTTPS official source`);
 }
+if(moduleIcons.size !== modules.length) fail(`module fallback icons are not unique: ${moduleIcons.size}/${modules.length}`);
+if(modules.some(module => module.icon === '♿')) fail('legacy wheelchair glyph must be replaced by the inclusive pixel-art icon');
 
 for(const question of questions){
   if(ids.has(question.id)) fail(`duplicate question id ${question.id}`);
@@ -97,7 +100,7 @@ for(const retired of ['cloud-sync.js','firebase-config.js','v4-cleanup.js','FIRE
 
 const app = fs.readFileSync('app.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','modalFocusables','teacherquest:local-state']){
+for(const feature of ['startBattle','beginExam','renderReview','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
 for(const feature of ['balancedSample','verificationStatus','sourceUrl','SMART DRILL']){
