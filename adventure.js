@@ -76,9 +76,11 @@ function loadPosition(){
   return {...SPAWN,direction:"down"};
 }
 
-function savePosition(player){
+function savePosition(player,{immediate=false}={}){
+  const position={x:Math.round(player.x),y:Math.round(player.y),direction:player.direction};
   try{
-    localStorage.setItem(STORAGE,JSON.stringify({x:Math.round(player.x),y:Math.round(player.y),direction:player.direction}));
+    localStorage.setItem(STORAGE,JSON.stringify(position));
+    window.TeacherQuestOnline?.saveAdventurePosition?.(position,{immediate});
   }catch(error){
     console.warn("Could not save adventure position",error);
   }
@@ -390,7 +392,7 @@ function createTeacherQuestAdventure(options={}){
   }
 
   function onKeyDown(event){
-    if(destroyed || !canvas.isConnected) return;
+    if(destroyed || !canvas.isConnected || document.body.classList.contains("auth-locked")) return;
     const target = event.target;
     const inControl = target instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA|BUTTON|A)$/.test(target.tagName);
     if(dialogueOpen || mapOpen){
@@ -716,6 +718,18 @@ function createTeacherQuestAdventure(options={}){
   const interactButton=root.querySelector("[data-interact]");
   const interactClick=event=>{event.preventDefault();canvas.focus({preventScroll:true});interact();};
   const onBlur=()=>keys.clear();
+  const applyCloudPosition=event=>{
+    const saved=event.detail?.adventure;
+    if(!saved || !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) return;
+    player.x=clamp(saved.x,40,WORLD_WIDTH-40);
+    player.y=clamp(saved.y,64,WORLD_HEIGHT-32);
+    player.direction=["up","down","left","right"].includes(saved.direction) ? saved.direction : "down";
+    camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
+    camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
+    keys.clear();
+    updateNearest();
+    updateHud();
+  };
   interactButton?.addEventListener("click",interactClick);
   const mapButtons=[...root.querySelectorAll("[data-adventure-map]")];
   mapButtons.forEach(button=>button.addEventListener("click",()=>toggleMap()));
@@ -724,18 +738,20 @@ function createTeacherQuestAdventure(options={}){
   window.addEventListener("keydown",onKeyDown,{passive:false});
   window.addEventListener("keyup",onKeyUp);
   window.addEventListener("blur",onBlur);
+  window.addEventListener("teacherquest:cloud-progress",applyCloudPosition);
   canvas.addEventListener("pointerdown",()=>canvas.focus({preventScroll:true}));
 
   function destroy(){
     if(destroyed) return;
     destroyed=true;
     cancelAnimationFrame(raf);
-    savePosition(player);
+    savePosition(player,{immediate:true});
     options.onLeave?.();
     keys.clear();
     window.removeEventListener("keydown",onKeyDown);
     window.removeEventListener("keyup",onKeyUp);
     window.removeEventListener("blur",onBlur);
+    window.removeEventListener("teacherquest:cloud-progress",applyCloudPosition);
     mobileBindings.forEach(([element,event,handler])=>element.removeEventListener(event,handler));
     interactButton?.removeEventListener("click",interactClick);
     if(window.teacherQuestAdventureDebug?.destroy===destroy) delete window.teacherQuestAdventureDebug;

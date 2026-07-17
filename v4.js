@@ -38,6 +38,7 @@ function readState(){
 function writeState(state,{touch=true}={}){
   if(touch) state.localUpdatedAt = Date.now();
   localStorage.setItem(STORAGE,JSON.stringify(state));
+  window.TeacherQuestOnline?.saveProgress?.();
   updateHud(state);
   window.dispatchEvent(new CustomEvent("teacherquest:local-state",{detail:{updatedAt:state.localUpdatedAt || 0}}));
 }

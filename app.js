@@ -8,6 +8,11 @@ const view = $("#view");
 const modal = $("#modal");
 const modalBody = $("#modalBody");
 const toast = $("#toast");
+const authGate = $("#authGate");
+const authGateButton = $("#authGateGoogle");
+const authGateButtonText = $("#authGateButtonText");
+const authGateStatus = $("#authGateStatus");
+const protectedSurfaces = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const modalBackground = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const STORAGE = "teacherQuest2569_v3";
 const letters = ["ก","ข","ค","ง"];
@@ -132,7 +137,9 @@ function loadState(){
 }
 
 function saveState(){
+  state.localUpdatedAt = Date.now();
   localStorage.setItem(STORAGE,JSON.stringify(state));
+  window.TeacherQuestOnline?.saveProgress?.();
   updateHud();
 }
 
@@ -144,6 +151,25 @@ function refreshState(){
 
 function resetDaily(){
   if(state.daily.date !== today()) state.daily = {date:today(),count:0};
+}
+
+function hasGoogleIdentity(value=onlineState){
+  return Boolean(value?.user && !value.user.isAnonymous && value.user.provider==="google");
+}
+
+function updateAuthGate(){
+  if(!authGate) return;
+  const locked=Boolean(onlineState.configured) && !hasGoogleIdentity();
+  authGate.hidden=!locked;
+  document.body.classList.toggle("auth-locked",locked);
+  document.body.classList.remove("auth-checking");
+  protectedSurfaces.forEach(element=>{element.inert=locked;});
+  if(!locked) return;
+  const connecting=onlineState.phase==="connecting";
+  authGateButton.disabled=connecting || !window.TeacherQuestOnline;
+  authGateButtonText.textContent=connecting ? "กำลังตรวจบัญชี…" : "เข้าสู่ระบบด้วย Google";
+  authGateStatus.textContent=onlineState.error || (connecting ? "กำลังเชื่อมต่อ Firebase" : "ต้องเข้าสู่ระบบก่อนเริ่มเล่น");
+  if(!connecting) requestAnimationFrame(()=>authGateButton.focus({preventScroll:true}));
 }
 
 function level(){ return Math.floor(state.xp / 100) + 1; }
@@ -257,7 +283,8 @@ function updateOnlineHud(){
   const label=phase==="online"
     ? `${onlineState.onlineCount || 1} ออนไลน์`
     : phase==="connecting" ? "กำลังเชื่อม"
-      : phase==="error" ? "ออนไลน์ขัดข้อง" : "ตั้งค่าออนไลน์";
+      : phase==="signin-required" ? "ต้องเข้าสู่ระบบ"
+        : phase==="error" ? "ออนไลน์ขัดข้อง" : "ตั้งค่าออนไลน์";
   $("#onlineCount").textContent=label;
   $("#playerName").textContent=profile.nickname || "ครูนักผจญภัย";
   $("#avatarArt").innerHTML=window.TeacherQuestOnline?.avatarMarkup?.(profile) || '<div class="pixel-head"></div>';
@@ -272,8 +299,9 @@ function updateOnlineHud(){
     adventureStatus.classList.toggle("online",phase==="online");
     adventureStatus.querySelector("span:last-child").textContent=phase==="online"
       ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน`
-      : phase==="setup" ? "โหมดออฟไลน์" : phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อม";
+      : phase==="setup" ? "โหมดออฟไลน์" : phase==="signin-required" ? "รอเข้าสู่ระบบ" : phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อม";
   }
+  updateAuthGate();
 }
 
 function showToast(message){
@@ -1026,7 +1054,8 @@ function renderCodex(){
 function renderProfile(){
   const stats = totalStats();
   const onlineProfile=onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}};
-  const onlineStatus=onlineState.phase==="online" ? "เชื่อมต่อแล้ว" : onlineState.phase==="setup" ? "พร้อมแต่งตัว • รอผูก Firebase" : onlineState.phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อมต่อ";
+  const cloudLabel=onlineState.cloudSync==="saving" ? "กำลังบันทึก Cloud" : onlineState.cloudSync==="error" ? "Cloud Save ขัดข้อง" : "Cloud Save พร้อม";
+  const onlineStatus=onlineState.phase==="online" ? `เชื่อมต่อแล้ว • ${cloudLabel}` : onlineState.phase==="setup" ? "โหมดทดสอบในเครื่อง" : onlineState.phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อมต่อ";
   const onlineCard=`<section class="online-profile-card pixel-box">${window.TeacherQuestOnline?.avatarMarkup?.(onlineProfile) || ""}<div><h3>${esc(onlineProfile.nickname)}</h3><p>${esc(onlineStatus)} • <b id="profileOnlineNow">${onlineState.onlineCount || 0}</b> ออนไลน์ • นักผจญภัยทั้งหมด <b id="profilePlayerTotal">${onlineState.totalPlayers || 0}</b> คน</p></div><button class="btn small mint" id="profileAvatarEdit">แต่งตัว / บัญชี</button></section>`;
   const achievements = [
     {icon:"⚔",name:"ก้าวแรก",desc:"ตอบข้อสอบครั้งแรก",ok:stats.attempted >= 1},
@@ -1061,9 +1090,8 @@ function openOnlineDialog(){
   const setupNotice=!onlineState.configured
     ? `<div class="online-alert"><strong>เหลือผูก Firebase Project ฟรีหนึ่งครั้ง</strong><br>โค้ดระบบออนไลน์พร้อมแล้ว เมื่อใส่ Web App Config ผู้เล่นจะเข้าแบบ Guest และพบกันในแผนที่อัตโนมัติ</div>`
     : onlineState.error ? `<div class="online-alert error">${esc(onlineState.error)}</div>` : "";
-  const googleReady=onlineState.configured && onlineState.user && onlineState.user.isAnonymous;
   const googleConnected=onlineState.user && !onlineState.user.isAnonymous;
-  openModal(`<div class="eyebrow">ONLINE PIXEL ID</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${googleReady ? '<button class="btn small sky" type="button" id="googleConnect">เชื่อมบัญชี Google</button>' : ""}${googleConnected ? '<button class="btn small dark" type="button" id="switchGuest">ออกจาก Google / ใช้ Guest ใหม่</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><p class="online-help">ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม ระบบไม่เผยแพร่อีเมล และส่งตำแหน่งเฉพาะตอนเปิดหน้าโลกผจญภัย</p></form>`);
+  openModal(`<div class="eyebrow">ONLINE PIXEL ID • CLOUD SAVE</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${googleConnected ? '<button class="btn small dark" type="button" id="signOutGoogle">ออกจากระบบ</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><p class="online-help">Google ID ใช้บันทึกคะแนน ข้อที่เคยทำ บุ๊กมาร์ก ประวัติสอบ และตำแหน่งขึ้น Cloud ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม โดยไม่เห็นอีเมล</p></form>`);
   const refreshDraft=()=>{
     $("#onlineAvatarPreview").innerHTML=api?.avatarMarkup?.(draft,"large") || "";
     $$("[data-avatar-group]",modalBody).forEach(button=>{
@@ -1094,17 +1122,11 @@ function openOnlineDialog(){
       showToast(error.message || "บันทึกไม่สำเร็จ");
     }
   };
-  $("#googleConnect")?.addEventListener("click",async event=>{
-    event.currentTarget.disabled=true;
-    event.currentTarget.textContent="กำลังเปิด Google…";
-    try{await api.signInGoogle();closeModal();showToast("เชื่อมบัญชี Google แล้ว");}
-    catch(error){event.currentTarget.disabled=false;event.currentTarget.textContent="เชื่อมบัญชี Google";showToast(error.message);}
-  });
-  $("#switchGuest")?.addEventListener("click",async()=>{
-    if(!confirm("ออกจาก Google และเริ่มบัญชี Guest ใหม่บนเครื่องนี้หรือไม่? ความคืบหน้าข้อสอบในเครื่องจะยังอยู่")) return;
-    await api.switchToGuest();
+  $("#signOutGoogle")?.addEventListener("click",async()=>{
+    if(!confirm("ออกจากระบบ Google หรือไม่? ข้อมูลที่บันทึกไว้บน Cloud จะไม่ถูกลบ")) return;
+    await api.signOut();
     closeModal();
-    showToast("กำลังสร้างบัญชี Guest ใหม่");
+    showToast("ออกจากระบบแล้ว");
   });
 }
 
@@ -1118,7 +1140,9 @@ function openSettings(){
   $("#resetData").onclick = () => {
     if(confirm("ล้างความคืบหน้า คะแนน และประวัติทั้งหมดหรือไม่?")){
       localStorage.removeItem(STORAGE);
-      state = clone(defaults);
+      state = {...clone(defaults),localUpdatedAt:Date.now()};
+      localStorage.setItem(STORAGE,JSON.stringify(state));
+      window.TeacherQuestOnline?.saveProgress?.();
       resetDaily();
       closeModal();
       go("adventure");
@@ -1134,6 +1158,19 @@ function bindGlobal(){
   $("#settingsBtn").onclick = openSettings;
   $("#onlineBtn").onclick = openOnlineDialog;
   $("#avatarEditBtn").onclick = openOnlineDialog;
+  authGateButton?.addEventListener("click",async()=>{
+    authGateButton.disabled=true;
+    authGateButtonText.textContent="กำลังเปิด Google…";
+    authGateStatus.textContent="เลือกบัญชี Google เพื่อเข้าสู่เกม";
+    try{
+      onlineState=await window.TeacherQuestOnline.signInGoogle();
+      updateOnlineHud();
+    }catch(error){
+      authGateButton.disabled=false;
+      authGateButtonText.textContent="ลองเข้าสู่ระบบอีกครั้ง";
+      authGateStatus.textContent=error.message || "เข้าสู่ระบบไม่สำเร็จ";
+    }
+  });
   $("#modalClose").onclick = closeModal;
   modal.addEventListener("click",event => { if(event.target === modal) closeModal(); });
   document.addEventListener("keydown",event => {
@@ -1173,6 +1210,7 @@ function bindGlobal(){
     adventureInstance?.setRemotePlayers?.(onlineState.zonePlayers || []);
     if($("#profileOnlineNow")) $("#profileOnlineNow").textContent=onlineState.onlineCount || 0;
     if($("#profilePlayerTotal")) $("#profilePlayerTotal").textContent=onlineState.totalPlayers || 0;
+    updateAuthGate();
   });
   document.addEventListener("pointerdown",unlockMusic,{once:true});
   document.addEventListener("keydown",unlockMusic,{once:true});
@@ -1182,6 +1220,7 @@ function init(){
   resetDaily();
   const errors = validateData();
   bindGlobal();
+  updateAuthGate();
   updateHud();
   if(errors.length){
     console.error(errors);

@@ -3,6 +3,11 @@
 
 const SDK_VERSION = "12.16.0";
 const PROFILE_STORAGE = "teacherQuestOnlineProfile_v1";
+const GAME_STORAGE = "teacherQuest2569_v3";
+const ADVENTURE_STORAGE = "teacherQuestAdventure_v1";
+const PROGRESS_VERSION = 1;
+const PROGRESS_SAVE_DELAY = 900;
+const ADVENTURE_SAVE_INTERVAL = 15000;
 const CONFIG = window.TEACHER_QUEST_FIREBASE_CONFIG;
 const POSITION_INTERVAL = 650;
 const PRESENCE_HEARTBEAT = 20000;
@@ -62,6 +67,55 @@ function saveLocalProfile(profile){
   catch(error){ console.warn("Could not save online profile",error); }
 }
 
+function readStoredObject(key){
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw) return null;
+    const value=JSON.parse(raw);
+    return value && typeof value==="object" && !Array.isArray(value) ? value : null;
+  }catch(error){
+    console.warn(`Could not read ${key}`,error);
+    return null;
+  }
+}
+
+function safeJson(value,fallback="{}"){
+  try{ return JSON.stringify(value && typeof value==="object" ? value : JSON.parse(fallback)); }
+  catch{ return fallback; }
+}
+
+function buildProgressBundle(updatedAt=Date.now()){
+  const game=readStoredObject(GAME_STORAGE) || {};
+  const adventure=readStoredObject(ADVENTURE_STORAGE) || {};
+  return {
+    version:PROGRESS_VERSION,
+    game:safeJson(game),
+    adventure:safeJson(adventure),
+    updatedAt:Number(updatedAt)||Date.now()
+  };
+}
+
+function applyProgressBundle(bundle){
+  if(!bundle || bundle.version!==PROGRESS_VERSION || typeof bundle.game!=="string") return false;
+  try{
+    const game=JSON.parse(bundle.game);
+    const adventure=typeof bundle.adventure==="string" ? JSON.parse(bundle.adventure) : {};
+    if(!game || typeof game!=="object" || Array.isArray(game)) return false;
+    const updatedAt=Number(bundle.updatedAt)||Date.now();
+    game.localUpdatedAt=updatedAt;
+    localStorage.setItem(GAME_STORAGE,JSON.stringify(game));
+    if(adventure && typeof adventure==="object" && !Array.isArray(adventure) && Number.isFinite(adventure.x) && Number.isFinite(adventure.y)){
+      localStorage.setItem(ADVENTURE_STORAGE,JSON.stringify(adventure));
+    }
+    window.dispatchEvent(new CustomEvent("teacherquest:cloud-progress",{detail:{updatedAt,adventure}}));
+    window.dispatchEvent(new CustomEvent("teacherquest:local-state",{detail:{updatedAt,source:"cloud"}}));
+    return true;
+  }catch(error){
+    console.warn("Could not apply cloud progress",error);
+    return false;
+  }
+}
+
 const state = {
   configured,
   phase:configured ? "connecting" : "setup",
@@ -70,6 +124,8 @@ const state = {
   profile:loadLocalProfile(),
   onlineCount:0,
   totalPlayers:0,
+  cloudSync:"idle",
+  cloudUpdatedAt:0,
   zone:null,
   zonePlayers:[],
   error:""
@@ -94,6 +150,11 @@ let lastPresenceFingerprint="";
 let presenceTimer=null;
 let cleanupTimer=null;
 let signingIn=false;
+let progressRef=null;
+let progressSaveTimer=null;
+let progressSaving=false;
+let progressQueued=false;
+let lastAdventureCloudSave=0;
 
 function publicState(){
   return clone({...state,zonePlayers:[...state.zonePlayers]});
@@ -299,17 +360,103 @@ function subscribeCounters(){
   });
 }
 
+function localProgressTimestamp(){
+  const value=Number(readStoredObject(GAME_STORAGE)?.localUpdatedAt)||0;
+  return value>0 && value<=Date.now()+120000 ? value : 0;
+}
+
+async function writeProgressNow(){
+  clearTimeout(progressSaveTimer);
+  progressSaveTimer=null;
+  if(!progressRef || !databaseModule || !state.user || state.user.isAnonymous) return false;
+  if(progressSaving){ progressQueued=true; return false; }
+  progressSaving=true;
+  const updatedAt=Date.now();
+  try{
+    await databaseModule.set(progressRef,buildProgressBundle(updatedAt));
+    state.cloudSync="saved";
+    state.cloudUpdatedAt=updatedAt;
+    emit();
+    return true;
+  }catch(error){
+    state.cloudSync="error";
+    state.error=friendlyError(error);
+    emit();
+    return false;
+  }finally{
+    progressSaving=false;
+    if(progressQueued){
+      progressQueued=false;
+      progressSaveTimer=setTimeout(()=>{void writeProgressNow();},PROGRESS_SAVE_DELAY);
+    }
+  }
+}
+
+function saveProgress(){
+  if(!progressRef || !state.user || state.user.isAnonymous) return false;
+  state.cloudSync="saving";
+  clearTimeout(progressSaveTimer);
+  progressSaveTimer=setTimeout(()=>{void writeProgressNow();},PROGRESS_SAVE_DELAY);
+  emit();
+  return true;
+}
+
+function saveAdventurePosition(value,{immediate=false}={}){
+  if(value && typeof value==="object"){
+    try{localStorage.setItem(ADVENTURE_STORAGE,JSON.stringify(value));}catch(error){console.warn(error);}
+  }
+  const now=Date.now();
+  if(!immediate && now-lastAdventureCloudSave<ADVENTURE_SAVE_INTERVAL) return false;
+  lastAdventureCloudSave=now;
+  if(immediate){void writeProgressNow();return true;}
+  return saveProgress();
+}
+
+async function setupProgressSync(uid){
+  progressRef=databaseModule.ref(database,`progress/${uid}`);
+  state.cloudSync="loading";
+  emit();
+  const snapshot=await databaseModule.get(progressRef);
+  const remote=snapshot.exists() ? snapshot.val() : null;
+  const localExists=Boolean(localStorage.getItem(GAME_STORAGE));
+  const localUpdatedAt=localProgressTimestamp();
+  const remoteUpdatedAt=Number(remote?.updatedAt)||0;
+  if(remote && remoteUpdatedAt>=localUpdatedAt){
+    applyProgressBundle(remote);
+    state.cloudUpdatedAt=remoteUpdatedAt;
+    state.cloudSync="saved";
+    return;
+  }
+  if(localExists){
+    await writeProgressNow();
+    return;
+  }
+  state.cloudSync="empty";
+}
+
+function clearProgressSync(){
+  clearTimeout(progressSaveTimer);
+  progressSaveTimer=null;
+  progressRef=null;
+  progressSaving=false;
+  progressQueued=false;
+  state.cloudSync="idle";
+  state.cloudUpdatedAt=0;
+}
+
 async function ensurePlayerCountClaim(uid){
   const claimRef=databaseModule.ref(database,`visitorClaims/${uid}`);
   await databaseModule.runTransaction(claimRef,current=>current ? undefined : {firstSeen:Date.now()},{applyLocally:false});
 }
 
 async function attachUser(user){
+  if(!user || user.isAnonymous) return;
   if(state.user?.uid && state.user.uid!==user.uid){
     await removePresence();
     await removeOnlineConnection();
+    clearProgressSync();
   }
-  state.user={uid:user.uid,isAnonymous:user.isAnonymous,email:user.email||"",displayName:user.displayName||"",provider:user.isAnonymous?"guest":"google"};
+  state.user={uid:user.uid,isAnonymous:false,email:user.email||"",displayName:user.displayName||"",provider:"google"};
   try{
     const profileRef=databaseModule.ref(database,`profiles/${user.uid}`);
     const snapshot=await databaseModule.get(profileRef);
@@ -323,11 +470,12 @@ async function attachUser(user){
     await databaseModule.update(profileRef,{
       nickname:state.profile.nickname,
       avatar:state.profile.avatar,
-      provider:state.user.provider,
+      provider:"google",
       createdAt:snapshot.val()?.createdAt || now,
       updatedAt:now
     });
     await ensurePlayerCountClaim(user.uid);
+    await setupProgressSync(user.uid);
     subscribeCounters();
     connectedUnsubscribe?.();
     connectedUnsubscribe=databaseModule.onValue(databaseModule.ref(database,".info/connected"),connection=>{
@@ -358,11 +506,11 @@ async function init(){
     database=databaseModule.getDatabase(app);
     await authModule.setPersistence(auth,authModule.browserLocalPersistence);
     authUnsubscribe=authModule.onAuthStateChanged(auth,user=>{
-      if(user){ signingIn=false; void attachUser(user); return; }
-      if(!signingIn){
-        signingIn=true;
-        authModule.signInAnonymously(auth).catch(error=>{signingIn=false;setPhase("error",friendlyError(error));});
-      }
+      signingIn=false;
+      if(user && !user.isAnonymous){ void attachUser(user); return; }
+      state.user=user ? {uid:user.uid,isAnonymous:true,email:"",displayName:"",provider:"guest"} : null;
+      state.connected=false;
+      setPhase("signin-required");
     });
   }catch(error){
     setPhase("error",friendlyError(error));
@@ -375,9 +523,9 @@ async function updateProfile(value){
   state.profile=next;
   saveLocalProfile(next);
   emit();
-  if(database && databaseModule && state.user){
+  if(database && databaseModule && state.user && !state.user.isAnonymous){
     await databaseModule.update(databaseModule.ref(database,`profiles/${state.user.uid}`),{
-      nickname:next.nickname,avatar:next.avatar,provider:state.user.provider,updatedAt:databaseModule.serverTimestamp()
+      nickname:next.nickname,avatar:next.avatar,provider:"google",updatedAt:databaseModule.serverTimestamp()
     });
     if(pendingWorldState) await flushPresence(true);
   }
@@ -392,36 +540,44 @@ async function signInGoogle(){
   provider.setCustomParameters({prompt:"select_account"});
   setPhase("connecting");
   try{
-    if(auth.currentUser?.isAnonymous) await authModule.linkWithPopup(auth.currentUser,provider);
-    else await authModule.signInWithPopup(auth,provider);
+    signingIn=true;
+    const result=auth.currentUser?.isAnonymous
+      ? await authModule.linkWithPopup(auth.currentUser,provider)
+      : await authModule.signInWithPopup(auth,provider);
+    signingIn=false;
+    await attachUser(result.user);
   }catch(error){
+    signingIn=false;
     if(error?.code==="auth/credential-already-in-use"){
       const credential=authModule.GoogleAuthProvider.credentialFromError?.(error);
       if(!credential) throw new Error("บัญชี Google นี้ถูกใช้อยู่แล้ว กรุณาลองออกจาก Guest แล้วเชื่อมใหม่");
       try{
         await removePresence();
         await removeOnlineConnection();
-        await authModule.signInWithCredential(auth,credential);
+        clearProgressSync();
+        const result=await authModule.signInWithCredential(auth,credential);
+        await attachUser(result.user);
       }catch(signInError){
         if(state.user && state.connected){
           await registerOnlineConnection();
           if(pendingWorldState) await flushPresence(true);
         }
-        setPhase(state.user?"online":"error",friendlyError(signInError));
+        setPhase("signin-required",friendlyError(signInError));
         throw new Error(friendlyError(signInError));
       }
     }else{
-      setPhase(state.user?"online":"error",friendlyError(error));
+      setPhase("signin-required",friendlyError(error));
       throw new Error(friendlyError(error));
     }
   }
   return publicState();
 }
 
-async function switchToGuest(){
+async function signOut(){
   if(!auth || !authModule) return;
   await removePresence();
   await removeOnlineConnection();
+  clearProgressSync();
   setPhase("connecting");
   await authModule.signOut(auth);
 }
@@ -451,12 +607,15 @@ function simulateForTests(value={}){
 }
 
 window.TeacherQuestOnline={
-  init,getState:publicState,subscribe,updateProfile,signInGoogle,switchToGuest,
-  updatePresence,leaveWorld,avatarMarkup,
+  init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,
+  updatePresence,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
   avatarOptions:AVATAR_OPTIONS,normalizeProfile,
   isConfigured:()=>configured
 };
-window.teacherQuestOnlineDebug={simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError};
+window.teacherQuestOnlineDebug={
+  simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError,
+  buildProgressBundle,applyProgressBundle
+};
 
 window.addEventListener("pagehide",()=>{void leaveWorld();});
 emit();

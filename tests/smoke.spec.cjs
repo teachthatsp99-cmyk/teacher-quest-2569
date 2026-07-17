@@ -374,6 +374,62 @@ test('offline avatar editor saves a pixel identity without requiring Firebase',a
   expect(pageErrors).toEqual([]);
 });
 
+test('configured production mode requires Google before the game becomes interactive',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  await expect(page.locator('#authGate')).toBeHidden();
+  await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,
+    phase:'signin-required',
+    connected:false,
+    user:{uid:'anonymous-test',isAnonymous:true,provider:'guest'},
+    error:''
+  }));
+  await expect(page.locator('#authGate')).toBeVisible();
+  await expect(page.locator('#authGateGoogle')).toBeEnabled();
+  await expect(page.locator('#authGateStatus')).toContainText('ต้องเข้าสู่ระบบ');
+  await expect(page.locator('body')).toHaveClass(/auth-locked/);
+  expect(await page.locator('.app-shell').evaluate(element=>element.inert)).toBe(true);
+
+  await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,
+    phase:'online',
+    connected:true,
+    user:{uid:'google-test',isAnonymous:false,provider:'google'},
+    cloudSync:'saved',
+    error:''
+  }));
+  await expect(page.locator('#authGate')).toBeHidden();
+  await expect(page.locator('body')).not.toHaveClass(/auth-locked/);
+  expect(await page.locator('.app-shell').evaluate(element=>element.inert)).toBe(false);
+});
+
+test('cloud progress bundle restores game history and adventure position',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  const restored=await page.evaluate(()=>{
+    localStorage.setItem('teacherQuest2569_v3',JSON.stringify({
+      xp:88,coins:31,maxCombo:4,records:{101:{attempts:2,correct:1,lastWrong:true}},
+      bookmarks:[101],examHistory:[],daily:{date:'2026-07-17',count:2},settings:{music:true,sound:true,volume:.35,reduced:false},
+      lastModule:'research',localUpdatedAt:100
+    }));
+    localStorage.setItem('teacherQuestAdventure_v1',JSON.stringify({x:777,y:444,direction:'left'}));
+    const bundle=window.teacherQuestOnlineDebug.buildProgressBundle(200);
+    localStorage.removeItem('teacherQuest2569_v3');
+    localStorage.removeItem('teacherQuestAdventure_v1');
+    const applied=window.teacherQuestOnlineDebug.applyProgressBundle({...bundle,updatedAt:300});
+    return {
+      applied,
+      game:JSON.parse(localStorage.getItem('teacherQuest2569_v3')),
+      adventure:JSON.parse(localStorage.getItem('teacherQuestAdventure_v1'))
+    };
+  });
+  expect(restored.applied).toBe(true);
+  expect(restored.game.xp).toBe(88);
+  expect(restored.game.records['101'].correct).toBe(1);
+  expect(restored.game.localUpdatedAt).toBe(300);
+  expect(restored.adventure).toEqual({x:777,y:444,direction:'left'});
+  await expect(page.locator('#topCoins')).toHaveText('31');
+});
+
 test('Firebase errors tell the owner exactly which console setting to fix',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   const messages=await page.evaluate(()=>({
@@ -392,6 +448,7 @@ test('online presence renders simulated friends only in the active pixel world',
   const local=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   await page.evaluate(({x,y})=>window.teacherQuestOnlineDebug.simulate({
     configured:true,phase:'online',connected:true,onlineCount:3,totalPlayers:42,
+    user:{uid:'local-player',isAnonymous:false,provider:'google'},cloudSync:'saved',
     profile:{nickname:'ผู้ทดสอบ',avatar:{skin:'#f4c7a1',hair:'#815226',shirt:'#5c55a7',accent:'#58e7b2',style:'cap'}},
     zonePlayers:[
       {uid:'friend-a',nickname:'เพื่อนเอ',x:x+45,y:y+10,direction:'left',moving:true,avatar:{shirt:'#1e8a72',accent:'#ffd45c',style:'spike'}},
