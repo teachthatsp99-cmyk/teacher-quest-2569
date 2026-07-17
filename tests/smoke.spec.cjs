@@ -374,6 +374,17 @@ test('offline avatar editor saves a pixel identity without requiring Firebase',a
   expect(pageErrors).toEqual([]);
 });
 
+test('Firebase errors tell the owner exactly which console setting to fix',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  const messages=await page.evaluate(()=>({
+    rules:window.teacherQuestOnlineDebug.formatError({code:'PERMISSION_DENIED',message:'Permission denied'}),
+    domain:window.teacherQuestOnlineDebug.formatError({code:'auth/unauthorized-domain'})
+  }));
+  expect(messages.rules).toContain('Realtime Database → Rules');
+  expect(messages.rules).toContain('กด Publish');
+  expect(messages.domain).toContain('Authorized domains');
+});
+
 test('online presence renders simulated friends only in the active pixel world',async({page})=>{
   const pageErrors=[];
   page.on('pageerror',error=>pageErrors.push(error.message));
