@@ -17,6 +17,7 @@ const modalBackground = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const STORAGE = "teacherQuest2569_v3";
 const letters = ["ก","ข","ค","ง"];
 const ROUND_COUNTS = Object.freeze({quick:10,zone:10,boss:15,all:15,law:12,weak:10,complete:20});
+const RAID_EMOTES = Object.freeze({hi:"HI!",go:"ลุย!",help:"ช่วย!",wow:"สุดยอด!",gg:"GG"});
 const clone = value => JSON.parse(JSON.stringify(value));
 const today = () => new Date().toLocaleDateString("sv-SE");
 const shuffle = items => items.slice().sort(() => Math.random() - 0.5);
@@ -89,6 +90,8 @@ const defaults = {
   records:{},
   bookmarks:[],
   examHistory:[],
+  raidWins:0,
+  raidRewards:[],
   daily:{date:today(),count:0},
   settings:{music:true,sound:true,volume:.35,reduced:false},
   lastModule:"all"
@@ -96,6 +99,8 @@ const defaults = {
 
 let state = loadState();
 let battle = null;
+let raidGame = null;
+let raidVictoryTimer = null;
 let exam = null;
 let examTimer = null;
 let toastTimer = null;
@@ -513,7 +518,7 @@ function go(name,options={}){
   if(name !== "practice") battle = null;
   if(name !== "exam") exam = null;
   currentView=name;
-  const routeMusic = {home:"menu",world:"map",practice:"training",exam:"exam",review:"training",codex:"codex",profile:"menu"};
+  const routeMusic = {home:"menu",world:"map",practice:"training",exam:"exam",review:"training",codex:"codex",profile:"menu",raid:"boss"};
   if(name !== "adventure") setMusicScene(routeMusic[name] || "menu");
   const routes = {
     adventure:renderAdventure,
@@ -523,7 +528,8 @@ function go(name,options={}){
     exam:renderExamLobby,
     review:renderReview,
     codex:renderCodex,
-    profile:renderProfile
+    profile:renderProfile,
+    raid:renderRaid
   };
   (routes[name] || renderHome)();
   window.scrollTo({top:0,behavior:"smooth"});
@@ -540,6 +546,7 @@ function renderAdventure(){
           <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน • คีย์บอร์ดไทยใช้ ไฟหก • โต้ตอบด้วย E/ปุ่ม ำ, SPACE หรือ ACTION โดยไม่ต้องสลับภาษา</p>
         </div>
         <div class="adventure-intro-actions">
+          <button class="btn small pink" data-go="raid">⚡ เรด Co-op</button>
           <button class="btn small mint" data-adventure-map>▤ แผนที่ 20 ด่าน</button>
           <button class="btn small dark" data-adventure-reset>⌂ กลับจุดเริ่ม</button>
           <button class="btn small dark" data-go="home">◆ ฐานบัญชาการ</button>
@@ -636,7 +643,7 @@ function renderHome(){
       <div class="eyebrow">MISSION 2569 • READY FOR THE EXAM</div>
       <h1>ฝึกให้แม่น<br><span>สู้ให้ติด</span></h1>
       <p>ออกเดินทางผ่านศาสตร์การสอน กฎหมาย วิชาชีพ และสถานการณ์การศึกษา ฝึกตอบแบบต่อสู้ เก็บคอมโบ แล้วพิชิตสนามสอบใหญ่</p>
-      <div class="hero-actions"><button class="btn" id="quickStart">⚔ ภารกิจด่วน ${ROUND_COUNTS.quick} ข้อ</button><button class="btn mint" data-go="world">◈ เลือกดินแดน</button><button class="btn dark" data-go="exam">◷ สนามสอบใหญ่</button></div>
+      <div class="hero-actions"><button class="btn" id="quickStart">⚔ ภารกิจด่วน ${ROUND_COUNTS.quick} ข้อ</button><button class="btn pink" data-go="raid">⚡ Multiplayer Raid</button><button class="btn mint" data-go="world">◈ เลือกดินแดน</button><button class="btn dark" data-go="exam">◷ สนามสอบใหญ่</button></div>
     </div>${heroArt()}</div></section>
     <div class="section-head"><div><h2>สถานะการเดินทาง</h2><p>ดูจุดแข็งและภารกิจที่รออยู่</p></div></div>
     <section class="dashboard">
@@ -649,6 +656,7 @@ function renderHome(){
     <section class="quest-strip">
       <button class="quest-card pixel-box" id="weakStart"><span class="quest-ico">◎</span><span><h3>ล่าจุดอ่อน</h3><p>ระบบเลือกข้อที่ยังไม่แม่น</p></span><b>+EXP</b></button>
       <button class="quest-card pixel-box" id="lawStart"><span class="quest-ico">⚖</span><span><h3>ศึกกฎหมาย</h3><p>รวมกฎหมายและวิชาชีพฉบับตรวจทาน</p></span><b>BOSS</b></button>
+      <button class="quest-card pixel-box raid-quest-card" data-go="raid"><span class="quest-ico">⚡</span><span><h3>Classroom Raid</h3><p>รวมทีมตอบสด ช่วยกันโจมตีบอส</p></span><b>CO-OP</b></button>
       <button class="quest-card pixel-box" data-go="codex"><span class="quest-ico">▤</span><span><h3>เปิดคัมภีร์</h3><p>สูตรจำและแหล่งอ้างอิงทางการ</p></span><b>READ</b></button>
     </section>
     <div class="section-head"><div><h2>ดินแดนแนะนำ</h2><p>${strongest ? `ดินแดนที่คุณทำได้ดีที่สุด: ${esc(strongest.title)}` : "เริ่มด่านแรกเพื่อเปิดสถิติ"}</p></div><button class="btn small dark" data-go="world">ดูทั้งหมด</button></div>
@@ -901,6 +909,256 @@ function finishBattle(defeat=false){
   bindCommon();
   if(returnToAdventure) $("#returnAdventure").onclick = () => go("adventure");
   else $("#againBattle").onclick = () => go("practice");
+}
+
+function raidHash(value){
+  let hash=2166136261;
+  for(const char of String(value)){
+    hash^=char.charCodeAt(0);
+    hash=Math.imul(hash,16777619);
+  }
+  return hash>>>0;
+}
+
+function raidQuestionPool(raid){
+  const moduleId=raid?.meta?.moduleId || "all";
+  const pool=D.questions.filter(question=>moduleId==="all" || question.module===moduleId);
+  const seed=raid?.meta?.questionSeed || 1;
+  return pool.slice().sort((a,b)=>raidHash(`${seed}:${a.id}`)-raidHash(`${seed}:${b.id}`));
+}
+
+function ensureRaidGame(raid){
+  if(!raidGame || raidGame.code!==raid.code){
+    raidGame={
+      code:raid.code,pool:raidQuestionPool(raid),index:0,selected:null,locked:false,
+      combo:0,correct:0,playerHp:100,feedback:null
+    };
+  }
+  return raidGame;
+}
+
+function raidModule(raid){
+  return raid?.meta?.moduleId==="all" ? null : moduleById(raid?.meta?.moduleId);
+}
+
+function raidModuleLabel(raid){ return raidModule(raid)?.title || "ทุกดินแดนทั้ง 400 ข้อ"; }
+
+function raidBossName(raid){ return raidModule(raid)?.boss || "จอมมารแห่งสนามสอบ"; }
+
+function raidBossArt(){
+  return `<div class="raid-boss-art" aria-hidden="true"><i class="raid-boss-horn left"></i><i class="raid-boss-horn right"></i><i class="raid-boss-head"></i><i class="raid-boss-eye left"></i><i class="raid-boss-eye right"></i><i class="raid-boss-body"></i><i class="raid-boss-core"></i><i class="raid-boss-arm left"></i><i class="raid-boss-arm right"></i></div>`;
+}
+
+function raidMemberCards(raid,{compact=false}={}){
+  const api=window.TeacherQuestOnline;
+  const localUid=onlineState.user?.uid;
+  const members=raid?.members || [];
+  if(!members.length) return `<div class="empty">กำลังรอสมาชิก…</div>`;
+  return members.map((member,index)=>{
+    const recentEmote=member.emote && Date.now()-(Number(member.emoteAt)||0)<8000;
+    const emote=recentEmote ? `<span class="raid-emote-pop">${esc(RAID_EMOTES[member.emote] || member.emote)}</span>` : "";
+    return `<article class="raid-member ${member.uid===localUid ? "is-me" : ""} ${compact ? "compact" : ""}" data-raid-member="${esc(member.uid)}">${emote}<span class="raid-rank">${index+1}</span>${api?.avatarMarkup?.(member,"raid-avatar") || ""}<div class="raid-member-copy"><strong>${esc(member.nickname)}${member.uid===raid.meta.hostUid ? " ◆" : ""}</strong><small>${raid.meta.status==="lobby" ? (member.ready ? "พร้อมบุก" : "กำลังเตรียมตัว") : `DMG ${member.score} • ถูก ${member.correct}`}</small></div></article>`;
+  }).join("");
+}
+
+function raidEmoteButtons(){
+  return `<div class="raid-emotes" aria-label="ส่งอีโมตให้ทีม">${Object.entries(RAID_EMOTES).map(([key,label])=>`<button type="button" class="skill" data-raid-emote="${key}" aria-label="ส่งอีโมต ${esc(label)}">${esc(label)}</button>`).join("")}</div>`;
+}
+
+function bindRaidEmotes(){
+  $$('[data-raid-emote]').forEach(button=>button.onclick=async()=>{
+    button.disabled=true;
+    try{await window.TeacherQuestOnline?.sendRaidEmote?.(button.dataset.raidEmote);}
+    catch(error){showToast(error.message || "ส่งอีโมตไม่สำเร็จ");}
+  });
+}
+
+function renderRaid(){
+  clearTimeout(raidVictoryTimer);
+  raidVictoryTimer=null;
+  onlineState=window.TeacherQuestOnline?.getState?.() || onlineState;
+  if(!hasGoogleIdentity() || onlineState.phase!=="online"){
+    view.innerHTML=`<section class="panel pixel-box raid-offline"><div class="eyebrow">MULTIPLAYER RAID • GOOGLE ID</div><h2>เชื่อมออนไลน์ก่อนรวมทีม</h2><p>${esc(onlineState.error || "Raid ใช้ Firebase เพื่อให้สมาชิกและพลังบอสตรงกันแบบเรียลไทม์")}</p><div class="hero-actions"><button class="btn sky" id="raidAccount">เปิดบัญชี / เช็กการเชื่อมต่อ</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
+    bindCommon();
+    $("#raidAccount").onclick=openOnlineDialog;
+    return;
+  }
+  const raid=onlineState.raid;
+  if(!raid){ renderRaidEntry(); return; }
+  if(raid.meta.status==="lobby"){ renderRaidLobby(raid); return; }
+  if(raid.meta.bossHp<=0){ renderRaidVictory(raid); return; }
+  renderRaidBattle(raid);
+}
+
+function renderRaidEntry(){
+  view.innerHTML=`<section class="raid-entry pixel-box"><div class="raid-entry-hero"><div><div class="eyebrow">CLASSROOM RAID • REALTIME CO-OP</div><h1>รวมปาร์ตี้<br><span>ปราบบอสความรู้</span></h1><p>สร้างห้องหรือใส่รหัส 6 ตัว เพื่อนแต่ละคนตอบข้อสอบบนหน้าจอของตนเอง ทุกคำตอบที่ถูกจะกลายเป็นพลังโจมตีบอสตัวเดียวกันแบบสด</p></div><div class="raid-entry-boss">${raidBossArt()}<span>8 PLAYERS MAX</span></div></div><div class="raid-entry-grid"><form class="raid-entry-card pixel-box" id="createRaidForm"><h2>◆ สร้างห้องใหม่</h2><label for="raidModule">ขอบเขตข้อสอบ<select id="raidModule"><option value="all">ทุกดินแดน • 400 ข้อ</option>${D.modules.map(item=>`<option value="${item.id}">${esc(item.title)} • 20 ข้อ</option>`).join("")}</select></label><p>หัวหน้าห้องเลือกเนื้อหาแล้วส่งรหัสให้เพื่อน จากนั้นกดเริ่มเมื่อทีมพร้อม</p><button class="btn pink" type="submit" id="createRaidBtn">⚡ สร้างห้อง Raid</button></form><form class="raid-entry-card pixel-box" id="joinRaidForm"><h2>◈ เข้าห้องเพื่อน</h2><label for="raidCodeInput">รหัสห้อง 6 ตัว<input id="raidCodeInput" class="raid-code-input" maxlength="6" inputmode="text" autocomplete="off" placeholder="ABC234" required></label><p>ใช้รหัสจากหัวหน้าห้อง ตัวอักษรพิมพ์เล็กหรือใหญ่ก็ได้</p><button class="btn mint" type="submit" id="joinRaidBtn">เข้าร่วมปาร์ตี้</button></form></div><div class="raid-safety"><strong>ปลอดภัยสำหรับห้องเรียน</strong><span>ไม่มีแชตอิสระ • แสดงเฉพาะชื่อในเกม ตัวละคร คะแนน และอีโมตที่กำหนดไว้</span></div><div class="hero-actions"><button class="btn dark" data-go="adventure">กลับโลกผจญภัย</button></div></section>`;
+  bindCommon();
+  const api=window.TeacherQuestOnline;
+  $("#raidCodeInput").oninput=event=>{event.target.value=api?.normalizeRaidCode?.(event.target.value) || event.target.value.toUpperCase();};
+  $("#createRaidForm").onsubmit=async event=>{
+    event.preventDefault();
+    const button=$("#createRaidBtn");
+    button.disabled=true;button.textContent="กำลังเปิดประตู Raid…";
+    try{onlineState=await api.createRaid({moduleId:$("#raidModule").value});renderRaid();}
+    catch(error){button.disabled=false;button.textContent="⚡ สร้างห้อง Raid";showToast(error.message || "สร้างห้องไม่สำเร็จ");}
+  };
+  $("#joinRaidForm").onsubmit=async event=>{
+    event.preventDefault();
+    const button=$("#joinRaidBtn");
+    button.disabled=true;button.textContent="กำลังเข้าห้อง…";
+    try{onlineState=await api.joinRaid($("#raidCodeInput").value);renderRaid();}
+    catch(error){button.disabled=false;button.textContent="เข้าร่วมปาร์ตี้";showToast(error.message || "เข้าห้องไม่สำเร็จ");}
+  };
+}
+
+function renderRaidLobby(raid){
+  const local=raid.members.find(member=>member.uid===onlineState.user?.uid);
+  view.innerHTML=`<section class="raid-lobby pixel-box"><header class="raid-toolbar"><div><div class="eyebrow">RAID LOBBY • ${esc(raidModuleLabel(raid))}</div><h1>ห้อง <span>${esc(raid.code)}</span></h1></div><div class="raid-toolbar-actions"><button class="btn small mint" id="copyRaidCode">คัดลอกรหัส</button><button class="btn small dark" id="leaveRaid">ออกจากห้อง</button></div></header><div class="raid-lobby-grid"><section class="raid-roster pixel-box"><div class="panel-title"><div><h2>สมาชิก ${raid.memberCount}/8</h2><small>◆ คือหัวหน้าห้อง • ทุกคนต้องล็อกอิน Google</small></div></div><div class="raid-member-list" id="raidMemberList">${raidMemberCards(raid)}</div>${raidEmoteButtons()}</section><aside class="raid-brief pixel-box"><div class="raid-mini-boss">${raidBossArt()}</div><h2>${esc(raidBossName(raid))}</h2><p>HP ${raid.meta.bossMax} • คำตอบถูกสร้างความเสียหาย 24–40 • พลังบอสเป็นค่ากลางร่วมกัน</p><div class="raid-rules"><span>1</span><p><strong>ตอบคนละชุด</strong> ทำพร้อมกันได้โดยไม่ต้องรอคิว</p><span>2</span><p><strong>โจมตีร่วมกัน</strong> ความเสียหายทุกคนรวมที่บอสตัวเดียว</p><span>3</span><p><strong>รับรางวัลทีม</strong> ชนะรับ 100 EXP + 50 เหรียญ</p></div>${raid.isHost ? `<button class="btn pink raid-start" id="startRaid">⚔ เริ่มบุกพร้อม ${raid.memberCount} คน</button><small class="raid-wait">เริ่มคนเดียวได้ หรือรอเพื่อนเข้าด้วยรหัสด้านบน</small>` : `<button class="btn ${local?.ready ? "mint" : "dark"} raid-start" id="toggleRaidReady">${local?.ready ? "✓ พร้อมแล้ว" : "กดเมื่อพร้อม"}</button><small class="raid-wait">กำลังรอหัวหน้าห้องเริ่มการบุก</small>`}</aside></div></section>`;
+  bindRaidEmotes();
+  $("#copyRaidCode").onclick=async()=>{
+    try{await navigator.clipboard.writeText(raid.code);showToast(`คัดลอกรหัส ${raid.code} แล้ว`);}
+    catch{showToast(`รหัสห้อง: ${raid.code}`);}
+  };
+  $("#leaveRaid").onclick=async()=>{await window.TeacherQuestOnline.leaveRaid();raidGame=null;renderRaid();};
+  $("#startRaid")?.addEventListener("click",async event=>{
+    event.currentTarget.disabled=true;event.currentTarget.textContent="กำลังเปิดศึก…";
+    try{onlineState=await window.TeacherQuestOnline.startRaid();renderRaid();}
+    catch(error){showToast(error.message || "เริ่ม Raid ไม่สำเร็จ");renderRaid();}
+  });
+  $("#toggleRaidReady")?.addEventListener("click",async()=>{
+    try{await window.TeacherQuestOnline.setRaidReady(!local?.ready);}
+    catch(error){showToast(error.message || "อัปเดตสถานะไม่สำเร็จ");}
+  });
+}
+
+function raidFeedbackMarkup(question,feedback,raid){
+  if(!feedback) return "";
+  const nextLabel=raid.meta.bossHp<=0 ? "รับรางวัลชัยชนะ" : raidGame.playerHp<=0 ? "พักฟื้น +40 HP" : "ข้อต่อไป";
+  return `<div class="feedback ${feedback.isCorrect ? "" : "bad"}"><h3>${feedback.isCorrect ? `โจมตีทีมสำเร็จ! -${feedback.damage} HP` : "บอสสวนกลับ! พลังใจลดลง"}</h3><p><strong>คำตอบ: ${letters[question.answer]}. ${esc(question.options[question.answer])}</strong></p><p>${esc(question.explanation)}</p><div class="source">${sourceMarkup(question)}</div><div class="hero-actions"><button class="btn small ${raidGame.playerHp<=0 ? "pink" : "mint"}" id="nextRaidQuestion">${nextLabel}</button><button class="btn small dark" id="raidBookmark">${state.bookmarks.includes(question.id) ? "★ เก็บแล้ว" : "☆ เก็บทบทวน"}</button></div></div>`;
+}
+
+function renderRaidBattle(raid=onlineState.raid,{allowDefeated=false}={}){
+  if(!raid || (raid.meta.bossHp<=0 && !allowDefeated)){renderRaid();return;}
+  const game=ensureRaidGame(raid);
+  const question=game.pool[game.index%game.pool.length];
+  const item=moduleById(question.module);
+  const hpPercent=clamp(raid.meta.bossHp/raid.meta.bossMax*100,0,100);
+  const playerHp=clamp(game.playerHp,0,100);
+  const optionMarkup=question.options.map((option,index)=>{
+    const selected=game.selected===index;
+    const resultClass=game.feedback ? (index===question.answer ? "correct" : selected && !game.feedback.isCorrect ? "wrong" : "") : "";
+    return `<button class="option ${selected ? "selected" : ""} ${resultClass}" data-raid-answer="${index}" ${game.locked ? "disabled" : ""}><span class="letter">${letters[index]}</span>${esc(option)}</button>`;
+  }).join("");
+  view.innerHTML=`<section class="raid-battle pixel-box"><header class="raid-toolbar compact"><div><div class="eyebrow">LIVE RAID • ห้อง ${esc(raid.code)}</div><h1>${esc(raidBossName(raid))}</h1></div><div class="raid-toolbar-actions"><span class="raid-live"><i></i><b id="raidMemberCount">${raid.memberCount}</b> คน</span><button class="btn small dark" id="leaveRaidBattle">ออกจากศึก</button></div></header><div class="raid-boss-hud"><div><strong>BOSS HP</strong><span id="raidBossHpText">${raid.meta.bossHp} / ${raid.meta.bossMax}</span></div><div class="hpbar enemy-hp raid-hp"><i id="raidBossHpBar" style="width:${hpPercent}%"></i></div></div><div class="arena raid-arena" id="raidArena" data-battle-action="idle"><div class="battle-action-label" id="raidAction" role="status" aria-live="polite"></div><div class="battle-slash" aria-hidden="true"></div><div class="battle-shield-fx" aria-hidden="true"></div><div class="raid-party-ghosts" aria-label="สมาชิกในปาร์ตี้">${raid.members.slice(0,8).map(member=>window.TeacherQuestOnline?.avatarMarkup?.(member,"raid-stage-avatar") || "").join("")}</div><div class="fighter player" id="raidPlayer">${fighterArt()}</div><div class="fighter enemy raid-boss" id="raidBoss">${raidBossArt()}</div></div><div class="raid-battle-grid"><main class="question-panel raid-question"><div class="raid-player-hud"><span>พลังใจ</span><div class="hpbar"><i style="width:${playerHp}%"></i></div><b>${game.playerHp} HP</b><span>COMBO ×${game.combo}</span></div><div class="question-meta"><span class="chip gold">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">ข้อส่วนตัว ${(game.index%game.pool.length)+1}/${game.pool.length}</span></div><div class="question-text">${esc(question.question)}</div><div class="options">${optionMarkup}</div><div class="battle-actions"><span class="raid-shared-note">ทุกคำตอบถูก ลด HP บอสของทั้งทีม</span><button class="btn attack-button" id="raidAttackBtn" ${game.selected===null || game.locked ? "disabled" : ""}>⚔ โจมตีบอส!</button></div><div id="raidFeedback">${raidFeedbackMarkup(question,game.feedback,raid)}</div></main><aside class="raid-team-panel pixel-box"><div class="panel-title"><div><h2>ทีมสด</h2><small>อันดับความเสียหาย</small></div></div><div class="raid-member-list compact" id="raidTeamList">${raidMemberCards(raid,{compact:true})}</div>${raidEmoteButtons()}</aside></div></section>`;
+  $$('[data-raid-answer]').forEach(button=>button.onclick=()=>{if(game.locked)return;game.selected=Number(button.dataset.raidAnswer);sfx.select();renderRaidBattle(raid);});
+  $("#raidAttackBtn").onclick=submitRaidAnswer;
+  $("#leaveRaidBattle").onclick=async()=>{if(!confirm("ออกจาก Raid ตอนนี้หรือไม่? คะแนนทีมที่ทำไว้ยังคงอยู่"))return;await window.TeacherQuestOnline.leaveRaid();raidGame=null;renderRaid();};
+  bindRaidEmotes();
+  $("#raidBookmark")?.addEventListener("click",event=>toggleBookmark(question.id,event.currentTarget));
+  $("#nextRaidQuestion")?.addEventListener("click",()=>{
+    if(onlineState.raid?.meta?.bossHp<=0){renderRaid();return;}
+    if(game.playerHp<=0) game.playerHp=40;
+    game.index++;
+    game.selected=null;
+    game.locked=false;
+    game.feedback=null;
+    renderRaidBattle(onlineState.raid);
+  });
+}
+
+function animateRaidAttack(damage,finisher=false){
+  const player=$("#raidPlayer"),boss=$("#raidBoss"),arena=$("#raidArena"),label=$("#raidAction");
+  if(arena) arena.dataset.battleAction=finisher ? "finisher" : "attack";
+  if(label) label.textContent=finisher ? "TEAM FINISHER!" : "CO-OP STRIKE!";
+  player?.classList.add("attack");
+  setTimeout(()=>{arena?.classList.add("impact");boss?.classList.add("hit");damagePop(boss,`-${damage}`);},150);
+  if(finisher) setTimeout(()=>{boss?.classList.add("defeated");player?.classList.add("victor");arena?.classList.add("victory");if(label)label.textContent="RAID CLEAR!";},500);
+}
+
+function animateRaidHurt(){
+  const player=$("#raidPlayer"),boss=$("#raidBoss"),arena=$("#raidArena"),label=$("#raidAction");
+  if(arena) arena.dataset.battleAction="counter";
+  if(label) label.textContent="BOSS COUNTER!";
+  boss?.classList.add("counter");
+  setTimeout(()=>{player?.classList.add("hurt");damagePop(player,"-18");},160);
+}
+
+async function submitRaidAnswer(){
+  const raid=onlineState.raid;
+  const game=raid && ensureRaidGame(raid);
+  if(!raid || !game || game.locked || game.selected===null) return;
+  const question=game.pool[game.index%game.pool.length];
+  const isCorrect=game.selected===question.answer;
+  game.locked=true;
+  $$('[data-raid-answer]').forEach(button=>{button.disabled=true;});
+  if($("#raidAttackBtn")){$("#raidAttackBtn").disabled=true;$("#raidAttackBtn").textContent="กำลังคำนวณพลัง…";}
+  recordAnswer(question,isCorrect);
+  if(isCorrect){
+    game.combo++;
+    game.correct++;
+    state.maxCombo=Math.max(state.maxCombo,game.combo);
+    saveState();
+    const requested=24+Math.min(game.combo*2,16);
+    let result={damage:0,bossHp:raid.meta.bossHp,bossMax:raid.meta.bossMax};
+    try{result=await window.TeacherQuestOnline.attackRaid(requested);}
+    catch(error){showToast(error.message || "การโจมตีไม่ถึงเซิร์ฟเวอร์");}
+    if(onlineState.raid) onlineState.raid.meta.bossHp=result.bossHp;
+    game.feedback={isCorrect:true,selected:game.selected,damage:result.damage};
+    sfx.correct();
+    renderRaidBattle(onlineState.raid || raid,{allowDefeated:result.bossHp<=0});
+    requestAnimationFrame(()=>animateRaidAttack(result.damage,result.bossHp<=0));
+  }else{
+    game.combo=0;
+    game.playerHp=clamp(game.playerHp-18,0,100);
+    game.feedback={isCorrect:false,selected:game.selected,damage:18};
+    sfx.wrong();
+    renderRaidBattle(raid);
+    requestAnimationFrame(animateRaidHurt);
+  }
+}
+
+function claimRaidReward(code){
+  const rewards=Array.isArray(state.raidRewards) ? state.raidRewards : [];
+  if(rewards.includes(code)) return false;
+  state.raidRewards=[...rewards,code].slice(-30);
+  state.raidWins=(Number(state.raidWins)||0)+1;
+  state.xp+=100;
+  state.coins+=50;
+  saveState();
+  sfx.win();
+  return true;
+}
+
+function renderRaidVictory(raid){
+  const rewarded=claimRaidReward(raid.code);
+  setMusicScene("victory","Raid Clear");
+  view.innerHTML=`<section class="raid-victory panel pixel-box"><div class="result-hero pixel-box mission-victory"><div class="raid-victory-stage"><div class="victory-burst" aria-hidden="true"></div><div class="raid-victory-party">${raid.members.slice(0,5).map(member=>window.TeacherQuestOnline?.avatarMarkup?.(member,"large") || "").join("")}</div><div class="raid-defeated-boss">${raidBossArt()}</div><div class="victory-banner">RAID CLEAR!</div></div><div class="eyebrow">TEAM VICTORY • ห้อง ${esc(raid.code)}</div><b>+${rewarded ? 100 : 0} EXP</b><h2>ทีมปราบ ${esc(raidBossName(raid))} สำเร็จ!</h2><p>${rewarded ? "รับ 100 EXP และ 50 เหรียญแล้ว" : "รางวัลห้องนี้ถูกรับไว้แล้ว จึงไม่สามารถรับซ้ำได้"}</p></div><div class="raid-scoreboard pixel-box"><div class="panel-title"><div><h2>อันดับทีม</h2><small>รวมความเสียหาย ${raid.meta.bossMax} HP</small></div></div><div class="raid-member-list">${raidMemberCards(raid)}</div></div>${raidEmoteButtons()}<div class="hero-actions"><button class="btn mint" id="raidVictoryGG">ส่ง GG ให้ทีม</button><button class="btn pink" id="raidAgain">สร้าง Raid ใหม่</button><button class="btn dark" id="raidReturnWorld">กลับโลกผจญภัย</button></div></section>`;
+  bindRaidEmotes();
+  $("#raidVictoryGG").onclick=async()=>{await window.TeacherQuestOnline.sendRaidEmote("gg");showToast("ส่ง GG ให้ทีมแล้ว");};
+  $("#raidAgain").onclick=async()=>{await window.TeacherQuestOnline.leaveRaid();raidGame=null;onlineState=window.TeacherQuestOnline.getState();setMusicScene("boss");renderRaid();};
+  $("#raidReturnWorld").onclick=async()=>{await window.TeacherQuestOnline.leaveRaid();raidGame=null;go("adventure");};
+}
+
+function updateRaidLiveView(previousRaid=null){
+  if(currentView!=="raid") return;
+  const raid=onlineState.raid;
+  if(!raid){raidGame=null;renderRaid();return;}
+  if(!previousRaid || previousRaid.code!==raid.code || previousRaid.meta.status!==raid.meta.status){renderRaid();return;}
+  if(raid.meta.status==="lobby"){renderRaidLobby(raid);return;}
+  if(raid.meta.bossHp<=0){
+    if($(".raid-victory")){
+      const list=$(".raid-scoreboard .raid-member-list");
+      if(list) list.innerHTML=raidMemberCards(raid);
+      return;
+    }
+    if(!raidVictoryTimer) raidVictoryTimer=setTimeout(()=>{raidVictoryTimer=null;renderRaidVictory(raid);},650);
+    return;
+  }
+  const percent=clamp(raid.meta.bossHp/raid.meta.bossMax*100,0,100);
+  if($("#raidBossHpText")) $("#raidBossHpText").textContent=`${raid.meta.bossHp} / ${raid.meta.bossMax}`;
+  if($("#raidBossHpBar")) $("#raidBossHpBar").style.width=`${percent}%`;
+  if($("#raidMemberCount")) $("#raidMemberCount").textContent=raid.memberCount;
+  if($("#raidTeamList")) $("#raidTeamList").innerHTML=raidMemberCards(raid,{compact:true});
 }
 
 function renderExamLobby(){
@@ -1216,10 +1474,16 @@ function bindGlobal(){
       renderBattle();
     }
     if(battle && event.key === "Enter" && battle.selected !== null && !battle.locked) submitBattle();
+    if(currentView==="raid" && raidGame && !raidGame.locked && ["1","2","3","4"].includes(event.key)){
+      raidGame.selected=Number(event.key)-1;
+      renderRaidBattle(onlineState.raid);
+    }
+    if(currentView==="raid" && raidGame && event.key==="Enter" && raidGame.selected!==null && !raidGame.locked) void submitRaidAnswer();
   });
   window.addEventListener("storage",event => { if(event.key === STORAGE) refreshState(); });
   window.addEventListener("teacherquest:local-state",refreshState);
   window.addEventListener("teacherquest:online",event=>{
+    const previousRaid=onlineState.raid;
     onlineState=event.detail || onlineState;
     updateOnlineHud();
     adventureInstance?.setPlayerProfile?.(onlineState.profile);
@@ -1227,6 +1491,7 @@ function bindGlobal(){
     if($("#profileOnlineNow")) $("#profileOnlineNow").textContent=onlineState.onlineCount || 0;
     if($("#profilePlayerTotal")) $("#profilePlayerTotal").textContent=onlineState.totalPlayers || 0;
     updateAuthGate();
+    updateRaidLiveView(previousRaid);
   });
   document.addEventListener("pointerdown",unlockMusic,{once:true});
   document.addEventListener("keydown",unlockMusic,{once:true});
@@ -1249,6 +1514,11 @@ function init(){
 window.teacherQuestSetMusicScene = setMusicScene;
 window.teacherQuestMusicDebug = {
   getState:() => ({scene:musicScene,label:musicSceneLabel,bpm:MUSIC_THEMES[musicScene].bpm,variant:musicVariant,playing:Boolean(musicTimer),themeCount:Object.keys(MUSIC_THEMES).length})
+};
+window.teacherQuestRaidDebug={
+  render:()=>go("raid"),
+  getState:()=>raidGame ? clone(raidGame) : null,
+  questionIds:raid=>raidQuestionPool(raid || onlineState.raid).map(question=>question.id)
 };
 
 init();

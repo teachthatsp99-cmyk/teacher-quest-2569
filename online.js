@@ -13,6 +13,14 @@ const POSITION_INTERVAL = 650;
 const PRESENCE_HEARTBEAT = 20000;
 const PLAYER_STALE_AFTER = 45000;
 const MAX_ZONE_PLAYERS = 40;
+const RAID_STORAGE = "teacherQuestRaidRoom_v1";
+const RAID_CODE_LENGTH = 6;
+const RAID_MAX_PLAYERS = 8;
+const RAID_BOSS_HP = 480;
+const RAID_HEARTBEAT = 25000;
+const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
+const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","policy","student","admin","quality","current"]);
 const connectionId = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/[^a-zA-Z0-9_-]/g,"");
 const listeners = new Set();
 const zoneUnsubscribers = [];
@@ -55,6 +63,76 @@ function normalizeProfile(value={}){
     nickname:cleanNickname(value.nickname) || randomNickname(),
     avatar:normalizeAvatar(value.avatar)
   };
+}
+
+function normalizeRaidCode(value){
+  return String(value || "").toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g,"").slice(0,RAID_CODE_LENGTH);
+}
+
+function validRaidModule(value){ return RAID_MODULES.includes(value) ? value : "all"; }
+
+function raidMember(value={},uid=""){
+  return {
+    uid:String(uid || ""),
+    nickname:cleanNickname(value.nickname) || "นักผจญภัย",
+    avatar:normalizeAvatar(value.avatar),
+    score:clamp(value.score,0,20000),
+    correct:clamp(value.correct,0,2000),
+    joinedAt:Number(value.joinedAt)||0,
+    lastSeen:Number(value.lastSeen)||0,
+    ready:Boolean(value.ready),
+    emote:RAID_EMOTES.includes(value.emote) ? value.emote : "",
+    emoteAt:Number(value.emoteAt)||0
+  };
+}
+
+function normalizeRaid(value,code=raidCode){
+  if(!value || typeof value!=="object" || !value.meta) return null;
+  const meta=value.meta || {};
+  const members=Object.entries(value.members || {}).map(([uid,member])=>raidMember(member,uid))
+    .sort((a,b)=>b.score-a.score || a.joinedAt-b.joinedAt || a.nickname.localeCompare(b.nickname,"th"));
+  return {
+    code:normalizeRaidCode(code),
+    meta:{
+      hostUid:String(meta.hostUid||""),
+      status:meta.status==="active" ? "active" : "lobby",
+      bossHp:clamp(meta.bossHp,0,Number(meta.bossMax)||RAID_BOSS_HP),
+      bossMax:clamp(meta.bossMax,1,1200),
+      moduleId:validRaidModule(meta.moduleId),
+      questionSeed:Math.max(1,Math.floor(Number(meta.questionSeed)||1)),
+      createdAt:Number(meta.createdAt)||0,
+      startedAt:Number(meta.startedAt)||0
+    },
+    members,
+    memberCount:members.length,
+    isHost:Boolean(state.user?.uid && meta.hostUid===state.user.uid)
+  };
+}
+
+function randomRaidCode(){
+  const bytes=new Uint8Array(RAID_CODE_LENGTH);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  return [...bytes].map((value,index)=>RAID_CODE_ALPHABET[(value || Math.floor(Math.random()*256)+index)%RAID_CODE_ALPHABET.length]).join("");
+}
+
+function raidMemberPayload({joinedAt=Date.now(),ready=false}={}){
+  return {
+    nickname:state.profile.nickname,
+    avatar:state.profile.avatar,
+    score:0,
+    correct:0,
+    joinedAt:Number(joinedAt)||Date.now(),
+    lastSeen:Date.now(),
+    ready:Boolean(ready),
+    emote:"",
+    emoteAt:0
+  };
+}
+
+function requireRaidOnline(){
+  if(!database || !databaseModule || !state.user || state.user.isAnonymous || state.phase!=="online"){
+    throw new Error("กรุณาเข้าสู่ระบบ Google และรอให้สถานะออนไลน์พร้อมก่อนเข้า Raid");
+  }
 }
 
 function loadLocalProfile(){
@@ -128,6 +206,7 @@ const state = {
   cloudUpdatedAt:0,
   zone:null,
   zonePlayers:[],
+  raid:null,
   error:""
 };
 
@@ -158,6 +237,12 @@ let lastAdventureCloudSave=0;
 let attachPromise=null;
 let attachingUid=null;
 let attachedUid=null;
+let raidCode="";
+let raidUnsubscribe=null;
+let raidMemberRef=null;
+let raidRoomDisconnect=null;
+let raidMemberDisconnect=null;
+let raidHeartbeatTimer=null;
 
 function publicState(){
   return clone({...state,zonePlayers:[...state.zonePlayers]});
@@ -467,6 +552,7 @@ async function ensurePlayerCountClaim(uid){
 
 async function attachUserOnce(user){
   if(state.user?.uid && state.user.uid!==user.uid){
+    await leaveRaid();
     await removePresence();
     await removeOnlineConnection();
   }
@@ -514,6 +600,7 @@ async function attachUserOnce(user){
     emit();
   });
   setPhase("online",warning);
+  void restoreRaid();
   return publicState();
 }
 
@@ -558,6 +645,7 @@ async function init(){
       signingIn=false;
       if(user && !user.isAnonymous){ void attachUser(user); return; }
       attachedUid=null;
+      void leaveRaid();
       clearCounterSubscriptions();
       connectedUnsubscribe?.();
       connectedUnsubscribe=null;
@@ -582,6 +670,7 @@ async function updateProfile(value){
       nickname:next.nickname,avatar:next.avatar,provider:"google",updatedAt:databaseModule.serverTimestamp()
     });
     if(pendingWorldState) await flushPresence(true);
+    if(state.raid) await touchRaidMember({nickname:next.nickname,avatar:next.avatar});
   }
   return publicState();
 }
@@ -629,6 +718,7 @@ async function signInGoogle(){
 
 async function signOut(){
   if(!auth || !authModule) return;
+  await leaveRaid();
   await removePresence();
   await removeOnlineConnection();
   clearCounterSubscriptions();
@@ -651,6 +741,229 @@ async function leaveWorld(){
   await removePresence();
 }
 
+function stopRaidHeartbeat(){
+  clearInterval(raidHeartbeatTimer);
+  raidHeartbeatTimer=null;
+}
+
+function rememberRaid(code){
+  try{sessionStorage.setItem(RAID_STORAGE,normalizeRaidCode(code));}catch(error){console.warn(error);}
+}
+
+function forgetRaid(){
+  try{sessionStorage.removeItem(RAID_STORAGE);}catch(error){console.warn(error);}
+}
+
+function rememberedRaid(){
+  try{return normalizeRaidCode(sessionStorage.getItem(RAID_STORAGE));}catch{return "";}
+}
+
+async function cancelRaidDisconnects(){
+  try{await raidRoomDisconnect?.cancel();}catch(error){/* Connection may already be closed. */}
+  try{await raidMemberDisconnect?.cancel();}catch(error){/* Connection may already be closed. */}
+  raidRoomDisconnect=null;
+  raidMemberDisconnect=null;
+}
+
+async function setupRaidDisconnect({hostLobby=false}={}){
+  await cancelRaidDisconnects();
+  if(!databaseModule || !database || !state.user || !raidCode) return;
+  raidMemberRef=databaseModule.ref(database,`raids/${raidCode}/members/${state.user.uid}`);
+  raidMemberDisconnect=databaseModule.onDisconnect(raidMemberRef);
+  await raidMemberDisconnect.remove();
+  if(hostLobby){
+    raidRoomDisconnect=databaseModule.onDisconnect(databaseModule.ref(database,`raids/${raidCode}`));
+    await raidRoomDisconnect.remove();
+  }
+}
+
+async function touchRaidMember(extra={}){
+  if(!raidMemberRef || !databaseModule || !state.user) return false;
+  try{
+    await databaseModule.update(raidMemberRef,{...extra,lastSeen:databaseModule.serverTimestamp()});
+    return true;
+  }catch(error){
+    state.error=friendlyError(error);
+    emit();
+    return false;
+  }
+}
+
+function startRaidHeartbeat(){
+  stopRaidHeartbeat();
+  raidHeartbeatTimer=setInterval(()=>{void touchRaidMember();},RAID_HEARTBEAT);
+}
+
+function clearRaidListener(){
+  try{raidUnsubscribe?.();}catch(error){console.warn(error);}
+  raidUnsubscribe=null;
+  stopRaidHeartbeat();
+}
+
+function subscribeRaid(code){
+  clearRaidListener();
+  raidCode=normalizeRaidCode(code);
+  if(!raidCode || !databaseModule || !database || !state.user) return;
+  rememberRaid(raidCode);
+  raidMemberRef=databaseModule.ref(database,`raids/${raidCode}/members/${state.user.uid}`);
+  const roomRef=databaseModule.ref(database,`raids/${raidCode}`);
+  raidUnsubscribe=databaseModule.onValue(roomRef,snapshot=>{
+    const next=normalizeRaid(snapshot.val(),raidCode);
+    if(!next){
+      state.raid=null;
+      clearRaidListener();
+      raidCode="";
+      raidMemberRef=null;
+      forgetRaid();
+      emit();
+      return;
+    }
+    state.raid=next;
+    state.error="";
+    emit();
+  },error=>{
+    state.error=friendlyError(error);
+    state.raid=null;
+    clearRaidListener();
+    emit();
+  });
+  startRaidHeartbeat();
+}
+
+async function createRaid({moduleId="all"}={}){
+  requireRaidOnline();
+  if(state.raid) await leaveRaid();
+  const now=Date.now();
+  const safeModule=validRaidModule(moduleId);
+  let lastError=null;
+  for(let attempt=0;attempt<6;attempt++){
+    const code=randomRaidCode();
+    const roomRef=databaseModule.ref(database,`raids/${code}`);
+    const member=raidMemberPayload({joinedAt:now,ready:true});
+    const payload={
+      meta:{
+        hostUid:state.user.uid,status:"lobby",bossHp:RAID_BOSS_HP,bossMax:RAID_BOSS_HP,
+        moduleId:safeModule,questionSeed:Math.floor(1+Math.random()*2147483646),createdAt:now,startedAt:0
+      },
+      members:{[state.user.uid]:member}
+    };
+    try{
+      await databaseModule.set(roomRef,payload);
+      raidCode=code;
+      state.raid=normalizeRaid(payload,code);
+      emit();
+      subscribeRaid(code);
+      await setupRaidDisconnect({hostLobby:true});
+      return publicState();
+    }catch(error){ lastError=error; }
+  }
+  throw new Error(friendlyError(lastError) || "สร้างห้อง Raid ไม่สำเร็จ กรุณาลองใหม่");
+}
+
+async function joinRaid(value,{restoring=false}={}){
+  requireRaidOnline();
+  const code=normalizeRaidCode(value);
+  if(code.length!==RAID_CODE_LENGTH) throw new Error("รหัสห้องต้องมี 6 ตัว");
+  if(state.raid?.code===code) return publicState();
+  if(state.raid) await leaveRaid();
+  const joinedAt=Date.now();
+  const memberRef=databaseModule.ref(database,`raids/${code}/members/${state.user.uid}`);
+  try{
+    await databaseModule.set(memberRef,raidMemberPayload({joinedAt}));
+    const snapshot=await databaseModule.get(databaseModule.ref(database,`raids/${code}`));
+    const room=normalizeRaid(snapshot.val(),code);
+    if(!room) throw new Error("ไม่พบห้อง Raid นี้");
+    if(room.memberCount>RAID_MAX_PLAYERS){
+      await databaseModule.remove(memberRef);
+      throw new Error(`ห้องเต็มแล้ว (สูงสุด ${RAID_MAX_PLAYERS} คน)`);
+    }
+    raidCode=code;
+    state.raid=room;
+    emit();
+    subscribeRaid(code);
+    await setupRaidDisconnect({hostLobby:false});
+    return publicState();
+  }catch(error){
+    if(!restoring) throw new Error(/ห้อง|รหัส/.test(error?.message||"") ? error.message : "เข้าห้องไม่ได้: ตรวจรหัส หรือขอให้หัวหน้าห้องสร้างใหม่");
+    forgetRaid();
+    return publicState();
+  }
+}
+
+async function restoreRaid(){
+  const code=rememberedRaid();
+  if(code.length!==RAID_CODE_LENGTH || state.raid) return;
+  await joinRaid(code,{restoring:true});
+}
+
+async function startRaid(){
+  requireRaidOnline();
+  if(!state.raid || !state.raid.isHost) throw new Error("เฉพาะหัวหน้าห้องเท่านั้นที่เริ่ม Raid ได้");
+  if(state.raid.meta.status!=="lobby") return publicState();
+  await databaseModule.update(databaseModule.ref(database,`raids/${state.raid.code}/meta`),{
+    status:"active",startedAt:databaseModule.serverTimestamp()
+  });
+  try{await raidRoomDisconnect?.cancel();}catch(error){/* Ignore stale connection. */}
+  raidRoomDisconnect=null;
+  await setupRaidDisconnect({hostLobby:false});
+  await touchRaidMember({ready:true});
+  return publicState();
+}
+
+async function attackRaid(value){
+  requireRaidOnline();
+  if(!state.raid || state.raid.meta.status!=="active" || state.raid.meta.bossHp<=0) throw new Error("Raid ยังไม่เริ่มหรือบอสถูกปราบแล้ว");
+  const damage=Math.round(clamp(value,1,40));
+  let transactionBefore=Number(state.raid.meta.bossHp)||0;
+  const hpRef=databaseModule.ref(database,`raids/${state.raid.code}/meta/bossHp`);
+  const result=await databaseModule.runTransaction(hpRef,current=>{
+    transactionBefore=Number(current)||0;
+    return Math.max(0,transactionBefore-damage);
+  },{applyLocally:false});
+  if(!result.committed) throw new Error("การโจมตีชนกับผู้เล่นอื่น กรุณาลองข้อถัดไป");
+  const bossHp=Number(result.snapshot.val())||0;
+  const actualDamage=Math.max(0,Math.min(damage,transactionBefore-bossHp));
+  await touchRaidMember({
+    score:databaseModule.increment(actualDamage),
+    correct:databaseModule.increment(1)
+  });
+  return {bossHp,bossMax:state.raid.meta.bossMax,damage:actualDamage};
+}
+
+async function sendRaidEmote(value){
+  requireRaidOnline();
+  const emote=RAID_EMOTES.includes(value) ? value : "";
+  if(!state.raid) throw new Error("ยังไม่ได้อยู่ในห้อง Raid");
+  await touchRaidMember({emote,emoteAt:databaseModule.serverTimestamp()});
+  return publicState();
+}
+
+async function setRaidReady(value){
+  requireRaidOnline();
+  if(!state.raid || state.raid.meta.status!=="lobby") return publicState();
+  await touchRaidMember({ready:Boolean(value)});
+  return publicState();
+}
+
+async function leaveRaid(){
+  const room=state.raid;
+  const code=raidCode || room?.code;
+  const memberRef=raidMemberRef;
+  await cancelRaidDisconnects();
+  clearRaidListener();
+  state.raid=null;
+  raidCode="";
+  raidMemberRef=null;
+  forgetRaid();
+  emit();
+  if(!databaseModule || !database || !state.user || !code) return publicState();
+  try{
+    if(room?.isHost && room.meta.status==="lobby") await databaseModule.remove(databaseModule.ref(database,`raids/${code}`));
+    else if(memberRef) await databaseModule.remove(memberRef);
+  }catch(error){console.warn("Could not leave Raid",error);}
+  return publicState();
+}
+
 function subscribe(listener){
   listeners.add(listener);
   listener(publicState());
@@ -660,6 +973,7 @@ function subscribe(listener){
 function simulateForTests(value={}){
   Object.assign(state,value);
   if(value.profile) state.profile=normalizeProfile(value.profile);
+  if(value.raid && !Array.isArray(value.raid.members)) state.raid=normalizeRaid(value.raid,value.raid.code);
   if(value.zonePlayers){
     state.zonePlayers=value.zonePlayers.map((player,index)=>({
       uid:String(player.uid||`test-${index}`),nickname:cleanNickname(player.nickname)||`เพื่อน ${index+1}`,
@@ -673,12 +987,13 @@ function simulateForTests(value={}){
 window.TeacherQuestOnline={
   init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,reconnect,
   updatePresence,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
-  avatarOptions:AVATAR_OPTIONS,normalizeProfile,
+  createRaid,joinRaid,startRaid,attackRaid,sendRaidEmote,setRaidReady,leaveRaid,
+  avatarOptions:AVATAR_OPTIONS,raidEmotes:RAID_EMOTES,normalizeProfile,normalizeRaidCode,
   isConfigured:()=>configured
 };
 window.teacherQuestOnlineDebug={
   simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError,
-  buildProgressBundle,applyProgressBundle
+  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid
 };
 
 window.addEventListener("pagehide",()=>{void leaveWorld();});
