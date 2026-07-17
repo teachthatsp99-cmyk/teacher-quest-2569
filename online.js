@@ -155,6 +155,9 @@ let progressSaveTimer=null;
 let progressSaving=false;
 let progressQueued=false;
 let lastAdventureCloudSave=0;
+let attachPromise=null;
+let attachingUid=null;
+let attachedUid=null;
 
 function publicState(){
   return clone({...state,zonePlayers:[...state.zonePlayers]});
@@ -347,17 +350,30 @@ async function removeOnlineConnection(){
   onlineConnectionUid=null;
 }
 
+function clearCounterSubscriptions(){
+  try{onlineUnsubscribe?.();}catch(error){console.warn(error);}
+  try{totalUnsubscribe?.();}catch(error){console.warn(error);}
+  onlineUnsubscribe=null;
+  totalUnsubscribe=null;
+  state.onlineCount=0;
+  state.totalPlayers=0;
+}
+
 function subscribeCounters(){
   if(onlineUnsubscribe || !database || !databaseModule) return;
+  const onError=error=>{
+    state.error=friendlyError(error);
+    emit();
+  };
   onlineUnsubscribe=databaseModule.onValue(databaseModule.ref(database,"online"),snapshot=>{
     const value=snapshot.val() || {};
     state.onlineCount=Object.keys(value).filter(uid=>value[uid] && Object.keys(value[uid]).length).length;
     emit();
-  });
+  },onError);
   totalUnsubscribe=databaseModule.onValue(databaseModule.ref(database,"visitorClaims"),snapshot=>{
     state.totalPlayers=Object.keys(snapshot.val() || {}).length;
     emit();
-  });
+  },onError);
 }
 
 function localProgressTimestamp(){
@@ -449,44 +465,77 @@ async function ensurePlayerCountClaim(uid){
   await databaseModule.runTransaction(claimRef,current=>current ? undefined : {firstSeen:Date.now()},{applyLocally:false});
 }
 
-async function attachUser(user){
-  if(!user || user.isAnonymous) return;
+async function attachUserOnce(user){
   if(state.user?.uid && state.user.uid!==user.uid){
     await removePresence();
     await removeOnlineConnection();
-    clearProgressSync();
   }
+  clearCounterSubscriptions();
+  connectedUnsubscribe?.();
+  connectedUnsubscribe=null;
+  clearProgressSync();
   state.user={uid:user.uid,isAnonymous:false,email:user.email||"",displayName:user.displayName||"",provider:"google"};
-  try{
-    const profileRef=databaseModule.ref(database,`profiles/${user.uid}`);
-    const snapshot=await databaseModule.get(profileRef);
-    const remote=snapshot.exists() ? normalizeProfile(snapshot.val()) : null;
-    state.profile=remote || normalizeProfile({
-      ...state.profile,
-      nickname:user.displayName ? cleanNickname(user.displayName) : state.profile.nickname
-    });
-    saveLocalProfile(state.profile);
-    const now=databaseModule.serverTimestamp();
-    await databaseModule.update(profileRef,{
-      nickname:state.profile.nickname,
-      avatar:state.profile.avatar,
+  const profileRef=databaseModule.ref(database,`profiles/${user.uid}`);
+  const localProfile=normalizeProfile({
+    ...state.profile,
+    nickname:user.displayName ? cleanNickname(user.displayName) : state.profile.nickname
+  });
+  const profileResult=await databaseModule.runTransaction(profileRef,current=>{
+    const next=current ? normalizeProfile(current) : localProfile;
+    const now=Date.now();
+    return {
+      nickname:next.nickname,
+      avatar:next.avatar,
       provider:"google",
-      createdAt:snapshot.val()?.createdAt || now,
+      createdAt:Number(current?.createdAt) || now,
       updatedAt:now
-    });
+    };
+  },{applyLocally:false});
+  state.profile=normalizeProfile(profileResult.snapshot.val());
+  saveLocalProfile(state.profile);
+
+  let warning="";
+  try{
     await ensurePlayerCountClaim(user.uid);
+  }catch(error){
+    warning=friendlyError(error);
+  }
+  try{
     await setupProgressSync(user.uid);
-    subscribeCounters();
-    connectedUnsubscribe?.();
-    connectedUnsubscribe=databaseModule.onValue(databaseModule.ref(database,".info/connected"),connection=>{
-      if(connection.val()===true){ state.connected=true; void registerOnlineConnection(); }
-      else state.connected=false;
-      state.phase=state.connected?"online":"connecting";
-      emit();
-    });
-    setPhase("online");
+  }catch(error){
+    state.cloudSync="error";
+    warning=warning || friendlyError(error);
+  }
+  subscribeCounters();
+  connectedUnsubscribe=databaseModule.onValue(databaseModule.ref(database,".info/connected"),connection=>{
+    if(connection.val()===true){ state.connected=true; void registerOnlineConnection(); }
+    else state.connected=false;
+    state.phase=state.connected?"online":"connecting";
+    emit();
+  });
+  setPhase("online",warning);
+  return publicState();
+}
+
+async function attachUser(user){
+  if(!user || user.isAnonymous) return publicState();
+  if(attachedUid===user.uid && state.user?.uid===user.uid && state.phase!=="error") return publicState();
+  if(attachingUid===user.uid && attachPromise) return attachPromise;
+  const run=attachUserOnce(user);
+  attachingUid=user.uid;
+  attachPromise=run;
+  try{
+    const result=await run;
+    attachedUid=user.uid;
+    return result;
   }catch(error){
     setPhase("error",friendlyError(error));
+    return publicState();
+  }finally{
+    if(attachPromise===run){
+      attachPromise=null;
+      attachingUid=null;
+    }
   }
 }
 
@@ -508,6 +557,11 @@ async function init(){
     authUnsubscribe=authModule.onAuthStateChanged(auth,user=>{
       signingIn=false;
       if(user && !user.isAnonymous){ void attachUser(user); return; }
+      attachedUid=null;
+      clearCounterSubscriptions();
+      connectedUnsubscribe?.();
+      connectedUnsubscribe=null;
+      clearProgressSync();
       state.user=user ? {uid:user.uid,isAnonymous:true,email:"",displayName:"",provider:"guest"} : null;
       state.connected=false;
       setPhase("signin-required");
@@ -545,7 +599,7 @@ async function signInGoogle(){
       ? await authModule.linkWithPopup(auth.currentUser,provider)
       : await authModule.signInWithPopup(auth,provider);
     signingIn=false;
-    await attachUser(result.user);
+    if(!result.user) throw new Error("Google ไม่ส่งข้อมูลบัญชีกลับมา กรุณาลองใหม่");
   }catch(error){
     signingIn=false;
     if(error?.code==="auth/credential-already-in-use"){
@@ -556,7 +610,7 @@ async function signInGoogle(){
         await removeOnlineConnection();
         clearProgressSync();
         const result=await authModule.signInWithCredential(auth,credential);
-        await attachUser(result.user);
+        if(!result.user) throw new Error("Google ไม่ส่งข้อมูลบัญชีกลับมา กรุณาลองใหม่");
       }catch(signInError){
         if(state.user && state.connected){
           await registerOnlineConnection();
@@ -577,9 +631,19 @@ async function signOut(){
   if(!auth || !authModule) return;
   await removePresence();
   await removeOnlineConnection();
+  clearCounterSubscriptions();
+  connectedUnsubscribe?.();
+  connectedUnsubscribe=null;
   clearProgressSync();
+  attachedUid=null;
   setPhase("connecting");
   await authModule.signOut(auth);
+}
+
+async function reconnect(){
+  if(!auth?.currentUser || auth.currentUser.isAnonymous) throw new Error("กรุณาเข้าสู่ระบบด้วย Google ก่อน");
+  attachedUid=null;
+  return attachUser(auth.currentUser);
 }
 
 async function leaveWorld(){
@@ -607,7 +671,7 @@ function simulateForTests(value={}){
 }
 
 window.TeacherQuestOnline={
-  init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,
+  init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,reconnect,
   updatePresence,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
   avatarOptions:AVATAR_OPTIONS,normalizeProfile,
   isConfigured:()=>configured
