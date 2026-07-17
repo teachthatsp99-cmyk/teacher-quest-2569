@@ -35,9 +35,9 @@
     "online": {
       ".read": "auth != null",
       "$uid": {
-        ".validate": "!newData.exists() || newData.numChildren() <= 5",
+        ".validate": "!newData.exists() || newData.hasChildren()",
         "$connection": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid && $connection.length >= 12 && $connection.length <= 80 && $connection.matches(/^[A-Za-z0-9_-]+$/)",
           ".validate": "!newData.exists() || (newData.hasChildren(['connectedAt']) && newData.child('connectedAt').isNumber() && newData.child('connectedAt').val() >= now - 120000 && newData.child('connectedAt').val() <= now + 120000)",
           "connectedAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
           "$other": { ".validate": false }
