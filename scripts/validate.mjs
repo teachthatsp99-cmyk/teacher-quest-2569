@@ -108,7 +108,7 @@ if(data?.questionBankAudit?.sourceInventory?.length !== 26) fail('source invento
 if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.referenceBackedCount || 0) !== questions.length) fail('verification counts do not cover the full bank');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','data.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','data.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
@@ -118,10 +118,15 @@ for(const retired of ['cloud-sync.js','firebase-config.js','v4-cleanup.js','FIRE
 }
 
 const app = fs.readFileSync('app.js','utf8');
+const adventure = fs.readFileSync('adventure.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS']){
+for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule']){
+  if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
+}
+if(!(html.indexOf('data.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('adventure scripts are not loaded in dependency order');
 for(const feature of ['balancedSample','verificationStatus','sourceUrl','SMART DRILL']){
   if(!v4.includes(feature) && !dataSource.includes(feature)) fail(`V4/data is missing ${feature}`);
 }

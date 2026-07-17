@@ -80,6 +80,7 @@ let toastTimer = null;
 let audioContext = null;
 let musicTimer = null;
 let modalPreviousFocus = null;
+let adventureInstance = null;
 
 function mergeDeep(base, incoming){
   const output = Array.isArray(base) ? base.slice() : {...base};
@@ -319,7 +320,7 @@ function fighterArt(){
   return '<div class="pixel-fighter"><i class="head"></i><i class="body"></i><i class="weapon"></i></div>';
 }
 function heroArt(){
-  return `<div class="hero-art"><div class="portal"></div><div class="teacher-sprite"><i class="hair"></i><i class="face"></i><i class="body"></i><i class="book"></i><i class="legs"></i></div><div class="float-badge one">16 ดินแดน</div><div class="float-badge two">${D.questions.length} ภารกิจ</div></div>`;
+  return `<div class="hero-art"><div class="portal"></div><div class="teacher-sprite"><i class="hair"></i><i class="face"></i><i class="body"></i><i class="book"></i><i class="legs"></i></div><div class="float-badge one">${D.modules.length} ดินแดน</div><div class="float-badge two">${D.questions.length} ภารกิจ</div></div>`;
 }
 
 function bindCommon(){
@@ -328,6 +329,10 @@ function bindCommon(){
 }
 
 function go(name,options={}){
+  if(adventureInstance){
+    adventureInstance.destroy();
+    adventureInstance = null;
+  }
   $$('.nav-btn').forEach(button => button.classList.toggle("active",button.dataset.view === name));
   view.className = "view";
   clearInterval(examTimer);
@@ -335,6 +340,7 @@ function go(name,options={}){
   if(name !== "practice") battle = null;
   if(name !== "exam") exam = null;
   const routes = {
+    adventure:renderAdventure,
     home:renderHome,
     world:renderWorld,
     practice:() => renderPractice(options),
@@ -345,6 +351,88 @@ function go(name,options={}){
   };
   (routes[name] || renderHome)();
   window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function renderAdventure(){
+  const stats = totalStats();
+  view.innerHTML = `
+    <section class="adventure-page" id="adventureRoot">
+      <header class="adventure-intro">
+        <div>
+          <div class="eyebrow">ADVENTURE MODE • PIXEL WORLD</div>
+          <h1>โลกครูเควสต์</h1>
+          <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน เข้าใกล้คนหรือประตูแล้วกด E, SPACE หรือปุ่ม ACTION</p>
+        </div>
+        <div class="adventure-intro-actions">
+          <button class="btn small mint" data-adventure-map>▤ แผนที่ 20 ด่าน</button>
+          <button class="btn small dark" data-adventure-reset>⌂ กลับจุดเริ่ม</button>
+          <button class="btn small dark" data-go="home">◆ ฐานบัญชาการ</button>
+        </div>
+      </header>
+      <div class="adventure-game pixel-box">
+        <canvas id="adventureCanvas" class="adventure-canvas" width="960" height="540" tabindex="0" role="img" aria-label="โลกผจญภัย Pixel Art ที่ควบคุมตัวละครเดินสำรวจได้" aria-describedby="adventureInstructions">เบราว์เซอร์นี้ไม่รองรับ Canvas กรุณาใช้เมนูแผนที่ภารกิจแทน</canvas>
+        <div class="adventure-hud" aria-hidden="true">
+          <div class="adventure-hud-card">
+            <small>ตำแหน่งปัจจุบัน</small>
+            <strong id="adventureDistrict">ลานสถาบันครูเควสต์</strong>
+            <p id="adventureObjective">กำลังค้นหาภารกิจแนะนำ…</p>
+            <div class="adventure-progress"><div class="meter"><i id="adventureProgressBar" style="width:${Math.round(stats.attempted / D.questions.length * 100)}%"></i></div><span id="adventureProgressText">สำรวจคลัง ${stats.attempted}/${D.questions.length} ข้อ</span></div>
+          </div>
+          <div class="adventure-mini-wrap">
+            <canvas id="adventureMiniMap" width="176" height="124"></canvas>
+            <span class="adventure-mini-label">MINI MAP</span>
+          </div>
+        </div>
+        <div class="adventure-prompt" id="adventurePrompt" role="status" aria-live="polite"></div>
+        <section class="adventure-dialogue" id="adventureDialogue" role="dialog" aria-modal="false" aria-labelledby="adventureDialogueTitle" aria-hidden="true" hidden>
+          <div class="adventure-dialogue-head"><div><div class="eyebrow" id="adventureDialogueEyebrow"></div><h2 id="adventureDialogueTitle"></h2></div></div>
+          <p id="adventureDialogueText"></p>
+          <div class="adventure-dialogue-stats" id="adventureDialogueStats"></div>
+          <div class="adventure-dialogue-actions" id="adventureDialogueActions"></div>
+        </section>
+        <section class="adventure-map-panel" id="adventureMapPanel" role="dialog" aria-modal="false" aria-labelledby="adventureMapTitle" aria-hidden="true" hidden>
+          <header class="adventure-map-head"><div><h2 id="adventureMapTitle">แผนที่โลกครูเควสต์</h2><p>4 เขต • 20 ประตู • คลังข้อสอบ ${D.questions.length} ข้อ</p></div><button class="btn small red" data-map-close>ปิดแผนที่ ×</button></header>
+          <div class="adventure-map-grid"></div>
+        </section>
+        <div class="adventure-mobile-controls" aria-label="ปุ่มควบคุมสำหรับจอสัมผัส">
+          <div class="pixel-dpad">
+            <button data-move="up" aria-label="เดินขึ้น">▲</button><button data-move="left" aria-label="เดินซ้าย">◀</button><button data-move="right" aria-label="เดินขวา">▶</button><button data-move="down" aria-label="เดินลง">▼</button>
+          </div>
+          <button class="adventure-interact-button" data-interact aria-label="โต้ตอบกับคนหรือประตู">A</button>
+        </div>
+      </div>
+      <div class="adventure-help" aria-label="วิธีเล่น">
+        <div><kbd>WASD</kbd><span><strong>เดินสำรวจ</strong>กดค้างและเดินเฉียงได้</span></div>
+        <div><kbd>E</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
+        <div><kbd>M</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
+        <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
+      </div>
+    </section>`;
+  bindCommon();
+  if(typeof window.createTeacherQuestAdventure !== "function"){
+    view.innerHTML = `<section class="panel pixel-box"><h2>ไม่สามารถเปิดโลกผจญภัยได้</h2><p>ไฟล์ระบบแผนที่ไม่ถูกโหลด กรุณาเปิดแผนที่ภารกิจแทน</p><button class="btn" data-go="world">เปิดแผนที่ภารกิจ</button></section>`;
+    bindCommon();
+    return;
+  }
+  const root = $("#adventureRoot");
+  adventureInstance = window.createTeacherQuestAdventure({
+    root,
+    canvas:$("#adventureCanvas"),
+    modules:D.modules,
+    getStats:moduleStats,
+    getBossCount:id => D.questions.filter(question => question.module === id && question.difficulty !== "ง่าย").length,
+    onStartModule:(id,mode) => {
+      const total = D.questions.filter(question => question.module === id).length;
+      const bossTotal = D.questions.filter(question => question.module === id && question.difficulty !== "ง่าย").length;
+      adventureInstance?.destroy();
+      adventureInstance = null;
+      if(mode === "complete") startBattle({mode:"module",module:id,count:total,complete:true,returnView:"adventure"});
+      else if(mode === "boss") startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.boss,bossTotal),boss:true,returnView:"adventure"});
+      else startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.zone,total),returnView:"adventure"});
+    },
+    onNavigate:name => go(name)
+  });
+  $("#adventureCanvas")?.focus({preventScroll:true});
 }
 
 function zoneHtml(item){
@@ -461,7 +549,8 @@ function startBattle(config){
     pool,index:0,playerHp:100,
     enemyHp:config.boss ? 150 : 100,enemyMax:config.boss ? 150 : 100,
     combo:0,selected:null,locked:false,hidden:[],shield:false,
-    skills:{fifty:1,heal:1,shield:1,hint:1},boss:Boolean(config.boss),correct:0
+    skills:{fifty:1,heal:1,shield:1,hint:1},boss:Boolean(config.boss),correct:0,
+    returnView:config.returnView || ""
   };
   $$('.nav-btn').forEach(button => button.classList.toggle("active",button.dataset.view === "practice"));
   renderBattle();
@@ -618,10 +707,12 @@ function finishBattle(defeat=false){
   const score = result ? result.correct : 0;
   const total = result ? result.pool.length : 0;
   if(!defeat) sfx.win();
-  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box ${defeat ? "retreat" : "mission-victory"}"><div class="result-battle-stage" data-result-action="${defeat ? "retreat" : "victory"}"><div class="victory-burst" aria-hidden="true"></div><div class="fighter result-fighter ${defeat ? "retreating" : "celebrating"}">${fighterArt()}</div><div class="victory-banner">${defeat ? "TRY AGAIN" : "VICTORY!"}</div></div><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p></div><div class="hero-actions"><button class="btn" id="againBattle">ฝึกอีกชุด</button><button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
+  const returnToAdventure = result?.returnView === "adventure";
+  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box ${defeat ? "retreat" : "mission-victory"}"><div class="result-battle-stage" data-result-action="${defeat ? "retreat" : "victory"}"><div class="victory-burst" aria-hidden="true"></div><div class="fighter result-fighter ${defeat ? "retreating" : "celebrating"}">${fighterArt()}</div><div class="victory-banner">${defeat ? "TRY AGAIN" : "VICTORY!"}</div></div><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p></div><div class="hero-actions">${returnToAdventure ? '<button class="btn" id="returnAdventure">◈ กลับสู่โลกผจญภัย</button>' : '<button class="btn" id="againBattle">ฝึกอีกชุด</button>'}<button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   battle = null;
   bindCommon();
-  $("#againBattle").onclick = () => go("practice");
+  if(returnToAdventure) $("#returnAdventure").onclick = () => go("adventure");
+  else $("#againBattle").onclick = () => go("practice");
 }
 
 function renderExamLobby(){
@@ -794,7 +885,7 @@ function openSettings(){
       state = clone(defaults);
       resetDaily();
       closeModal();
-      go("home");
+      go("adventure");
       showToast("เริ่มการเดินทางใหม่แล้ว");
     }
   };
@@ -851,7 +942,7 @@ function init(){
     view.innerHTML = `<section class="panel pixel-box"><h2>พบข้อผิดพลาดในคลังข้อสอบ</h2><pre>${esc(errors.join("\n"))}</pre></section>`;
     return;
   }
-  go("home");
+  go("adventure");
 }
 
 init();

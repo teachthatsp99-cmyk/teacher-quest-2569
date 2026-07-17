@@ -20,6 +20,7 @@ test('core battle flow renders graphics, feedback and a source link',async({page
   expect(favicon.ok()).toBe(true);
   await page.goto(url,{waitUntil:'networkidle'});
   await expect(page).toHaveTitle(/ครูเควสต์ 2569/);
+  await page.locator('[data-view="home"]').first().click();
   await expect(page.locator('#quickStart')).toBeVisible();
   await expect(page.locator('.zone')).toHaveCount(4);
   await expect(page.locator('#avatarArt')).toBeVisible();
@@ -40,6 +41,7 @@ test('core battle flow renders graphics, feedback and a source link',async({page
 
 test('settings modal traps focus and blocks battle keyboard shortcuts',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
+  await page.locator('[data-view="home"]').first().click();
   await page.locator('#quickStart').click();
   await page.locator('#settingsBtn').click();
   await expect(page.locator('#modal')).toBeVisible();
@@ -174,6 +176,7 @@ test('practice availability is scoped and never fills a short module set from ot
 
 test('battle shows player attack, enemy counter and finishing victory actions',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
+  await page.locator('[data-view="home"]').first().click();
   await page.locator('#quickStart').click();
 
   await submitCurrentBattleAnswer(page,{correct:true});
@@ -203,6 +206,7 @@ test('all main views render without browser errors',async({page})=>{
   page.on('pageerror',error=>pageErrors.push(error.message));
   await page.goto(url,{waitUntil:'networkidle'});
   const expected = {
+    adventure:'โลกครูเควสต์',
     world:'แผนที่ภารกิจ',
     practice:'สนามฝึก',
     exam:'สนามสอบใหญ่',
@@ -218,26 +222,25 @@ test('all main views render without browser errors',async({page})=>{
   expect(pageErrors).toEqual([]);
 });
 
-test('mobile navigation is a usable 4 by 2 grid with no horizontal overflow',async({page})=>{
+test('mobile navigation is a usable 3 by 3 grid with no horizontal overflow',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto(url,{waitUntil:'networkidle'});
   const overflow = await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth);
   expect(overflow).toBe(false);
   await expect(page.locator('.nav-list')).toBeVisible();
-  await expect(page.locator('.nav-list .nav-btn')).toHaveCount(8);
-  await expect(page.locator('.hero-art')).toBeHidden();
+  await expect(page.locator('.nav-list .nav-btn')).toHaveCount(9);
   const metrics = await page.locator('.nav-list .nav-btn').evaluateAll(buttons=>{
     const boxes=buttons.map(button=>button.getBoundingClientRect());
     const rows=[...new Set(boxes.map(box=>Math.round(box.top)))];
     return {rows:rows.length,perRow:rows.map(top=>boxes.filter(box=>Math.round(box.top)===top).length),minHeight:Math.min(...boxes.map(box=>box.height))};
   });
-  expect(metrics.rows).toBe(2);
-  expect(metrics.perRow).toEqual([4,4]);
+  expect(metrics.rows).toBe(3);
+  expect(metrics.perRow).toEqual([3,3,3]);
   expect(metrics.minHeight).toBeGreaterThanOrEqual(44);
   const topButtonHeights = await page.locator('.top-btn').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().height));
   expect(Math.min(...topButtonHeights)).toBeGreaterThanOrEqual(44);
 
-  for(const view of ['world','practice','exam','review','codex','profile','home']){
+  for(const view of ['adventure','world','practice','exam','review','codex','profile','home']){
     await page.locator(`[data-view="${view}"]`).first().click();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),`${view} overflowed horizontally`).toBe(false);
   }
@@ -254,4 +257,66 @@ test('mobile navigation is a usable 4 by 2 grid with no horizontal overflow',asy
   await page.locator('[data-view="home"]').first().click();
   await page.locator('#quickStart').click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),'battle overflowed horizontally').toBe(false);
+});
+
+test('pixel adventure supports held movement, map, portal interaction and complete quest entry',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  await expect(page.locator('#adventureCanvas')).toBeVisible();
+  await expect(page.locator('.nav-btn[data-view="adventure"]')).toHaveClass(/active/);
+  const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(initial.district).toBe('ลานสถาบันครูเควสต์');
+
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(350);
+  await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(50);
+  const moved=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(moved.x-initial.x).toBeGreaterThan(35);
+  expect(moved.moving).toBe(false);
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('measure'))).toBe(true);
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(850);
+  await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(50);
+  const blockedByLake=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(blockedByLake.x).toBeLessThan(826);
+
+  await page.locator('[data-adventure-map]').click();
+  await expect(page.locator('#adventureMapPanel')).toBeVisible();
+  await expect(page.locator('.map-district')).toHaveCount(4);
+  await expect(page.locator('.map-zone')).toHaveCount(20);
+  await page.locator('[data-map-close]').click();
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('research'))).toBe(true);
+  await page.keyboard.press('e');
+  await expect(page.locator('#adventureDialogue')).toBeVisible();
+  await expect(page.locator('#adventureDialogueTitle')).toHaveText('วิจัยในชั้นเรียน');
+  await expect(page.locator('[data-adventure-mode="complete"]')).toContainText('พิชิตครบ 20 ข้อ');
+  await expect(page.locator('[data-adventure-mode="quick"]')).toContainText('ฝึกด่วน 10 ข้อ');
+  await expect(page.locator('[data-adventure-mode="boss"]')).toContainText('ท้าบอส 15 ข้อ');
+  await page.locator('[data-adventure-mode="complete"]').click();
+  await expect(page.locator('.battle-center strong')).toHaveText('1 / 20');
+  await expect(page.locator('.question-meta .chip.gold')).toContainText('วิจัยในชั้นเรียน');
+  expect(pageErrors).toEqual([]);
+});
+
+test('touch d-pad holds movement and adventure position survives navigation',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(url,{waitUntil:'networkidle'});
+  const before=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  const right=page.locator('[data-move="right"]');
+  await right.dispatchEvent('pointerdown',{pointerId:7,pointerType:'touch',isPrimary:true});
+  await page.waitForTimeout(300);
+  await right.dispatchEvent('pointerup',{pointerId:7,pointerType:'touch',isPrimary:true});
+  await page.waitForTimeout(50);
+  const after=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(after.x-before.x).toBeGreaterThan(25);
+  await page.locator('[data-view="home"]').first().click();
+  await page.locator('[data-view="adventure"]').first().click();
+  const restored=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(Math.abs(restored.x-after.x)).toBeLessThan(3);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });
