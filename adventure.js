@@ -12,6 +12,14 @@ const INTERACT_DISTANCE = 76;
 const SPAWN = Object.freeze({x:1024,y:812});
 const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
+const DIRECTION_BY_CODE = Object.freeze({
+  ArrowUp:"up",KeyW:"up",ArrowDown:"down",KeyS:"down",
+  ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right"
+});
+const DIRECTION_BY_KEY = Object.freeze({
+  ArrowUp:"up",w:"up",ไ:"up",ArrowDown:"down",s:"down",ห:"down",
+  ArrowLeft:"left",a:"left",ฟ:"left",ArrowRight:"right",d:"right",ก:"right"
+});
 
 const DISTRICTS = Object.freeze([
   {name:"หมู่บ้านครูนักคิด",short:"ศาสตร์ครู",color:"#ffd45c",x:0,y:0,w:1024,h:768,hub:{x:512,y:384}},
@@ -46,7 +54,7 @@ const WATER = Object.freeze([
 ]);
 
 const NPC_DEFINITIONS = Object.freeze([
-  {id:"guide",x:1018,y:866,name:"ครูผู้พิทักษ์",role:"ไกด์ประจำโลก",color:"#ffd45c",dialogue:"ยินดีต้อนรับสู่ครูเควสต์! เดินสำรวจโลกทั้ง 4 เขต เข้าใกล้ประตูวิชา แล้วกด E หรือ SPACE เพื่อเริ่มภารกิจ ข้อที่ทำแล้วจะถูกบันทึกไว้เสมอ",action:"help"},
+  {id:"guide",x:1018,y:866,name:"ครูผู้พิทักษ์",role:"ไกด์ประจำโลก",color:"#ffd45c",dialogue:"ยินดีต้อนรับสู่ครูเควสต์! เดินสำรวจโลกทั้ง 4 เขต เข้าใกล้ประตูวิชา แล้วกด E (ปุ่ม ำ เมื่อเป็นภาษาไทย) หรือ SPACE เพื่อเริ่มภารกิจ โดยไม่ต้องสลับภาษาคีย์บอร์ด",action:"help"},
   {id:"trainer",x:900,y:830,name:"ครูฝึกคอมโบ",role:"สนามฝึก",color:"#ff72b4",dialogue:"อยากซ้อมแบบรวดเร็ว หรือไล่ล่าข้อที่ยังไม่แม่นใช่ไหม? สนามฝึกเดิมยังอยู่ครบและใช้ความคืบหน้าชุดเดียวกับโลกนี้",action:"practice"},
   {id:"examiner",x:1138,y:830,name:"ผู้คุมสนามสอบ",role:"สนามสอบใหญ่",color:"#ff6679",dialogue:"เมื่อพร้อมแล้ว มาทดลองสนามสอบแบบจับเวลาจริงได้ คำตอบจะถูกเก็บไว้จนกว่าจะกดส่งข้อสอบ",action:"exam"},
   {id:"librarian",x:1024,y:554,name:"บรรณารักษ์พิกเซล",role:"คัมภีร์ความรู้",color:"#58e7b2",dialogue:"คัมภีร์เก็บสูตรจำ สาระสำคัญ และแหล่งอ้างอิงของทุกดินแดนไว้ หากติดตรงไหนแวะมาทบทวนได้",action:"codex"},
@@ -132,6 +140,11 @@ function districtAt(x,y){
 function locationNameAt(x,y){
   if(x>=816&&x<=1232&&y>=520&&y<=976) return "ลานสถาบันครูเควสต์";
   return districtAt(x,y).name;
+}
+
+function musicSceneAt(x,y){
+  if(x>=816&&x<=1232&&y>=520&&y<=976) return "plaza";
+  return `district${DISTRICTS.indexOf(districtAt(x,y))}`;
 }
 
 function drawPixelText(ctx,text,x,y,{size=12,color="#fff",align="left",stroke="#091020"}={}){
@@ -332,6 +345,7 @@ function createTeacherQuestAdventure(options={}){
     camera.y = clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
     savePosition(player);
     updateNearest();
+    updateHud();
   }
 
   function onKeyDown(event){
@@ -346,13 +360,15 @@ function createTeacherQuestAdventure(options={}){
       return;
     }
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-    const movement = ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","w","a","s","d"];
-    if(movement.includes(key) && !inControl){ event.preventDefault(); keys.add(key); }
-    if(!inControl && !event.repeat && (key === "e" || key === " " || key === "Enter")){
+    const direction = DIRECTION_BY_CODE[event.code] || DIRECTION_BY_KEY[key];
+    if(direction && !inControl){ event.preventDefault(); keys.add(direction); }
+    const interactKey = ["KeyE","Space","Enter","NumpadEnter"].includes(event.code) || ["e","ำ"," ","Enter"].includes(key);
+    if(!inControl && !event.repeat && interactKey){
       event.preventDefault();
       interact();
     }
-    if(!inControl && !event.repeat && key === "m"){
+    const mapKey = event.code === "KeyM" || key === "m" || key === "ท";
+    if(!inControl && !event.repeat && mapKey){
       event.preventDefault();
       toggleMap();
     }
@@ -360,7 +376,8 @@ function createTeacherQuestAdventure(options={}){
 
   function onKeyUp(event){
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-    keys.delete(key);
+    const direction = DIRECTION_BY_CODE[event.code] || DIRECTION_BY_KEY[key];
+    if(direction) keys.delete(direction);
   }
 
   function drawGround(){
@@ -544,6 +561,7 @@ function createTeacherQuestAdventure(options={}){
     if(locationName!==previousDistrict){
       previousDistrict=locationName;
       if(districtLabel) districtLabel.textContent=locationName;
+      options.onMusicScene?.(musicSceneAt(player.x,player.y),locationName);
     }
     const totals=portals.reduce((result,portal)=>{const stats=statsFor(portal);result.done+=Math.min(stats.done,stats.total);result.total+=stats.total;return result;},{done:0,total:0});
     const pct=totals.total?Math.round(totals.done/totals.total*100):0;
@@ -555,8 +573,8 @@ function createTeacherQuestAdventure(options={}){
 
   function update(delta){
     if(dialogueOpen||mapOpen){player.moving=false;return;}
-    const horizontal=(keys.has("ArrowRight")||keys.has("d")?1:0)-(keys.has("ArrowLeft")||keys.has("a")?1:0);
-    const vertical=(keys.has("ArrowDown")||keys.has("s")?1:0)-(keys.has("ArrowUp")||keys.has("w")?1:0);
+    const horizontal=(keys.has("right")?1:0)-(keys.has("left")?1:0);
+    const vertical=(keys.has("down")?1:0)-(keys.has("up")?1:0);
     player.moving=Boolean(horizontal||vertical);
     if(player.moving){
       const length=Math.hypot(horizontal,vertical)||1;
@@ -572,6 +590,7 @@ function createTeacherQuestAdventure(options={}){
     camera.x+=(targetX-camera.x)*ease;
     camera.y+=(targetY-camera.y)*ease;
     updateNearest();
+    if(locationNameAt(player.x,player.y)!==previousDistrict) updateHud();
   }
 
   function frame(time){
@@ -589,7 +608,7 @@ function createTeacherQuestAdventure(options={}){
 
   const mobileBindings=[];
   root.querySelectorAll("[data-move]").forEach(button=>{
-    const key={up:"ArrowUp",down:"ArrowDown",left:"ArrowLeft",right:"ArrowRight"}[button.dataset.move];
+    const key=button.dataset.move;
     const down=event=>{event.preventDefault();button.classList.add("pressed");keys.add(key);try{button.setPointerCapture?.(event.pointerId);}catch(error){/* Synthetic test events do not own a pointer. */}canvas.focus({preventScroll:true});};
     const up=event=>{event.preventDefault();button.classList.remove("pressed");keys.delete(key);};
     button.addEventListener("pointerdown",down);button.addEventListener("pointerup",up);button.addEventListener("pointercancel",up);button.addEventListener("lostpointercapture",up);
@@ -628,8 +647,8 @@ function createTeacherQuestAdventure(options={}){
 
   window.teacherQuestAdventureDebug={
     getState:()=>({x:player.x,y:player.y,direction:player.direction,moving:player.moving,district:locationNameAt(player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null}),
-    teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();return true;},
-    teleportToNpc:id=>{const npc=npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";updateNearest();return true;},
+    teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();updateHud();return true;},
+    teleportToNpc:id=>{const npc=npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";updateNearest();updateHud();return true;},
     interact,
     resetPosition,
     destroy

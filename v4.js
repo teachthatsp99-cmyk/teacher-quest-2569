@@ -98,6 +98,7 @@ function overall(state=readState()){
 
 function activate(){
   active = true;
+  window.teacherQuestSetMusicScene?.("training","ศูนย์ฝึกอัจฉริยะ");
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.remove("active"));
   document.querySelector("#v4CoachBtn")?.classList.add("active");
   renderCoach();
@@ -105,6 +106,7 @@ function activate(){
 }
 
 function renderCoach(){
+  window.teacherQuestSetMusicScene?.("training","ศูนย์ฝึกอัจฉริยะ");
   drill = null;
   cards = null;
   const state = readState();
@@ -194,6 +196,7 @@ function startDrill(mode){
   const state = readState();
   const questions = selectQuestions(mode,state);
   if(!questions.length){ alert("ยังไม่มีข้อในโหมดนี้ ลองเลือกชุดผสมอัจฉริยะ"); return; }
+  window.teacherQuestSetMusicScene?.("battle","ชุดฝึกอัจฉริยะ",2);
   drill = {mode,questions,index:0,combo:0,best:0,correct:0,answered:false,selected:null,eliminated:[],shield:false,items:{eliminate:2,shield:1,hint:2}};
   renderDrill();
 }
@@ -300,6 +303,7 @@ function finishDrill(){
   state.v4.sessions = (Number(state.v4.sessions)||0)+1;
   writeState(state);
   const percent = Math.round(drill.correct/drill.questions.length*100);
+  window.teacherQuestSetMusicScene?.(percent>=60?"victory":"retreat",percent>=60?"ฝึกสำเร็จ":"กลับไปฝึกใหม่");
   view.innerHTML = `<section class="result-card pixel-box"><div class="eyebrow">MISSION COMPLETE</div><div class="score-big">${percent}%</div><div class="rank">ตอบถูก ${drill.correct} / ${drill.questions.length}</div><div class="result-break"><div><b>${drill.best}</b>คอมโบสูงสุด</div><div><b>+${drill.correct*8+(drill.questions.length-drill.correct)*2}</b>EXP</div><div><b>${overall(state).weak}</b>ข้อรอแก้มือ</div></div><div class="v4-actions" style="justify-content:center"><button class="v4-btn mint" data-v4-finish="again">ฝึกชุดใหม่</button><button class="v4-btn sky" data-v4-finish="coach">กลับศูนย์ฝึก</button><button class="v4-btn dark" data-v4-finish="home">กลับฐานบัญชาการ</button></div></section>`;
   document.querySelector('[data-v4-finish="again"]').onclick=()=>startDrill(drill.mode);
   document.querySelector('[data-v4-finish="coach"]').onclick=renderCoach;
@@ -310,6 +314,7 @@ function startFlashcards(){
   const state = readState();
   let pool = selectQuestions("weak",state);
   if(!pool.length) pool = shuffle(DATA.questions).slice(0,10);
+  window.teacherQuestSetMusicScene?.("codex","แฟลชการ์ดทบทวน");
   cards = {questions:pool,index:0,revealed:false};
   renderFlashcard();
 }

@@ -41,6 +41,23 @@ const MODULE_PIXEL_ART = Object.freeze({
   quality:["11111111","10000001","10222201","10211201","10222201","10000001","11111111","00111100"],
   current:["00122100","12222221","01211210","12222221","01211210","00122100","00011000","00100100"]
 });
+const MUSIC_THEMES = Object.freeze({
+  menu:{label:"ฐานบัญชาการ",bpm:104,wave:"triangle",lead:[262,0,330,392,330,294,262,0,294,0,349,440,392,349,330,0],bass:[131,131,110,123,131,147,110,123],drums:.25},
+  map:{label:"แผนที่ภารกิจ",bpm:112,wave:"triangle",lead:[330,392,440,0,392,330,294,330,349,440,494,0,440,392,330,294],bass:[131,147,165,147,139,165,185,147],drums:.3},
+  codex:{label:"หอคัมภีร์",bpm:92,wave:"sine",lead:[262,0,294,330,0,392,349,330,247,0,294,349,0,330,294,262],bass:[98,110,131,123,98,110,123,131],drums:.08},
+  plaza:{label:"ลานสถาบันครูเควสต์",bpm:110,wave:"triangle",lead:[392,0,440,523,494,440,392,330,349,0,392,440,523,494,440,0],bass:[131,165,147,123,139,165,147,131],drums:.22},
+  district0:{label:"หมู่บ้านครูนักคิด",bpm:116,wave:"triangle",lead:[262,330,392,0,440,392,330,294,262,294,330,0,392,440,392,330],bass:[131,165,147,131,131,147,165,123],drums:.28},
+  district1:{label:"นครนวัตกรรม",bpm:132,wave:"square",lead:[330,392,494,659,0,587,494,392,349,440,523,698,0,659,523,440],bass:[165,196,147,196,175,220,165,196],drums:.42,leadGain:.017},
+  district2:{label:"ป่าคัมภีร์กฎหมาย",bpm:98,wave:"triangle",lead:[220,0,262,294,330,0,294,262,208,0,247,294,330,294,247,0],bass:[110,98,104,123,110,98,104,92],drums:.16},
+  district3:{label:"ป้อมอนาคตการศึกษา",bpm:124,wave:"sine",lead:[294,370,440,0,554,440,370,330,277,349,415,0,523,415,349,294],bass:[147,185,139,165,147,175,139,185],drums:.34},
+  training:{label:"สนามฝึก",bpm:140,wave:"square",lead:[330,392,440,392,494,440,392,330,349,440,523,440,587,523,440,392],bass:[131,165,147,165,139,175,147,196],drums:.58,leadGain:.018},
+  exam:{label:"สนามสอบ",bpm:126,wave:"triangle",lead:[220,262,0,294,330,294,262,247,220,262,0,330,349,330,294,262],bass:[110,123,131,98,110,131,123,104],drums:.35},
+  battle:{label:"การต่อสู้",bpm:158,wave:"square",lead:[220,220,262,294,330,294,262,247,220,262,294,349,330,294,262,247],bass:[110,110,98,123,110,131,98,123],drums:.78,leadGain:.017,bassGain:.012},
+  boss:{label:"ศึกบอส",bpm:178,wave:"sawtooth",lead:[196,233,262,294,196,311,294,262,185,220,262,311,349,311,262,233],bass:[98,87,93,82,98,104,87,93],drums:1,leadGain:.014,bassGain:.014},
+  victory:{label:"ชัยชนะ",bpm:146,wave:"square",lead:[262,330,392,523,330,392,523,659,392,494,587,784,659,587,523,0],bass:[131,165,196,262,165,196,247,262],drums:.55,leadGain:.019},
+  retreat:{label:"ถอยตั้งหลัก",bpm:82,wave:"triangle",lead:[262,0,247,220,0,196,185,0,220,0,208,196,0,185,175,0],bass:[98,92,87,82,98,92,87,82],drums:.08}
+});
+const MUSIC_VARIANT_STEPS = Object.freeze([0,2,3,5,7]);
 
 function moduleIconMarkup(item,className=""){
   const pattern = MODULE_PIXEL_ART[item?.id] || MODULE_PIXEL_ART.learn;
@@ -79,6 +96,12 @@ let examTimer = null;
 let toastTimer = null;
 let audioContext = null;
 let musicTimer = null;
+let musicScene = "menu";
+let musicSceneLabel = MUSIC_THEMES.menu.label;
+let musicStep = 0;
+let musicVariant = 0;
+let musicUnlocked = false;
+const activeMusicNodes = new Set();
 let modalPreviousFocus = null;
 let adventureInstance = null;
 
@@ -215,6 +238,7 @@ function updateHud(){
   $("#dailyQuestBar").style.width = `${clamp(state.daily.count / 10 * 100,0,100)}%`;
   $("#dailyQuestCount").textContent = `${Math.min(state.daily.count,10)} / 10`;
   $("#musicBtn").classList.toggle("off",!state.settings.music);
+  refreshMusicButton();
   $("#soundBtn").classList.toggle("off",!state.settings.sound);
   document.body.classList.toggle("no-motion",state.settings.reduced);
 }
@@ -288,25 +312,109 @@ const sfx = {
   win(){ [523,659,784,1047].forEach((note,index) => tone(note,.18,"square",.07,index*.11)); }
 };
 
-function startMusic(){
-  if(!state.settings.music || musicTimer) return;
+function musicTone(frequency,duration,type,gain){
+  const context = ensureAudio();
+  if(!context) return;
+  const oscillator = context.createOscillator();
+  const volume = context.createGain();
+  const now = context.currentTime;
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency,now);
+  volume.gain.setValueAtTime(Math.max(.0001,gain * state.settings.volume),now);
+  volume.gain.exponentialRampToValueAtTime(.001,now + duration);
+  oscillator.connect(volume).connect(context.destination);
+  const node = {oscillator,volume};
+  activeMusicNodes.add(node);
+  oscillator.onended = () => activeMusicNodes.delete(node);
+  oscillator.start(now);
+  oscillator.stop(now + duration);
+}
+
+function stopActiveMusicNodes(){
+  const context = audioContext;
+  activeMusicNodes.forEach(({oscillator,volume}) => {
+    try{
+      const now = context?.currentTime || 0;
+      volume.gain.cancelScheduledValues(now);
+      volume.gain.setTargetAtTime(.001,now,.008);
+      oscillator.stop(now + .04);
+    }catch(error){ /* The oscillator may already have ended. */ }
+  });
+  activeMusicNodes.clear();
+}
+
+function musicInterval(theme){ return Math.round(60000 / theme.bpm / 2); }
+
+function playMusicStep(){
+  if(!state.settings.music) return;
+  const theme = MUSIC_THEMES[musicScene] || MUSIC_THEMES.menu;
+  const step = musicStep % theme.lead.length;
+  const beatSeconds = musicInterval(theme) / 1000;
+  const semitones = MUSIC_VARIANT_STEPS[musicVariant % MUSIC_VARIANT_STEPS.length] || 0;
+  const transpose = frequency => frequency * Math.pow(2,semitones/12);
+  const lead = theme.lead[step];
+  if(lead) musicTone(transpose(lead),Math.min(.22,beatSeconds*.82),theme.wave,theme.leadGain || .02);
+  if(step % 2 === 0){
+    const bass = theme.bass[(step/2) % theme.bass.length];
+    if(bass) musicTone(transpose(bass),Math.min(.3,beatSeconds*1.45),"triangle",theme.bassGain || .01);
+  }
+  if(theme.drums && step % 4 === 0) musicTone(58,Math.min(.075,beatSeconds*.3),"sine",.008*theme.drums);
+  if(theme.drums > .3 && step % 2 === 1) musicTone(1450,Math.min(.025,beatSeconds*.12),"square",.0022*theme.drums);
+  if(theme.drums > .65 && step % 8 === 6) musicTone(118,Math.min(.055,beatSeconds*.22),"sawtooth",.004*theme.drums);
+  musicStep++;
+}
+
+function startMusic({unlock=false}={}){
+  if(unlock) musicUnlocked = true;
+  if(!musicUnlocked || !state.settings.music || musicTimer) return;
   const context = ensureAudio();
   if(!context) return;
   if(context.state === "suspended") context.resume();
-  let step = 0;
-  const sequence = [220,277,330,440,330,277,247,330];
-  musicTimer = setInterval(() => {
-    if(!state.settings.music) return;
-    tone(sequence[step++ % sequence.length],.18,"triangle",.022,0,true);
-  },260);
+  playMusicStep();
+  musicTimer = setInterval(playMusicStep,musicInterval(MUSIC_THEMES[musicScene] || MUSIC_THEMES.menu));
 }
-function stopMusic(){ clearInterval(musicTimer); musicTimer = null; }
+
+function stopMusic({reset=true}={}){
+  clearInterval(musicTimer);
+  musicTimer = null;
+  stopActiveMusicNodes();
+  if(reset) musicStep = 0;
+}
+
+function refreshMusicButton(){
+  const button = $("#musicBtn");
+  if(!button) return;
+  const status = state.settings.music ? "เปิดอยู่" : "ปิดอยู่";
+  button.title = `เพลง: ${musicSceneLabel} • ${status}`;
+  button.setAttribute("aria-label",`${state.settings.music ? "ปิด" : "เปิด"}เพลงประกอบ ขณะนี้เป็นเพลง${musicSceneLabel}`);
+}
+
+function setMusicScene(scene,label="",variant=0){
+  const nextScene = MUSIC_THEMES[scene] ? scene : "menu";
+  const nextVariant = Math.abs(Number(variant) || 0) % MUSIC_VARIANT_STEPS.length;
+  const changed = nextScene !== musicScene || nextVariant !== musicVariant;
+  const wasPlaying = Boolean(musicTimer);
+  musicScene = nextScene;
+  musicVariant = nextVariant;
+  musicSceneLabel = label || MUSIC_THEMES[nextScene].label;
+  document.body.dataset.musicScene = musicScene;
+  document.body.dataset.musicLabel = musicSceneLabel;
+  document.body.dataset.musicBpm = String(MUSIC_THEMES[musicScene].bpm);
+  refreshMusicButton();
+  if(changed && wasPlaying){
+    stopMusic();
+    startMusic();
+  }
+}
+
+function unlockMusic(){ startMusic({unlock:true}); }
+
 function toggleMusic(){
   state = loadState();
   state.settings.music = !state.settings.music;
-  state.settings.music ? startMusic() : stopMusic();
+  state.settings.music ? startMusic({unlock:true}) : stopMusic();
   saveState();
-  showToast(state.settings.music ? "เปิดเพลงแล้ว" : "ปิดเพลงแล้ว");
+  showToast(state.settings.music ? `เปิดเพลง ${musicSceneLabel} แล้ว` : "ปิดเพลงแล้ว");
 }
 function toggleSound(){
   state = loadState();
@@ -339,6 +447,8 @@ function go(name,options={}){
   examTimer = null;
   if(name !== "practice") battle = null;
   if(name !== "exam") exam = null;
+  const routeMusic = {home:"menu",world:"map",practice:"training",exam:"exam",review:"training",codex:"codex",profile:"menu"};
+  if(name !== "adventure") setMusicScene(routeMusic[name] || "menu");
   const routes = {
     adventure:renderAdventure,
     home:renderHome,
@@ -361,7 +471,7 @@ function renderAdventure(){
         <div>
           <div class="eyebrow">ADVENTURE MODE • PIXEL WORLD</div>
           <h1>โลกครูเควสต์</h1>
-          <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน เข้าใกล้คนหรือประตูแล้วกด E, SPACE หรือปุ่ม ACTION</p>
+          <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน • คีย์บอร์ดไทยใช้ ไฟหก • โต้ตอบด้วย E/ปุ่ม ำ, SPACE หรือ ACTION โดยไม่ต้องสลับภาษา</p>
         </div>
         <div class="adventure-intro-actions">
           <button class="btn small mint" data-adventure-map>▤ แผนที่ 20 ด่าน</button>
@@ -402,9 +512,9 @@ function renderAdventure(){
         </div>
       </div>
       <div class="adventure-help" aria-label="วิธีเล่น">
-        <div><kbd>WASD</kbd><span><strong>เดินสำรวจ</strong>กดค้างและเดินเฉียงได้</span></div>
-        <div><kbd>E</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
-        <div><kbd>M</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
+        <div><kbd>WASD</kbd><span><strong>เดินสำรวจ</strong>ภาษาไทยใช้ปุ่ม ไ ฟ ห ก ได้ทันที</span></div>
+        <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
+        <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
         <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
       </div>
     </section>`;
@@ -421,6 +531,7 @@ function renderAdventure(){
     modules:D.modules,
     getStats:moduleStats,
     getBossCount:id => D.questions.filter(question => question.module === id && question.difficulty !== "ง่าย").length,
+    onMusicScene:(scene,label) => setMusicScene(scene,label),
     onStartModule:(id,mode) => {
       const total = D.questions.filter(question => question.module === id).length;
       const bossTotal = D.questions.filter(question => question.module === id && question.difficulty !== "ง่าย").length;
@@ -552,6 +663,9 @@ function startBattle(config){
     skills:{fifty:1,heal:1,shield:1,hint:1},boss:Boolean(config.boss),correct:0,
     returnView:config.returnView || ""
   };
+  const moduleIndex = config.module ? D.modules.findIndex(item => item.id === config.module) : 0;
+  const battleLabel = config.module ? moduleById(config.module)?.title : config.boss ? "ศึกบอสใหญ่" : "สนามต่อสู้";
+  setMusicScene(config.boss ? "boss" : "battle",battleLabel || "การต่อสู้",Math.max(0,moduleIndex));
   $$('.nav-btn').forEach(button => button.classList.toggle("active",button.dataset.view === "practice"));
   renderBattle();
   window.scrollTo({top:0,behavior:"smooth"});
@@ -708,6 +822,7 @@ function finishBattle(defeat=false){
   const total = result ? result.pool.length : 0;
   if(!defeat) sfx.win();
   const returnToAdventure = result?.returnView === "adventure";
+  setMusicScene(defeat ? "retreat" : "victory");
   view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box ${defeat ? "retreat" : "mission-victory"}"><div class="result-battle-stage" data-result-action="${defeat ? "retreat" : "victory"}"><div class="victory-burst" aria-hidden="true"></div><div class="fighter result-fighter ${defeat ? "retreating" : "celebrating"}">${fighterArt()}</div><div class="victory-banner">${defeat ? "TRY AGAIN" : "VICTORY!"}</div></div><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p></div><div class="hero-actions">${returnToAdventure ? '<button class="btn" id="returnAdventure">◈ กลับสู่โลกผจญภัย</button>' : '<button class="btn" id="againBattle">ฝึกอีกชุด</button>'}<button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   battle = null;
   bindCommon();
@@ -745,6 +860,7 @@ function beginExam(count,minutes,moduleId,boss){
   if(count > pool.length) showToast(`ขอบเขตนี้มี ${pool.length} ข้อ ระบบปรับจำนวนให้อัตโนมัติ`);
   pool = shuffle(pool).slice(0,Math.min(count,pool.length));
   exam = {pool,answers:Array(pool.length).fill(null),index:0,end:Date.now()+minutes*60000,minutes};
+  setMusicScene(boss ? "boss" : "exam",boss ? "ศึกบอสสนามสอบ" : "สนามสอบ");
   renderExam();
   examTimer = setInterval(updateExamTimer,500);
   updateExamTimer();
@@ -818,7 +934,9 @@ function finishExam(){
   saveState();
   const result = exam;
   exam = null;
-  sfx.win();
+  setMusicScene(percent >= 60 ? "victory" : "retreat",percent >= 60 ? "ผลสอบแห่งชัยชนะ" : "ผลสอบ: กลับไปฝึกใหม่");
+  if(percent >= 60) sfx.win();
+  else sfx.wrong();
   view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box"><div class="eyebrow">EXAM RESULT</div><b>${percent}%</b><h2>${percent >= 80 ? "ผ่านด่านอย่างสง่างาม" : percent >= 60 ? "ใกล้ถึงเป้าหมาย" : "กลับไปเก็บเลเวลอีกนิด"}</h2><p>${score} คะแนน จาก ${result.pool.length} ข้อ</p></div><div class="section-head"><div><h2>ผลรายดินแดน</h2><p>ใช้เลือกด่านที่จะฝึกต่อ</p></div></div><div class="breakdown">${Object.entries(breakdown).map(([id,item]) => { const module=moduleById(id); return `<div class="break-card pixel-box"><strong class="inline-module-label">${moduleIconMarkup(module,"tiny")} ${esc(module.title)}</strong><b>${item.correct}/${item.total}</b><small>${Math.round(item.correct/item.total*100)}%</small></div>`; }).join("")}</div><div class="hero-actions"><button class="btn" data-go="exam">สอบใหม่</button><button class="btn mint" data-go="review">ทบทวนข้อผิด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   bindCommon();
 }
@@ -852,6 +970,7 @@ function renderReview(limit=60){
 
 function startCustomBattle(pool,hp){
   battle = {pool,index:0,playerHp:100,enemyHp:hp,enemyMax:hp,combo:0,selected:null,locked:false,hidden:[],shield:false,skills:{fifty:1,heal:1,shield:1,hint:1},boss:false,correct:0};
+  setMusicScene("battle","ศึกทบทวน",1);
   renderBattle();
 }
 
@@ -874,7 +993,7 @@ function renderProfile(){
 
 function openSettings(){
   state = loadState();
-  openModal(`<h2 id="modalTitle">⚙ ตั้งค่าเกม</h2><div class="setting-row"><span id="musicSettingLabel">เพลงประกอบ</span><button class="btn small ${state.settings.music ? "mint" : "dark"}" id="setMusic" aria-label="เพลงประกอบ: ${state.settings.music ? "เปิดอยู่ กดเพื่อปิด" : "ปิดอยู่ กดเพื่อเปิด"}">${state.settings.music ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><span id="soundSettingLabel">เสียงเอฟเฟกต์</span><button class="btn small ${state.settings.sound ? "mint" : "dark"}" id="setSound" aria-label="เสียงเอฟเฟกต์: ${state.settings.sound ? "เปิดอยู่ กดเพื่อปิด" : "ปิดอยู่ กดเพื่อเปิด"}">${state.settings.sound ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><label for="volume">ระดับเสียง</label><input id="volume" type="range" min="0" max="1" step="0.05" value="${state.settings.volume}"></div><div class="setting-row"><label for="reduce">ลดการเคลื่อนไหว</label><input id="reduce" type="checkbox" ${state.settings.reduced ? "checked" : ""}></div><div class="setting-row"><span>เวอร์ชันคัมภีร์</span><b>${D.version} • ${D.questions.length} ข้อ</b></div><p><button class="btn small red" id="resetData">เริ่มความคืบหน้าใหม่</button></p>`);
+  openModal(`<h2 id="modalTitle">⚙ ตั้งค่าเกม</h2><div class="setting-row"><span id="musicSettingLabel">เพลงประกอบ<br><small>ธีมปัจจุบัน: ${esc(musicSceneLabel)}</small></span><button class="btn small ${state.settings.music ? "mint" : "dark"}" id="setMusic" aria-label="เพลงประกอบ: ${state.settings.music ? "เปิดอยู่ กดเพื่อปิด" : "ปิดอยู่ กดเพื่อเปิด"}">${state.settings.music ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><span id="soundSettingLabel">เสียงเอฟเฟกต์</span><button class="btn small ${state.settings.sound ? "mint" : "dark"}" id="setSound" aria-label="เสียงเอฟเฟกต์: ${state.settings.sound ? "เปิดอยู่ กดเพื่อปิด" : "ปิดอยู่ กดเพื่อเปิด"}">${state.settings.sound ? "เปิด" : "ปิด"}</button></div><div class="setting-row"><label for="volume">ระดับเสียง</label><input id="volume" type="range" min="0" max="1" step="0.05" value="${state.settings.volume}"></div><div class="setting-row"><label for="reduce">ลดการเคลื่อนไหว</label><input id="reduce" type="checkbox" ${state.settings.reduced ? "checked" : ""}></div><div class="setting-row"><span>เวอร์ชันคัมภีร์</span><b>${D.version} • ${D.questions.length} ข้อ</b></div><p><button class="btn small red" id="resetData">เริ่มความคืบหน้าใหม่</button></p>`);
   $("#setMusic").onclick = () => { toggleMusic(); openSettings(); };
   $("#setSound").onclick = () => { toggleSound(); openSettings(); };
   $("#volume").oninput = event => { state.settings.volume = Number(event.target.value); saveState(); };
@@ -928,7 +1047,8 @@ function bindGlobal(){
   });
   window.addEventListener("storage",event => { if(event.key === STORAGE) refreshState(); });
   window.addEventListener("teacherquest:local-state",refreshState);
-  document.addEventListener("pointerdown",() => { if(state.settings.music) startMusic(); },{once:true});
+  document.addEventListener("pointerdown",unlockMusic,{once:true});
+  document.addEventListener("keydown",unlockMusic,{once:true});
 }
 
 function init(){
@@ -944,6 +1064,11 @@ function init(){
   }
   go("adventure");
 }
+
+window.teacherQuestSetMusicScene = setMusicScene;
+window.teacherQuestMusicDebug = {
+  getState:() => ({scene:musicScene,label:musicSceneLabel,bpm:MUSIC_THEMES[musicScene].bpm,variant:musicVariant,playing:Boolean(musicTimer),themeCount:Object.keys(MUSIC_THEMES).length})
+};
 
 init();
 })();
