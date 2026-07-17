@@ -361,7 +361,7 @@ function renderAdventure(){
         <div>
           <div class="eyebrow">ADVENTURE MODE • PIXEL WORLD</div>
           <h1>โลกครูเควสต์</h1>
-          <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน เข้าใกล้คนหรือประตูแล้วกด E, SPACE หรือปุ่ม ACTION</p>
+          <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน • คีย์บอร์ดไทยใช้ ไฟหก • โต้ตอบด้วย E/ปุ่ม ำ, SPACE หรือ ACTION โดยไม่ต้องสลับภาษา</p>
         </div>
         <div class="adventure-intro-actions">
           <button class="btn small mint" data-adventure-map>▤ แผนที่ 20 ด่าน</button>
@@ -402,9 +402,9 @@ function renderAdventure(){
         </div>
       </div>
       <div class="adventure-help" aria-label="วิธีเล่น">
-        <div><kbd>WASD</kbd><span><strong>เดินสำรวจ</strong>กดค้างและเดินเฉียงได้</span></div>
-        <div><kbd>E</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
-        <div><kbd>M</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
+        <div><kbd>WASD</kbd><span><strong>เดินสำรวจ</strong>ภาษาไทยใช้ปุ่ม ไ ฟ ห ก ได้ทันที</span></div>
+        <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
+        <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
         <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
       </div>
     </section>`;

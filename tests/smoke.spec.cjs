@@ -268,6 +268,13 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(initial.district).toBe('ลานสถาบันครูเควสต์');
 
+  await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ก',code:'KeyD',bubbles:true})));
+  await page.waitForTimeout(250);
+  await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keyup',{key:'ก',code:'KeyD',bubbles:true})));
+  await page.waitForTimeout(50);
+  const thaiLayoutMoved=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(thaiLayoutMoved.x-initial.x).toBeGreaterThan(25);
+
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(350);
   await page.keyboard.up('ArrowRight');
@@ -284,14 +291,14 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   const blockedByLake=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(blockedByLake.x).toBeLessThan(826);
 
-  await page.locator('[data-adventure-map]').click();
+  await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ท',code:'KeyM',bubbles:true})));
   await expect(page.locator('#adventureMapPanel')).toBeVisible();
   await expect(page.locator('.map-district')).toHaveCount(4);
   await expect(page.locator('.map-zone')).toHaveCount(20);
   await page.locator('[data-map-close]').click();
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('research'))).toBe(true);
-  await page.keyboard.press('e');
+  await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ำ',code:'KeyE',bubbles:true})));
   await expect(page.locator('#adventureDialogue')).toBeVisible();
   await expect(page.locator('#adventureDialogueTitle')).toHaveText('วิจัยในชั้นเรียน');
   await expect(page.locator('[data-adventure-mode="complete"]')).toContainText('พิชิตครบ 20 ข้อ');
