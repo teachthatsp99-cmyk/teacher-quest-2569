@@ -96,9 +96,22 @@ test('exam count follows the selected module availability',async({page})=>{
   await expect(page.locator('#examCount option')).toHaveCount(2);
   await expect(page.locator('#examCount')).toHaveValue('20');
   await page.locator('#startExam').click();
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','exam');
   await expect(page.getByRole('heading',{name:'ข้อ 1 จาก 20'})).toBeVisible();
   await page.locator('[data-exam-answer="1"]').click();
   await expect(page.locator('.question-grid button.answered')).toHaveCount(1);
+});
+
+test('soundtrack raises the tempo for a boss encounter and exposes the current theme',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  await page.locator('[data-view="exam"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','exam');
+  await page.locator('#bossExam').click();
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','boss');
+  await expect(page.locator('body')).toHaveAttribute('data-music-bpm','178');
+  const music=await page.evaluate(()=>window.teacherQuestMusicDebug.getState());
+  expect(music.label).toBe('ศึกบอสสนามสอบ');
+  expect(music.bpm).toBeGreaterThan(150);
 });
 
 test('all 20 zones show complete-bank and optional short modes with unique pixel icons',async({page})=>{
@@ -265,6 +278,10 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   await page.goto(url,{waitUntil:'networkidle'});
   await expect(page.locator('#adventureCanvas')).toBeVisible();
   await expect(page.locator('.nav-btn[data-view="adventure"]')).toHaveClass(/active/);
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','plaza');
+  const music=await page.evaluate(()=>window.teacherQuestMusicDebug.getState());
+  expect(music.themeCount).toBeGreaterThanOrEqual(12);
+  expect(music.bpm).toBe(110);
   const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(initial.district).toBe('ลานสถาบันครูเควสต์');
 
@@ -298,6 +315,7 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   await page.locator('[data-map-close]').click();
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('research'))).toBe(true);
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','district0');
   await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ำ',code:'KeyE',bubbles:true})));
   await expect(page.locator('#adventureDialogue')).toBeVisible();
   await expect(page.locator('#adventureDialogueTitle')).toHaveText('วิจัยในชั้นเรียน');
@@ -305,6 +323,8 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   await expect(page.locator('[data-adventure-mode="quick"]')).toContainText('ฝึกด่วน 10 ข้อ');
   await expect(page.locator('[data-adventure-mode="boss"]')).toContainText('ท้าบอส 15 ข้อ');
   await page.locator('[data-adventure-mode="complete"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','battle');
+  await expect(page.locator('#musicBtn')).toHaveAttribute('title',/วิจัยในชั้นเรียน/);
   await expect(page.locator('.battle-center strong')).toHaveText('1 / 20');
   await expect(page.locator('.question-meta .chip.gold')).toContainText('วิจัยในชั้นเรียน');
   expect(pageErrors).toEqual([]);

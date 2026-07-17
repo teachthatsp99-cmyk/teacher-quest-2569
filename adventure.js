@@ -142,6 +142,11 @@ function locationNameAt(x,y){
   return districtAt(x,y).name;
 }
 
+function musicSceneAt(x,y){
+  if(x>=816&&x<=1232&&y>=520&&y<=976) return "plaza";
+  return `district${DISTRICTS.indexOf(districtAt(x,y))}`;
+}
+
 function drawPixelText(ctx,text,x,y,{size=12,color="#fff",align="left",stroke="#091020"}={}){
   ctx.save();
   ctx.font = `900 ${size}px "Noto Sans Thai", Tahoma, sans-serif`;
@@ -340,6 +345,7 @@ function createTeacherQuestAdventure(options={}){
     camera.y = clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
     savePosition(player);
     updateNearest();
+    updateHud();
   }
 
   function onKeyDown(event){
@@ -555,6 +561,7 @@ function createTeacherQuestAdventure(options={}){
     if(locationName!==previousDistrict){
       previousDistrict=locationName;
       if(districtLabel) districtLabel.textContent=locationName;
+      options.onMusicScene?.(musicSceneAt(player.x,player.y),locationName);
     }
     const totals=portals.reduce((result,portal)=>{const stats=statsFor(portal);result.done+=Math.min(stats.done,stats.total);result.total+=stats.total;return result;},{done:0,total:0});
     const pct=totals.total?Math.round(totals.done/totals.total*100):0;
@@ -583,6 +590,7 @@ function createTeacherQuestAdventure(options={}){
     camera.x+=(targetX-camera.x)*ease;
     camera.y+=(targetY-camera.y)*ease;
     updateNearest();
+    if(locationNameAt(player.x,player.y)!==previousDistrict) updateHud();
   }
 
   function frame(time){
@@ -639,8 +647,8 @@ function createTeacherQuestAdventure(options={}){
 
   window.teacherQuestAdventureDebug={
     getState:()=>({x:player.x,y:player.y,direction:player.direction,moving:player.moving,district:locationNameAt(player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null}),
-    teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();return true;},
-    teleportToNpc:id=>{const npc=npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";updateNearest();return true;},
+    teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();updateHud();return true;},
+    teleportToNpc:id=>{const npc=npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";updateNearest();updateHud();return true;},
     interact,
     resetPosition,
     destroy
