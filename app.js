@@ -104,6 +104,11 @@ let musicUnlocked = false;
 const activeMusicNodes = new Set();
 let modalPreviousFocus = null;
 let adventureInstance = null;
+let currentView = "";
+let onlineState = window.TeacherQuestOnline?.getState?.() || {
+  configured:false,phase:"setup",connected:false,user:null,
+  profile:{nickname:"ครูนักผจญภัย",avatar:{}},onlineCount:0,totalPlayers:0,zonePlayers:[],error:""
+};
 
 function mergeDeep(base, incoming){
   const output = Array.isArray(base) ? base.slice() : {...base};
@@ -241,6 +246,34 @@ function updateHud(){
   refreshMusicButton();
   $("#soundBtn").classList.toggle("off",!state.settings.sound);
   document.body.classList.toggle("no-motion",state.settings.reduced);
+  updateOnlineHud();
+}
+
+function updateOnlineHud(){
+  const button=$("#onlineBtn");
+  if(!button) return;
+  const phase=onlineState.phase || "setup";
+  const profile=onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}};
+  const label=phase==="online"
+    ? `${onlineState.onlineCount || 1} ออนไลน์`
+    : phase==="connecting" ? "กำลังเชื่อม"
+      : phase==="error" ? "ออนไลน์ขัดข้อง" : "ตั้งค่าออนไลน์";
+  $("#onlineCount").textContent=label;
+  $("#playerName").textContent=profile.nickname || "ครูนักผจญภัย";
+  $("#avatarArt").innerHTML=window.TeacherQuestOnline?.avatarMarkup?.(profile) || '<div class="pixel-head"></div>';
+  button.classList.toggle("online",phase==="online");
+  button.classList.toggle("error",phase==="error");
+  button.classList.toggle("setup",phase==="setup");
+  button.title=phase==="online"
+    ? `${label} • นักผจญภัยทั้งหมด ${onlineState.totalPlayers || 1} คน`
+    : onlineState.error || (phase==="setup" ? "แต่งตัวได้ทันที • ต้องผูก Firebase เพื่อพบผู้เล่นอื่น" : "กำลังเชื่อม Firebase");
+  const adventureStatus=$("#adventureOnlineStatus");
+  if(adventureStatus){
+    adventureStatus.classList.toggle("online",phase==="online");
+    adventureStatus.querySelector("span:last-child").textContent=phase==="online"
+      ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน`
+      : phase==="setup" ? "โหมดออฟไลน์" : phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อม";
+  }
 }
 
 function showToast(message){
@@ -424,8 +457,11 @@ function toggleSound(){
   showToast(state.settings.sound ? "เปิดเสียงเอฟเฟกต์แล้ว" : "ปิดเสียงเอฟเฟกต์แล้ว");
 }
 
-function fighterArt(){
-  return '<div class="pixel-fighter"><i class="head"></i><i class="body"></i><i class="weapon"></i></div>';
+function fighterArt(isPlayer=true){
+  if(!isPlayer) return '<div class="pixel-fighter"><i class="head"></i><i class="body"></i><i class="weapon"></i></div>';
+  const avatar=window.TeacherQuestOnline?.normalizeProfile?.(onlineState.profile)?.avatar || onlineState.profile?.avatar || {};
+  const style=`--avatar-skin:${esc(avatar.skin || "#e8b989")};--avatar-hair:${esc(avatar.hair || "#24182f")};--avatar-shirt:${esc(avatar.shirt || "#3d68af")};--avatar-accent:${esc(avatar.accent || "#ffd45c")}`;
+  return `<div class="pixel-fighter custom-fighter" data-hair-style="${esc(avatar.style || "short")}" style="${style}"><i class="fighter-hair"></i><i class="head"></i><i class="body"></i><i class="weapon"></i></div>`;
 }
 function heroArt(){
   return `<div class="hero-art"><div class="portal"></div><div class="teacher-sprite"><i class="hair"></i><i class="face"></i><i class="body"></i><i class="book"></i><i class="legs"></i></div><div class="float-badge one">${D.modules.length} ดินแดน</div><div class="float-badge two">${D.questions.length} ภารกิจ</div></div>`;
@@ -437,6 +473,7 @@ function bindCommon(){
 }
 
 function go(name,options={}){
+  if(currentView==="adventure" && name!=="adventure") void window.TeacherQuestOnline?.leaveWorld?.();
   if(adventureInstance){
     adventureInstance.destroy();
     adventureInstance = null;
@@ -447,6 +484,7 @@ function go(name,options={}){
   examTimer = null;
   if(name !== "practice") battle = null;
   if(name !== "exam") exam = null;
+  currentView=name;
   const routeMusic = {home:"menu",world:"map",practice:"training",exam:"exam",review:"training",codex:"codex",profile:"menu"};
   if(name !== "adventure") setMusicScene(routeMusic[name] || "menu");
   const routes = {
@@ -494,6 +532,7 @@ function renderAdventure(){
           </div>
         </div>
         <div class="adventure-prompt" id="adventurePrompt" role="status" aria-live="polite"></div>
+        <div class="adventure-online-badge ${onlineState.phase==="online" ? "online" : ""}" id="adventureOnlineStatus"><span class="online-dot" aria-hidden="true"></span><span>${onlineState.phase==="online" ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน` : "โหมดออฟไลน์"}</span></div>
         <section class="adventure-dialogue" id="adventureDialogue" role="dialog" aria-modal="false" aria-labelledby="adventureDialogueTitle" aria-hidden="true" hidden>
           <div class="adventure-dialogue-head"><div><div class="eyebrow" id="adventureDialogueEyebrow"></div><h2 id="adventureDialogueTitle"></h2></div></div>
           <p id="adventureDialogueText"></p>
@@ -531,18 +570,24 @@ function renderAdventure(){
     modules:D.modules,
     getStats:moduleStats,
     getBossCount:id => D.questions.filter(question => question.module === id && question.difficulty !== "ง่าย").length,
+    getPlayerProfile:() => onlineState.profile,
+    onPlayerState:player => window.TeacherQuestOnline?.updatePresence?.(player),
     onMusicScene:(scene,label) => setMusicScene(scene,label),
     onStartModule:(id,mode) => {
       const total = D.questions.filter(question => question.module === id).length;
       const bossTotal = D.questions.filter(question => question.module === id && question.difficulty !== "ง่าย").length;
       adventureInstance?.destroy();
       adventureInstance = null;
+      void window.TeacherQuestOnline?.leaveWorld?.();
       if(mode === "complete") startBattle({mode:"module",module:id,count:total,complete:true,returnView:"adventure"});
       else if(mode === "boss") startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.boss,bossTotal),boss:true,returnView:"adventure"});
       else startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.zone,total),returnView:"adventure"});
     },
     onNavigate:name => go(name)
   });
+  adventureInstance.setPlayerProfile?.(onlineState.profile);
+  adventureInstance.setRemotePlayers?.(onlineState.zonePlayers || []);
+  updateOnlineHud();
   $("#adventureCanvas")?.focus({preventScroll:true});
 }
 
@@ -675,7 +720,7 @@ function renderBattle(){
   if(!battle || battle.index >= battle.pool.length){ finishBattle(); return; }
   const question = battle.pool[battle.index];
   const item = moduleById(question.module);
-  view.innerHTML = `<section class="battle-shell pixel-box"><div class="battle-hud"><div><div class="fighter-name">◆ ครูนักผจญภัย</div><div class="hpbar"><i style="width:${battle.playerHp}%"></i></div></div><div class="battle-center"><strong>${battle.index+1} / ${battle.pool.length}</strong><small>COMBO ×${battle.combo}</small></div><div><div class="fighter-name right">${esc(battle.boss ? item.boss : "มอนสเตอร์ความสับสน")} ◆</div><div class="hpbar enemy-hp"><i style="width:${battle.enemyHp / battle.enemyMax * 100}%"></i></div></div></div><div class="arena" id="battleArena" data-battle-action="idle"><div class="battle-action-label" id="battleAction" role="status" aria-live="polite"></div><div class="battle-slash" aria-hidden="true"></div><div class="battle-shield-fx" aria-hidden="true"></div><div class="fighter player" id="playerFighter">${fighterArt()}</div><div class="fighter enemy" id="enemyFighter">${fighterArt()}</div></div><div class="question-panel"><div class="question-meta"><span class="chip gold">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span>${question.verified ? `<span class="chip mint">ตรวจ ${esc(question.verifiedAt)}</span>` : `<span class="chip">อ้างอิงต้นทาง</span>`}</div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${battle.selected === index ? "selected" : ""}" data-answer="${index}" ${battle.locked || battle.hidden.includes(index) ? "disabled" : ""} style="${battle.hidden.includes(index) ? "visibility:hidden" : ""}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><div class="skills"><button class="skill" data-skill="fifty" ${!battle.skills.fifty || battle.locked ? "disabled" : ""}>✂ 50:50</button><button class="skill" data-skill="shield" ${!battle.skills.shield || battle.locked ? "disabled" : ""}>◈ โล่</button><button class="skill" data-skill="heal" ${!battle.skills.heal || battle.locked ? "disabled" : ""}>+ ฟื้นพลัง</button><button class="skill" data-skill="hint" ${!battle.skills.hint || battle.locked ? "disabled" : ""}>◉ คำใบ้</button></div><button class="btn attack-button" id="attackBtn" ${battle.selected === null || battle.locked ? "disabled" : ""}>⚔ โจมตี!</button></div><div id="feedbackSlot"></div></div></section>`;
+  view.innerHTML = `<section class="battle-shell pixel-box"><div class="battle-hud"><div><div class="fighter-name">◆ ${esc(onlineState.profile?.nickname || "ครูนักผจญภัย")}</div><div class="hpbar"><i style="width:${battle.playerHp}%"></i></div></div><div class="battle-center"><strong>${battle.index+1} / ${battle.pool.length}</strong><small>COMBO ×${battle.combo}</small></div><div><div class="fighter-name right">${esc(battle.boss ? item.boss : "มอนสเตอร์ความสับสน")} ◆</div><div class="hpbar enemy-hp"><i style="width:${battle.enemyHp / battle.enemyMax * 100}%"></i></div></div></div><div class="arena" id="battleArena" data-battle-action="idle"><div class="battle-action-label" id="battleAction" role="status" aria-live="polite"></div><div class="battle-slash" aria-hidden="true"></div><div class="battle-shield-fx" aria-hidden="true"></div><div class="fighter player" id="playerFighter">${fighterArt()}</div><div class="fighter enemy" id="enemyFighter">${fighterArt(false)}</div></div><div class="question-panel"><div class="question-meta"><span class="chip gold">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><span class="chip">${esc(question.difficulty)}</span><span class="chip">${esc(questionType(question))}</span>${question.verified ? `<span class="chip mint">ตรวจ ${esc(question.verifiedAt)}</span>` : `<span class="chip">อ้างอิงต้นทาง</span>`}</div><div class="question-text">${esc(question.question)}</div><div class="options">${question.options.map((option,index) => `<button class="option ${battle.selected === index ? "selected" : ""}" data-answer="${index}" ${battle.locked || battle.hidden.includes(index) ? "disabled" : ""} style="${battle.hidden.includes(index) ? "visibility:hidden" : ""}"><span class="letter">${letters[index]}</span>${esc(option)}</button>`).join("")}</div><div class="battle-actions"><div class="skills"><button class="skill" data-skill="fifty" ${!battle.skills.fifty || battle.locked ? "disabled" : ""}>✂ 50:50</button><button class="skill" data-skill="shield" ${!battle.skills.shield || battle.locked ? "disabled" : ""}>◈ โล่</button><button class="skill" data-skill="heal" ${!battle.skills.heal || battle.locked ? "disabled" : ""}>+ ฟื้นพลัง</button><button class="skill" data-skill="hint" ${!battle.skills.hint || battle.locked ? "disabled" : ""}>◉ คำใบ้</button></div><button class="btn attack-button" id="attackBtn" ${battle.selected === null || battle.locked ? "disabled" : ""}>⚔ โจมตี!</button></div><div id="feedbackSlot"></div></div></section>`;
   $$('.option').forEach(button => button.onclick = () => {
     if(battle.locked) return;
     battle.selected = Number(button.dataset.answer);
@@ -980,6 +1025,9 @@ function renderCodex(){
 
 function renderProfile(){
   const stats = totalStats();
+  const onlineProfile=onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}};
+  const onlineStatus=onlineState.phase==="online" ? "เชื่อมต่อแล้ว" : onlineState.phase==="setup" ? "พร้อมแต่งตัว • รอผูก Firebase" : onlineState.phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อมต่อ";
+  const onlineCard=`<section class="online-profile-card pixel-box">${window.TeacherQuestOnline?.avatarMarkup?.(onlineProfile) || ""}<div><h3>${esc(onlineProfile.nickname)}</h3><p>${esc(onlineStatus)} • <b id="profileOnlineNow">${onlineState.onlineCount || 0}</b> ออนไลน์ • นักผจญภัยทั้งหมด <b id="profilePlayerTotal">${onlineState.totalPlayers || 0}</b> คน</p></div><button class="btn small mint" id="profileAvatarEdit">แต่งตัว / บัญชี</button></section>`;
   const achievements = [
     {icon:"⚔",name:"ก้าวแรก",desc:"ตอบข้อสอบครั้งแรก",ok:stats.attempted >= 1},
     {icon:"✦",name:"คอมโบ 10",desc:"ตอบถูกต่อเนื่อง 10 ข้อ",ok:state.maxCombo >= 10},
@@ -988,7 +1036,76 @@ function renderProfile(){
     {icon:"◆",name:"คลังสมบัติ",desc:"สะสม 300 เหรียญ",ok:state.coins >= 300},
     {icon:"★",name:"ปรมาจารย์",desc:"ขึ้นถึงเลเวล 20",ok:level() >= 20}
   ];
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สมุดนักผจญภัย</h2><small>เลเวล ${level()} • ${rankName()}</small></div></div><div class="profile-grid"><div><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นรวม</span></div><div class="stat-card pixel-box"><b>${stats.attempts}</b><span>จำนวนครั้งที่ตอบ</span></div><div class="stat-card pixel-box"><b>${state.examHistory.length}</b><span>รอบสนามสอบ</span></div><div class="stat-card pixel-box"><b>${state.bookmarks.length}</b><span>ข้อที่เก็บไว้</span></div></div><div class="section-head"><div><h2>พลังรายดินแดน</h2></div></div>${D.modules.map(item => { const stats = moduleStats(item.id); return `<div class="chart-row"><span class="inline-module-label">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><div class="bar"><i style="width:${stats.accuracy}%"></i></div><b>${stats.accuracy}%</b></div>`; }).join("")}</div><div><div class="section-head"><div><h2>เหรียญตรา</h2></div></div><div class="achievement-grid">${achievements.map(item => `<article class="achievement pixel-box ${item.ok ? "unlocked" : ""}"><span class="medal">${item.icon}</span><span><h3>${esc(item.name)}</h3><p>${esc(item.desc)}</p></span></article>`).join("")}</div><div class="section-head"><div><h2>ประวัติสนามสอบ</h2></div></div>${state.examHistory.length ? state.examHistory.slice(0,8).map(item => `<div class="review-card pixel-box"><div><h3>${item.pct}% • ${item.score}/${item.total}</h3><p>${esc(item.date)}</p></div></div>`).join("") : '<div class="empty">ยังไม่มีประวัติสนามสอบ</div>'}</div></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สมุดนักผจญภัย</h2><small>เลเวล ${level()} • ${rankName()}</small></div></div>${onlineCard}<div class="profile-grid"><div><div class="dashboard"><div class="stat-card pixel-box"><b>${stats.accuracy}%</b><span>ความแม่นรวม</span></div><div class="stat-card pixel-box"><b>${stats.attempts}</b><span>จำนวนครั้งที่ตอบ</span></div><div class="stat-card pixel-box"><b>${state.examHistory.length}</b><span>รอบสนามสอบ</span></div><div class="stat-card pixel-box"><b>${state.bookmarks.length}</b><span>ข้อที่เก็บไว้</span></div></div><div class="section-head"><div><h2>พลังรายดินแดน</h2></div></div>${D.modules.map(item => { const stats = moduleStats(item.id); return `<div class="chart-row"><span class="inline-module-label">${moduleIconMarkup(item,"tiny")} ${esc(item.title)}</span><div class="bar"><i style="width:${stats.accuracy}%"></i></div><b>${stats.accuracy}%</b></div>`; }).join("")}</div><div><div class="section-head"><div><h2>เหรียญตรา</h2></div></div><div class="achievement-grid">${achievements.map(item => `<article class="achievement pixel-box ${item.ok ? "unlocked" : ""}"><span class="medal">${item.icon}</span><span><h3>${esc(item.name)}</h3><p>${esc(item.desc)}</p></span></article>`).join("")}</div><div class="section-head"><div><h2>ประวัติสนามสอบ</h2></div></div>${state.examHistory.length ? state.examHistory.slice(0,8).map(item => `<div class="review-card pixel-box"><div><h3>${item.pct}% • ${item.score}/${item.total}</h3><p>${esc(item.date)}</p></div></div>`).join("") : '<div class="empty">ยังไม่มีประวัติสนามสอบ</div>'}</div></div></section>`;
+  $("#profileAvatarEdit").onclick=openOnlineDialog;
+}
+
+const AVATAR_GROUP_LABELS=Object.freeze({skin:"สีผิว",hair:"สีผม",shirt:"ชุด",accent:"สีประจำตัว",style:"ทรงผม"});
+const AVATAR_STYLE_LABELS=Object.freeze({short:"สั้น",spike:"ตั้ง",long:"ยาว",cap:"หมวก"});
+
+function avatarOptionsMarkup(profile){
+  const options=window.TeacherQuestOnline?.avatarOptions || {};
+  return Object.entries(options).map(([group,values])=>`<div class="avatar-option-group"><span class="avatar-option-title">${esc(AVATAR_GROUP_LABELS[group] || group)}</span><div class="avatar-swatches">${values.map(value=>{
+    const selected=profile.avatar?.[group]===value;
+    const label=group==="style" ? AVATAR_STYLE_LABELS[value] || value : value;
+    const style=group==="style" ? "" : ` style="--swatch:${esc(value)}"`;
+    return `<button type="button" class="avatar-swatch ${selected ? "selected" : ""}" data-avatar-group="${esc(group)}" data-avatar-value="${esc(value)}"${style} aria-label="${esc(AVATAR_GROUP_LABELS[group])} ${esc(label)}" aria-pressed="${selected}">${group==="style" ? esc(label) : ""}</button>`;
+  }).join("")}</div></div>`).join("");
+}
+
+function openOnlineDialog(){
+  onlineState=window.TeacherQuestOnline?.getState?.() || onlineState;
+  const api=window.TeacherQuestOnline;
+  const draft=clone(onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}});
+  const statusText=onlineState.phase==="online" ? "เชื่อมต่อ Firebase แล้ว" : onlineState.phase==="connecting" ? "กำลังเชื่อม Firebase" : onlineState.phase==="error" ? "เชื่อมต่อไม่สำเร็จ" : "โหมดออฟไลน์ — แต่งตัวได้ แต่ยังไม่เห็นเพื่อน";
+  const setupNotice=!onlineState.configured
+    ? `<div class="online-alert"><strong>เหลือผูก Firebase Project ฟรีหนึ่งครั้ง</strong><br>โค้ดระบบออนไลน์พร้อมแล้ว เมื่อใส่ Web App Config ผู้เล่นจะเข้าแบบ Guest และพบกันในแผนที่อัตโนมัติ</div>`
+    : onlineState.error ? `<div class="online-alert error">${esc(onlineState.error)}</div>` : "";
+  const googleReady=onlineState.configured && onlineState.user && onlineState.user.isAnonymous;
+  const googleConnected=onlineState.user && !onlineState.user.isAnonymous;
+  openModal(`<div class="eyebrow">ONLINE PIXEL ID</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${googleReady ? '<button class="btn small sky" type="button" id="googleConnect">เชื่อมบัญชี Google</button>' : ""}${googleConnected ? '<button class="btn small dark" type="button" id="switchGuest">ออกจาก Google / ใช้ Guest ใหม่</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><p class="online-help">ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม ระบบไม่เผยแพร่อีเมล และส่งตำแหน่งเฉพาะตอนเปิดหน้าโลกผจญภัย</p></form>`);
+  const refreshDraft=()=>{
+    $("#onlineAvatarPreview").innerHTML=api?.avatarMarkup?.(draft,"large") || "";
+    $$("[data-avatar-group]",modalBody).forEach(button=>{
+      const selected=draft.avatar?.[button.dataset.avatarGroup]===button.dataset.avatarValue;
+      button.classList.toggle("selected",selected);
+      button.setAttribute("aria-pressed",String(selected));
+    });
+  };
+  $$("[data-avatar-group]",modalBody).forEach(button=>button.onclick=()=>{
+    draft.avatar={...(draft.avatar||{}),[button.dataset.avatarGroup]:button.dataset.avatarValue};
+    refreshDraft();
+  });
+  $("#onlineProfileForm").onsubmit=async event=>{
+    event.preventDefault();
+    const saveButton=$("#saveOnlineProfile");
+    saveButton.disabled=true;
+    saveButton.textContent="กำลังบันทึก…";
+    try{
+      draft.nickname=$("#onlineNickname").value;
+      onlineState=await api.updateProfile(draft);
+      updateOnlineHud();
+      adventureInstance?.setPlayerProfile?.(onlineState.profile);
+      closeModal();
+      showToast(onlineState.configured ? "บันทึกตัวละครออนไลน์แล้ว" : "บันทึกตัวละครในเครื่องแล้ว");
+    }catch(error){
+      saveButton.disabled=false;
+      saveButton.textContent="บันทึกตัวละคร";
+      showToast(error.message || "บันทึกไม่สำเร็จ");
+    }
+  };
+  $("#googleConnect")?.addEventListener("click",async event=>{
+    event.currentTarget.disabled=true;
+    event.currentTarget.textContent="กำลังเปิด Google…";
+    try{await api.signInGoogle();closeModal();showToast("เชื่อมบัญชี Google แล้ว");}
+    catch(error){event.currentTarget.disabled=false;event.currentTarget.textContent="เชื่อมบัญชี Google";showToast(error.message);}
+  });
+  $("#switchGuest")?.addEventListener("click",async()=>{
+    if(!confirm("ออกจาก Google และเริ่มบัญชี Guest ใหม่บนเครื่องนี้หรือไม่? ความคืบหน้าข้อสอบในเครื่องจะยังอยู่")) return;
+    await api.switchToGuest();
+    closeModal();
+    showToast("กำลังสร้างบัญชี Guest ใหม่");
+  });
 }
 
 function openSettings(){
@@ -1015,6 +1132,8 @@ function bindGlobal(){
   $("#musicBtn").onclick = toggleMusic;
   $("#soundBtn").onclick = toggleSound;
   $("#settingsBtn").onclick = openSettings;
+  $("#onlineBtn").onclick = openOnlineDialog;
+  $("#avatarEditBtn").onclick = openOnlineDialog;
   $("#modalClose").onclick = closeModal;
   modal.addEventListener("click",event => { if(event.target === modal) closeModal(); });
   document.addEventListener("keydown",event => {
@@ -1047,6 +1166,14 @@ function bindGlobal(){
   });
   window.addEventListener("storage",event => { if(event.key === STORAGE) refreshState(); });
   window.addEventListener("teacherquest:local-state",refreshState);
+  window.addEventListener("teacherquest:online",event=>{
+    onlineState=event.detail || onlineState;
+    updateOnlineHud();
+    adventureInstance?.setPlayerProfile?.(onlineState.profile);
+    adventureInstance?.setRemotePlayers?.(onlineState.zonePlayers || []);
+    if($("#profileOnlineNow")) $("#profileOnlineNow").textContent=onlineState.onlineCount || 0;
+    if($("#profilePlayerTotal")) $("#profilePlayerTotal").textContent=onlineState.totalPlayers || 0;
+  });
   document.addEventListener("pointerdown",unlockMusic,{once:true});
   document.addEventListener("keydown",unlockMusic,{once:true});
 }
@@ -1054,7 +1181,6 @@ function bindGlobal(){
 function init(){
   resetDaily();
   const errors = validateData();
-  $("#avatarArt").innerHTML = '<div class="pixel-head"></div>';
   bindGlobal();
   updateHud();
   if(errors.length){

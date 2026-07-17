@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="polish.css">
 <link rel="stylesheet" href="v4.css">
 <link rel="stylesheet" href="adventure.css">
+<link rel="stylesheet" href="online.css">
 </head>
 <body class="scanlines">
 <a class="skip" href="#main">ข้ามไปยังเนื้อหา</a>
@@ -27,6 +28,7 @@
     <div class="top-spacer"></div>
     <div class="hud-chip level-chip" title="เลเวล"><span>LV</span><b id="topLevel">1</b></div>
     <div class="hud-chip coin-chip" title="เหรียญ"><span aria-hidden="true">◉</span><b id="topCoins">0</b></div>
+    <button class="online-chip setup" id="onlineBtn" title="บัญชีและผู้เล่นออนไลน์" aria-label="เปิดบัญชี ตัวละคร และสถานะออนไลน์"><span class="online-dot" aria-hidden="true"></span><span class="online-label" id="onlineCount">ตั้งค่าออนไลน์</span></button>
     <button class="top-btn" id="musicBtn" title="เปิดหรือปิดเพลง" aria-label="เปิดหรือปิดเพลง">♫</button>
     <button class="top-btn" id="soundBtn" title="เปิดหรือปิดเสียงเอฟเฟกต์" aria-label="เปิดหรือปิดเสียงเอฟเฟกต์">SFX</button>
     <button class="top-btn" id="settingsBtn" title="ตั้งค่า" aria-label="เปิดตั้งค่า">⚙</button>
@@ -37,8 +39,9 @@
     <section class="player-card pixel-box">
       <div class="avatar-row">
         <div class="avatar-frame" id="avatarArt" aria-hidden="true"></div>
-        <div><h3>ครูนักผจญภัย</h3><small id="rankName">ผู้ฝึกหัด</small></div>
+        <div><h3 id="playerName">ครูนักผจญภัย</h3><small id="rankName">ผู้ฝึกหัด</small></div>
       </div>
+      <button class="btn small dark avatar-edit" id="avatarEditBtn">แต่งตัวละคร</button>
       <div class="meter-label"><span>EXP</span><b id="xpText">0 / 100</b></div>
       <div class="meter"><i id="xpBar"></i></div>
       <div class="mini-stats"><span>✦ <b id="sideStreak">0</b> คอมโบสูงสุด</span><span>★ <b id="sideMastery">0</b>% แม่นยำ</span></div>
@@ -72,6 +75,8 @@
   </div>
 </div>
 <script src="data.js"></script>
+<script src="online-config.js"></script>
+<script src="online.js"></script>
 <script src="adventure.js"></script>
 <script src="app.js"></script>
 <script src="v4.js"></script>

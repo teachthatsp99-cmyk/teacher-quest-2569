@@ -108,10 +108,11 @@ if(data?.questionBankAudit?.sourceInventory?.length !== 26) fail('source invento
 if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.referenceBackedCount || 0) !== questions.length) fail('verification counts do not cover the full bank');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','data.js','adventure.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','data.js','online-config.js','online.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
+for(const asset of ['database.rules.json','FIREBASE_ONLINE_SETUP.md']) if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 for(const retired of ['cloud-sync.js','firebase-config.js','v4-cleanup.js','FIREBASE_SETUP.md','firestore.rules']){
   if(fs.existsSync(retired)) fail(`retired file still exists: ${retired}`);
   if(html.includes(retired)) fail(`index.html still references retired file ${retired}`);
@@ -119,6 +120,7 @@ for(const retired of ['cloud-sync.js','firebase-config.js','v4-cleanup.js','FIRE
 
 const app = fs.readFileSync('app.js','utf8');
 const adventure = fs.readFileSync('adventure.js','utf8');
+const online = fs.readFileSync('online.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
 for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
@@ -126,7 +128,17 @@ for(const feature of ['startBattle','beginExam','renderReview','renderAdventure'
 for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
-if(!(html.indexOf('data.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('adventure scripts are not loaded in dependency order');
+for(const feature of ['signInAnonymously','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup']){
+  if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
+}
+if(!(html.indexOf('data.js') < html.indexOf('online-config.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('online/adventure scripts are not loaded in dependency order');
+try{
+  const rules=JSON.parse(fs.readFileSync('database.rules.json','utf8'));
+  const rulesText=JSON.stringify(rules);
+  for(const path of ['profiles','visitorClaims','online','world']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
+  if(!rulesText.includes('auth.uid === $uid')) fail('database rules do not enforce per-user writes');
+}catch(error){ fail(`database.rules.json is invalid: ${error.message}`); }
+if(/service_account|private_key|BEGIN PRIVATE KEY/i.test(fs.readFileSync('online-config.js','utf8'))) fail('online config contains a private credential marker');
 for(const feature of ['balancedSample','verificationStatus','sourceUrl','SMART DRILL']){
   if(!v4.includes(feature) && !dataSource.includes(feature)) fail(`V4/data is missing ${feature}`);
 }

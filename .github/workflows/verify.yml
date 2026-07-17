@@ -19,6 +19,9 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check data.js
+          node --check online-config.js
+          node --check online.js
+          node --check adventure.js
           node --check app.js
           node --check v4.js
           node --check scripts/validate.mjs
@@ -29,6 +32,10 @@ jobs:
         run: |
           grep -q 'v4.css' index.html
           grep -q 'v4.js' index.html
+          grep -q 'online.js' index.html
+          grep -q 'online.css' index.html
+          test -e database.rules.json
+          test -e FIREBASE_ONLINE_SETUP.md
           test ! -e cloud-sync.js
           test ! -e firebase-config.js
           test ! -e v4-cleanup.js
