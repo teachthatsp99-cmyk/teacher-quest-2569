@@ -34,6 +34,7 @@ jobs:
           grep -q 'v4.js' index.html
           grep -q 'online.js' index.html
           grep -q 'online.css' index.html
+          grep -q 'raid.css' index.html
           test -e database.rules.json
           test -e FIREBASE_ONLINE_SETUP.md
           test ! -e cloud-sync.js

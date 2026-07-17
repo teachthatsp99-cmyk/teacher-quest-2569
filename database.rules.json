@@ -80,6 +80,59 @@
           "$other": { ".validate": false }
         }
       }
+    },
+    "raids": {
+      "$room": {
+        ".read": "auth != null && auth.token.firebase.identities['google.com'] != null && $room.length === 6 && $room.matches(/^[A-HJ-NP-Z2-9]{6}$/) && data.child('members').child(auth.uid).exists()",
+        ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && $room.length === 6 && $room.matches(/^[A-HJ-NP-Z2-9]{6}$/) && ((!data.exists() && newData.hasChildren(['meta','members']) && newData.child('meta').child('hostUid').val() === auth.uid && newData.child('meta').child('status').val() === 'lobby' && newData.child('members').child(auth.uid).exists()) || (data.exists() && !newData.exists() && data.child('meta').child('hostUid').val() === auth.uid))",
+        ".validate": "!newData.exists() || newData.hasChildren(['meta','members'])",
+        "meta": {
+          ".validate": "newData.hasChildren(['hostUid','status','bossHp','bossMax','moduleId','questionSeed','createdAt','startedAt'])",
+          "hostUid": { ".validate": "newData.isString() && newData.val().length >= 4 && newData.val().length <= 128 && (!data.exists() || newData.val() === data.val())" },
+          "status": {
+            ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('meta').child('hostUid').val() === auth.uid",
+            ".validate": "(newData.val() === 'lobby' || newData.val() === 'active') && ((!data.exists() && newData.val() === 'lobby') || newData.val() === data.val() || (data.val() === 'lobby' && newData.val() === 'active'))"
+          },
+          "bossHp": {
+            ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('members').child(auth.uid).exists() && root.child('raids').child($room).child('meta').child('status').val() === 'active'",
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= root.child('raids').child($room).child('meta').child('bossMax').val() && (!data.exists() || (newData.val() <= data.val() && newData.val() >= data.val() - 40))"
+          },
+          "bossMax": { ".validate": "newData.isNumber() && newData.val() >= 240 && newData.val() <= 1200 && (!data.exists() || newData.val() === data.val())" },
+          "moduleId": { ".validate": "newData.isString() && (newData.val() === 'all' || newData.val() === 'learn' || newData.val() === 'curriculum' || newData.val() === 'measure' || newData.val() === 'research' || newData.val() === 'psych' || newData.val() === 'media' || newData.val() === 'classroom' || newData.val() === 'profession' || newData.val() === 'eduact' || newData.val() === 'child' || newData.val() === 'disability' || newData.val() === 'civil' || newData.val() === 'ksp' || newData.val() === 'voclaw' || newData.val() === 'culture' || newData.val() === 'policy' || newData.val() === 'student' || newData.val() === 'admin' || newData.val() === 'quality' || newData.val() === 'current') && (!data.exists() || newData.val() === data.val())" },
+          "questionSeed": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 2147483647 && (!data.exists() || newData.val() === data.val())" },
+          "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() >= now - 120000 && newData.val() <= now + 120000) || (data.exists() && newData.val() === data.val()))" },
+          "startedAt": {
+            ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('meta').child('hostUid').val() === auth.uid",
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (data.val() === 0 && newData.val() >= now - 120000 && newData.val() <= now + 120000 && root.child('raids').child($room).child('meta').child('status').val() === 'active'))"
+          },
+          "$other": { ".validate": false }
+        },
+        "members": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('meta').exists() && root.child('raids').child($room).child('meta').child('createdAt').val() >= now - 21600000 && (root.child('raids').child($room).child('meta').child('status').val() === 'lobby' || root.child('raids').child($room).child('meta').child('status').val() === 'active')",
+            ".validate": "!newData.exists() || (newData.hasChildren(['nickname','avatar','score','correct','joinedAt','lastSeen','ready','emote','emoteAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20)",
+            "nickname": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 20" },
+            "score": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20000 && (!data.exists() || (newData.val() >= data.val() && newData.val() <= data.val() + 40))" },
+            "correct": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2000 && (!data.exists() || (newData.val() >= data.val() && newData.val() <= data.val() + 1))" },
+            "joinedAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() >= now - 120000 && newData.val() <= now + 120000) || (data.exists() && newData.val() === data.val()))" },
+            "lastSeen": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
+            "ready": { ".validate": "newData.isBoolean()" },
+            "emote": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'hi' || newData.val() === 'go' || newData.val() === 'help' || newData.val() === 'wow' || newData.val() === 'gg')" },
+            "emoteAt": { ".validate": "newData.isNumber() && (newData.val() === 0 || (newData.val() >= now - 120000 && newData.val() <= now + 120000) || (data.exists() && newData.val() === data.val()))" },
+            "avatar": {
+              ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString()",
+              "skin": { ".validate": "newData.val() === '#f4c7a1' || newData.val() === '#e8b989' || newData.val() === '#c98f65' || newData.val() === '#8b5b3f'" },
+              "hair": { ".validate": "newData.val() === '#24182f' || newData.val() === '#4a2d28' || newData.val() === '#815226' || newData.val() === '#d9b65a' || newData.val() === '#5b4b85'" },
+              "shirt": { ".validate": "newData.val() === '#3d68af' || newData.val() === '#1e8a72' || newData.val() === '#9b4e86' || newData.val() === '#b86535' || newData.val() === '#5c55a7'" },
+              "accent": { ".validate": "newData.val() === '#ffd45c' || newData.val() === '#58e7b2' || newData.val() === '#5dcbff' || newData.val() === '#ff72b4' || newData.val() === '#a88cff'" },
+              "style": { ".validate": "newData.val() === 'short' || newData.val() === 'spike' || newData.val() === 'long' || newData.val() === 'cap'" },
+              "$other": { ".validate": false }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
+      }
     }
   }
 }

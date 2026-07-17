@@ -486,3 +486,116 @@ test('online presence renders simulated friends only in the active pixel world',
   await expect.poll(()=>page.evaluate(()=>window.teacherQuestOnlineDebug.getState().zone)).toBe(null);
   expect(pageErrors).toEqual([]);
 });
+
+test('multiplayer Raid renders a live lobby, deterministic questions and responsive team battle',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const raid={
+    code:'ABC234',isHost:true,memberCount:2,
+    meta:{hostUid:'raid-host',status:'lobby',bossHp:480,bossMax:480,moduleId:'research',questionSeed:2569,createdAt:Date.now(),startedAt:0},
+    members:[
+      {uid:'raid-host',nickname:'ครูหัวหน้าทีม',avatar:{shirt:'#3d68af',accent:'#ffd45c',style:'cap'},score:0,correct:0,joinedAt:1,lastSeen:Date.now(),ready:true,emote:'go',emoteAt:Date.now()},
+      {uid:'raid-friend',nickname:'เพื่อนร่วมทีม',avatar:{shirt:'#1e8a72',accent:'#58e7b2',style:'spike'},score:0,correct:0,joinedAt:2,lastSeen:Date.now(),ready:true,emote:'',emoteAt:0}
+    ]
+  };
+  await page.evaluate(raidState=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,phase:'online',connected:true,user:{uid:'raid-host',isAnonymous:false,provider:'google'},
+    profile:{nickname:'ครูหัวหน้าทีม',avatar:{shirt:'#3d68af',accent:'#ffd45c',style:'cap'}},raid:raidState,error:''
+  }),raid);
+  await page.evaluate(()=>window.teacherQuestRaidDebug.render());
+  await expect(page.locator('.raid-lobby')).toBeVisible();
+  await expect(page.locator('.raid-lobby h1')).toContainText('ABC234');
+  await expect(page.locator('.raid-member')).toHaveCount(2);
+  await expect(page.locator('#startRaid')).toContainText('2 คน');
+  await expect(page.locator('.raid-emote-pop')).toContainText('ลุย!');
+
+  raid.meta.status='active';
+  raid.meta.startedAt=Date.now();
+  await page.evaluate(raidState=>window.teacherQuestOnlineDebug.simulate({raid:raidState}),raid);
+  await expect(page.locator('.raid-battle')).toBeVisible();
+  await expect(page.locator('.raid-boss-art').first()).toBeVisible();
+  await expect(page.locator('[data-raid-answer]')).toHaveCount(4);
+  await expect(page.locator('#raidTeamList .raid-member')).toHaveCount(2);
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','boss');
+  const ids=await page.evaluate(()=>window.teacherQuestRaidDebug.questionIds());
+  expect(ids).toHaveLength(20);
+  expect(new Set(ids).size).toBe(20);
+
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
+  expect(pageErrors).toEqual([]);
+});
+
+test('Raid answers trigger Pixel attacks and boss counter actions',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  const raid={
+    code:'HJK567',isHost:true,memberCount:1,
+    meta:{hostUid:'raid-host',status:'active',bossHp:480,bossMax:480,moduleId:'research',questionSeed:42,createdAt:Date.now(),startedAt:Date.now()},
+    members:[{uid:'raid-host',nickname:'ครูนักบุก',avatar:{},score:0,correct:0,joinedAt:1,lastSeen:Date.now(),ready:true,emote:'',emoteAt:0}]
+  };
+  await page.evaluate(raidState=>{
+    window.teacherQuestOnlineDebug.simulate({configured:true,phase:'online',connected:true,user:{uid:'raid-host',isAnonymous:false,provider:'google'},profile:{nickname:'ครูนักบุก',avatar:{}},raid:raidState,error:''});
+    window.TeacherQuestOnline.attackRaid=async damage=>({damage,bossHp:480-damage,bossMax:480});
+    window.teacherQuestRaidDebug.render();
+  },raid);
+  const first=await page.evaluate(()=>{
+    const id=window.teacherQuestRaidDebug.questionIds()[0];
+    const question=window.GAME_DATA.questions.find(item=>item.id===id);
+    return {answer:question.answer};
+  });
+  await page.locator(`[data-raid-answer="${first.answer}"]`).click();
+  await page.locator('#raidAttackBtn').click();
+  await expect(page.locator('#raidArena')).toHaveAttribute('data-battle-action','attack');
+  await expect(page.locator('#raidAction')).toContainText('CO-OP STRIKE');
+  await expect(page.locator('#raidFeedback')).toContainText('โจมตีทีมสำเร็จ');
+  await page.locator('#nextRaidQuestion').click();
+
+  const second=await page.evaluate(()=>{
+    const game=window.teacherQuestRaidDebug.getState();
+    const id=window.teacherQuestRaidDebug.questionIds()[game.index%20];
+    const question=window.GAME_DATA.questions.find(item=>item.id===id);
+    return {wrong:(question.answer+1)%4};
+  });
+  await page.locator(`[data-raid-answer="${second.wrong}"]`).click();
+  await page.locator('#raidAttackBtn').click();
+  await expect(page.locator('#raidArena')).toHaveAttribute('data-battle-action','counter');
+  await expect(page.locator('#raidAction')).toContainText('BOSS COUNTER');
+  await expect(page.locator('#raidFeedback')).toContainText('บอสสวนกลับ');
+  await page.locator('#nextRaidQuestion').click();
+  await page.evaluate(()=>{window.TeacherQuestOnline.attackRaid=async damage=>({damage,bossHp:0,bossMax:480});});
+  const finisher=await page.evaluate(()=>{
+    const game=window.teacherQuestRaidDebug.getState();
+    const ids=window.teacherQuestRaidDebug.questionIds();
+    return window.GAME_DATA.questions.find(item=>item.id===ids[game.index%ids.length]).answer;
+  });
+  await page.locator(`[data-raid-answer="${finisher}"]`).click();
+  await page.locator('#raidAttackBtn').click();
+  await expect(page.locator('#raidArena')).toHaveAttribute('data-battle-action','finisher');
+  await expect(page.locator('#raidAction')).toContainText('TEAM FINISHER');
+  await expect(page.locator('#raidBoss')).toHaveClass(/defeated/,{timeout:1500});
+});
+
+test('Raid victory grants its cloud-saved reward only once per room',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  const raid={
+    code:'MNP789',isHost:false,memberCount:2,
+    meta:{hostUid:'friend-host',status:'active',bossHp:0,bossMax:480,moduleId:'all',questionSeed:99,createdAt:Date.now(),startedAt:Date.now()},
+    members:[
+      {uid:'friend-host',nickname:'หัวหน้าทีม',avatar:{},score:270,correct:10,joinedAt:1,lastSeen:Date.now(),ready:true,emote:'gg',emoteAt:Date.now()},
+      {uid:'raid-local',nickname:'ผู้ช่วยทีม',avatar:{},score:210,correct:8,joinedAt:2,lastSeen:Date.now(),ready:true,emote:'',emoteAt:0}
+    ]
+  };
+  await page.evaluate(raidState=>{
+    window.teacherQuestOnlineDebug.simulate({configured:true,phase:'online',connected:true,user:{uid:'raid-local',isAnonymous:false,provider:'google'},profile:{nickname:'ผู้ช่วยทีม',avatar:{}},raid:raidState,error:''});
+    window.teacherQuestRaidDebug.render();
+  },raid);
+  await expect(page.locator('.raid-victory')).toBeVisible();
+  await expect(page.locator('.victory-banner')).toHaveText('RAID CLEAR!');
+  await expect(page.locator('#topCoins')).toHaveText('50');
+  await page.evaluate(()=>window.teacherQuestRaidDebug.render());
+  await expect(page.locator('#topCoins')).toHaveText('50');
+  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuest2569_v3')));
+  expect(saved.raidWins).toBe(1);
+  expect(saved.raidRewards).toEqual(['MNP789']);
+});

@@ -108,7 +108,7 @@ if(data?.questionBankAudit?.sourceInventory?.length !== 26) fail('source invento
 if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.referenceBackedCount || 0) !== questions.length) fail('verification counts do not cover the full bank');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','data.js','online-config.js','online.js','adventure.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','data.js','online-config.js','online.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
@@ -122,13 +122,13 @@ const app = fs.readFileSync('app.js','utf8');
 const adventure = fs.readFileSync('adventure.js','utf8');
 const online = fs.readFileSync('online.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle']){
+for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
 for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
-for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect']){
+for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
@@ -136,9 +136,11 @@ if(!(html.indexOf('data.js') < html.indexOf('online-config.js') && html.indexOf(
 try{
   const rules=JSON.parse(fs.readFileSync('database.rules.json','utf8'));
   const rulesText=JSON.stringify(rules);
-  for(const path of ['profiles','visitorClaims','online','progress','world']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
+  for(const path of ['profiles','visitorClaims','online','progress','world','raids']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
   if(!rulesText.includes('auth.uid === $uid')) fail('database rules do not enforce per-user writes');
   if(!rulesText.includes("auth.token.firebase.identities['google.com'] != null")) fail('database rules do not require a linked Google identity');
+  if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
+  if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
   const expressions=[];
   const collectRuleExpressions=value=>{
     if(!value || typeof value!=='object') return;
