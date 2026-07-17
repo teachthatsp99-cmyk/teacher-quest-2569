@@ -138,7 +138,11 @@ try{
   for(const path of ['profiles','visitorClaims','online','world']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
   if(!rulesText.includes('auth.uid === $uid')) fail('database rules do not enforce per-user writes');
 }catch(error){ fail(`database.rules.json is invalid: ${error.message}`); }
-if(/service_account|private_key|BEGIN PRIVATE KEY/i.test(fs.readFileSync('online-config.js','utf8'))) fail('online config contains a private credential marker');
+const onlineConfig=fs.readFileSync('online-config.js','utf8');
+if(/service_account|private_key|BEGIN PRIVATE KEY/i.test(onlineConfig)) fail('online config contains a private credential marker');
+for(const value of ['teacher-quest-2569.firebaseapp.com','teacher-quest-2569-default-rtdb.asia-southeast1.firebasedatabase.app','localHosts.has(location.hostname)?null:productionConfig']){
+  if(!onlineConfig.includes(value)) fail(`online config is missing ${value}`);
+}
 for(const feature of ['balancedSample','verificationStatus','sourceUrl','SMART DRILL']){
   if(!v4.includes(feature) && !dataSource.includes(feature)) fail(`V4/data is missing ${feature}`);
 }
