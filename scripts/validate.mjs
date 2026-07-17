@@ -137,6 +137,21 @@ try{
   const rulesText=JSON.stringify(rules);
   for(const path of ['profiles','visitorClaims','online','world']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
   if(!rulesText.includes('auth.uid === $uid')) fail('database rules do not enforce per-user writes');
+  const expressions=[];
+  const collectRuleExpressions=value=>{
+    if(!value || typeof value!=='object') return;
+    for(const [key,child] of Object.entries(value)){
+      if(key.startsWith('.') && typeof child==='string') expressions.push(child);
+      collectRuleExpressions(child);
+    }
+  };
+  collectRuleExpressions(rules);
+  const supportedRuleMethods=new Set(['child','exists','getPriority','hasChild','hasChildren','isBoolean','isNumber','isString','matches','val']);
+  for(const expression of expressions){
+    for(const match of expression.matchAll(/\.([A-Za-z_$][\w$]*)\s*\(/g)){
+      if(!supportedRuleMethods.has(match[1])) fail(`database rules use unsupported method ${match[1]}()`);
+    }
+  }
 }catch(error){ fail(`database.rules.json is invalid: ${error.message}`); }
 const onlineConfig=fs.readFileSync('online-config.js','utf8');
 if(/service_account|private_key|BEGIN PRIVATE KEY/i.test(onlineConfig)) fail('online config contains a private credential marker');
