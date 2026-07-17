@@ -347,3 +347,51 @@ test('touch d-pad holds movement and adventure position survives navigation',asy
   expect(Math.abs(restored.x-after.x)).toBeLessThan(3);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });
+
+test('offline avatar editor saves a pixel identity without requiring Firebase',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  await expect(page.locator('#onlineBtn')).toContainText('ตั้งค่าออนไลน์');
+  await page.locator('#onlineBtn').click();
+  await expect(page.getByRole('heading',{name:'บัญชีและตัวละคร'})).toBeVisible();
+  await expect(page.locator('.online-alert')).toContainText('ผูก Firebase Project ฟรี');
+  await expect(page.locator('.avatar-swatch')).toHaveCount(23);
+  await page.locator('#onlineNickname').fill('ครูพิกเซล');
+  await page.locator('[data-avatar-group="style"][data-avatar-value="spike"]').click();
+  await page.locator('[data-avatar-group="shirt"]').nth(1).click();
+  await page.locator('#saveOnlineProfile').click();
+  await expect(page.locator('#modal')).toBeHidden();
+  await expect(page.locator('#playerName')).toHaveText('ครูพิกเซล');
+  await expect(page.locator('#avatarArt .pixel-avatar')).toHaveAttribute('data-hair-style','spike');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestOnlineProfile_v1')).nickname)).toBe('ครูพิกเซล');
+
+  await page.reload({waitUntil:'networkidle'});
+  await expect(page.locator('#playerName')).toHaveText('ครูพิกเซล');
+  await page.locator('[data-view="home"]').first().click();
+  await page.locator('#quickStart').click();
+  await expect(page.locator('#playerFighter .custom-fighter')).toHaveAttribute('data-hair-style','spike');
+  expect(pageErrors).toEqual([]);
+});
+
+test('online presence renders simulated friends only in the active pixel world',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const local=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  await page.evaluate(({x,y})=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,phase:'online',connected:true,onlineCount:3,totalPlayers:42,
+    profile:{nickname:'ผู้ทดสอบ',avatar:{skin:'#f4c7a1',hair:'#815226',shirt:'#5c55a7',accent:'#58e7b2',style:'cap'}},
+    zonePlayers:[
+      {uid:'friend-a',nickname:'เพื่อนเอ',x:x+45,y:y+10,direction:'left',moving:true,avatar:{shirt:'#1e8a72',accent:'#ffd45c',style:'spike'}},
+      {uid:'friend-b',nickname:'เพื่อนบี',x:x-55,y:y-5,direction:'right',moving:false,avatar:{shirt:'#9b4e86',accent:'#ff72b4',style:'long'}}
+    ]
+  }),local);
+  await expect(page.locator('#onlineCount')).toHaveText('3 ออนไลน์');
+  await expect(page.locator('#adventureOnlineStatus')).toContainText('พื้นที่นี้ 3 คน');
+  await expect(page.locator('#avatarArt .pixel-avatar')).toHaveAttribute('data-hair-style','cap');
+  await expect.poll(()=>page.evaluate(()=>window.teacherQuestAdventureDebug.getState().remotePlayers)).toBe(2);
+  await page.locator('[data-view="home"]').first().click();
+  await expect.poll(()=>page.evaluate(()=>window.teacherQuestOnlineDebug.getState().zone)).toBe(null);
+  expect(pageErrors).toEqual([]);
+});
