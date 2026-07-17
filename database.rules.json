@@ -4,11 +4,11 @@
     ".write": false,
     "profiles": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid",
-        ".validate": "newData.hasChildren(['nickname','avatar','provider','createdAt','updatedAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && (newData.child('provider').val() === 'guest' || newData.child('provider').val() === 'google') && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber()",
+        ".read": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null",
+        ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null",
+        ".validate": "newData.hasChildren(['nickname','avatar','provider','createdAt','updatedAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('provider').val() === 'google' && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber()",
         "nickname": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 20" },
-        "provider": { ".validate": "newData.val() === 'guest' || newData.val() === 'google'" },
+        "provider": { ".validate": "newData.val() === 'google'" },
         "createdAt": { ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())" },
         "updatedAt": { ".validate": "newData.isNumber()" },
         "avatar": {
@@ -24,31 +24,43 @@
       }
     },
     "visitorClaims": {
-      ".read": "auth != null",
+      ".read": "auth != null && auth.token.firebase.identities['google.com'] != null",
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid && !data.exists()",
+        ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && !data.exists()",
         ".validate": "newData.hasChildren(['firstSeen']) && newData.child('firstSeen').isNumber()",
         "firstSeen": { ".validate": "newData.isNumber()" },
         "$other": { ".validate": false }
       }
     },
     "online": {
-      ".read": "auth != null",
+      ".read": "auth != null && auth.token.firebase.identities['google.com'] != null",
       "$uid": {
         ".validate": "!newData.exists() || newData.hasChildren()",
         "$connection": {
-          ".write": "auth != null && auth.uid === $uid && $connection.length >= 12 && $connection.length <= 80 && $connection.matches(/^[A-Za-z0-9_-]+$/)",
+          ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && $connection.length >= 12 && $connection.length <= 80 && $connection.matches(/^[A-Za-z0-9_-]+$/)",
           ".validate": "!newData.exists() || (newData.hasChildren(['connectedAt']) && newData.child('connectedAt').isNumber() && newData.child('connectedAt').val() >= now - 120000 && newData.child('connectedAt').val() <= now + 120000)",
           "connectedAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
           "$other": { ".validate": false }
         }
       }
     },
+    "progress": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null",
+        ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null",
+        ".validate": "!newData.exists() || (newData.hasChildren(['version','game','updatedAt']) && newData.child('version').val() === 1 && newData.child('game').isString() && newData.child('game').val().length >= 2 && newData.child('game').val().length <= 1000000 && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() >= now - 120000 && newData.child('updatedAt').val() <= now + 120000)",
+        "version": { ".validate": "newData.val() === 1" },
+        "game": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 1000000" },
+        "adventure": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 1000" },
+        "updatedAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
+        "$other": { ".validate": false }
+      }
+    },
     "world": {
       "$zone": {
-        ".read": "auth != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3') && query.limitToLast != null && query.limitToLast <= 40",
+        ".read": "auth != null && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3') && query.limitToLast != null && query.limitToLast <= 40",
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3')",
+          ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3')",
           ".validate": "!newData.exists() || (newData.hasChildren(['nickname','avatar','x','y','direction','moving','lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2048 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1536 && (newData.child('direction').val() === 'up' || newData.child('direction').val() === 'down' || newData.child('direction').val() === 'left' || newData.child('direction').val() === 'right') && newData.child('moving').isBoolean() && newData.child('lastSeen').isNumber() && newData.child('lastSeen').val() >= now - 120000 && newData.child('lastSeen').val() <= now + 120000)",
           "nickname": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 20" },
           "x": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2048" },

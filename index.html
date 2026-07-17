@@ -17,8 +17,19 @@
 <link rel="stylesheet" href="adventure.css">
 <link rel="stylesheet" href="online.css">
 </head>
-<body class="scanlines">
+<body class="scanlines auth-checking">
 <a class="skip" href="#main">ข้ามไปยังเนื้อหา</a>
+<section class="auth-gate" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authGateTitle" aria-describedby="authGateText">
+  <div class="auth-gate-card pixel-box">
+    <div class="auth-gate-art" aria-hidden="true"><span class="auth-gate-orb"></span><span class="auth-gate-spark one"></span><span class="auth-gate-spark two"></span><span class="auth-gate-spark three"></span></div>
+    <div class="eyebrow">GOOGLE ID • CLOUD SAVE</div>
+    <h1 id="authGateTitle">เข้าสู่โลก<br><span>ครูเควสต์</span></h1>
+    <p id="authGateText">เข้าสู่ระบบด้วย Google ก่อนเริ่มเล่น เพื่อบันทึกคะแนน ข้อที่เคยทำ บุ๊กมาร์ก ประวัติสอบ และตำแหน่งไว้เล่นต่อได้ทุกอุปกรณ์</p>
+    <button class="btn sky auth-google-btn" id="authGateGoogle" type="button" disabled><span aria-hidden="true">G</span><span id="authGateButtonText">กำลังตรวจบัญชี…</span></button>
+    <p class="auth-gate-status" id="authGateStatus" role="status" aria-live="polite">กำลังเชื่อมต่อ Firebase</p>
+    <small>ระบบไม่เผยแพร่อีเมลให้ผู้เล่นอื่นเห็น • ใช้ชื่อและตัวละครในเกมเท่านั้น</small>
+  </div>
+</section>
 <header class="topbar">
   <div class="top-inner">
     <button class="brand" data-view="adventure" aria-label="กลับสู่โลกผจญภัย">

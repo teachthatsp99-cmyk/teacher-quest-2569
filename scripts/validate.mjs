@@ -122,21 +122,23 @@ const app = fs.readFileSync('app.js','utf8');
 const adventure = fs.readFileSync('adventure.js','utf8');
 const online = fs.readFileSync('online.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView']){
+for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
-for(const feature of ['signInAnonymously','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup']){
+for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
+if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
 if(!(html.indexOf('data.js') < html.indexOf('online-config.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('online/adventure scripts are not loaded in dependency order');
 try{
   const rules=JSON.parse(fs.readFileSync('database.rules.json','utf8'));
   const rulesText=JSON.stringify(rules);
-  for(const path of ['profiles','visitorClaims','online','world']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
+  for(const path of ['profiles','visitorClaims','online','progress','world']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
   if(!rulesText.includes('auth.uid === $uid')) fail('database rules do not enforce per-user writes');
+  if(!rulesText.includes("auth.token.firebase.identities['google.com'] != null")) fail('database rules do not require a linked Google identity');
   const expressions=[];
   const collectRuleExpressions=value=>{
     if(!value || typeof value!=='object') return;
