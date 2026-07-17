@@ -36,16 +36,11 @@
 
 กฎนี้อนุญาตให้ผู้เล่นแก้เฉพาะโปรไฟล์และตำแหน่งของตนเอง อีเมลไม่ถูกเก็บในข้อมูลสาธารณะ และผู้ที่ยังไม่ยืนยันตัวตนอ่านข้อมูลไม่ได้
 
-## 4. ใส่ Web App Config
+## 4. Web App Config
 
-1. กลับหน้า Project overview แล้วกดไอคอนเว็บ `</>`
-2. ตั้งชื่อแอป เช่น `Teacher Quest Web` โดยไม่ต้องเปิด Firebase Hosting
-3. คัดลอกออบเจ็กต์ `firebaseConfig`
-4. ตรวจให้มี `databaseURL` ซึ่งดูได้จากหน้า Realtime Database
-5. เปิดไฟล์ `online-config.js`
-6. เปลี่ยนค่า `window.TEACHER_QUEST_FIREBASE_CONFIG` จาก `null` เป็นออบเจ็กต์ที่คัดลอกมา
+Repository นี้เชื่อมกับโปรเจกต์ `teacher-quest-2569` ไว้ใน `online-config.js` แล้ว ไม่ต้องคัดลอกค่าซ้ำอีก เว้นแต่เจ้าของจะย้ายไป Firebase Project ใหม่
 
-ตัวอย่างรูปแบบ:
+หากย้ายโปรเจกต์ ให้กลับหน้า Project overview กดไอคอนเว็บ `</>` คัดลอกออบเจ็กต์ `firebaseConfig` และเพิ่ม `databaseURL` จากหน้า Realtime Database โดยคงรูปแบบนี้:
 
 ```js
 window.TEACHER_QUEST_FIREBASE_CONFIG = {
@@ -60,6 +55,12 @@ window.TEACHER_QUEST_FIREBASE_CONFIG = {
 ```
 
 Firebase Web Config เป็นรหัสระบุโปรเจกต์ฝั่งเว็บ ไม่ใช่รหัสผ่าน แต่ห้ามนำ Service Account, private key หรือไฟล์ Admin SDK ใส่ GitHub เด็ดขาด
+
+## จุดที่ต้องยืนยันใน Console ก่อนทดสอบ
+
+- Authentication → Sign-in method: **Anonymous** และ **Google** ต้องเป็น Enabled
+- Authentication → Settings → Authorized domains: ต้องมี `teachthatsp99-cmyk.github.io`
+- Realtime Database → Rules: ต้องเป็นเนื้อหาเดียวกับ `database.rules.json` และกด **Publish** แล้ว
 
 ## 5. ทดสอบก่อนเปิดใช้จริง
 

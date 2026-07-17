@@ -118,13 +118,16 @@ function avatarMarkup(profile=state.profile,className=""){
 }
 
 function friendlyError(error){
+  const rawError=`${String(error?.code || "")} ${String(error?.message || "")}`;
+  if(/permission[_\s-]*denied/i.test(rawError)){
+    return "Firebase ปฏิเสธสิทธิ์: เปิด Realtime Database → Rules วางไฟล์ database.rules.json แล้วกด Publish";
+  }
   const map={
     "auth/operation-not-allowed":"ยังไม่ได้เปิด Anonymous หรือ Google Sign-in ใน Firebase",
     "auth/unauthorized-domain":"ยังไม่ได้เพิ่มโดเมนเว็บไซต์ใน Authorized domains",
     "auth/popup-blocked":"เบราว์เซอร์บล็อกหน้าต่าง Google กรุณาอนุญาตป๊อปอัปแล้วลองใหม่",
     "auth/popup-closed-by-user":"ปิดหน้าต่าง Google ก่อนเข้าสู่ระบบสำเร็จ",
-    "auth/network-request-failed":"อินเทอร์เน็ตขัดข้อง กรุณาลองใหม่",
-    "PERMISSION_DENIED":"กฎ Realtime Database ยังไม่ตรงกับไฟล์ database.rules.json"
+    "auth/network-request-failed":"อินเทอร์เน็ตขัดข้อง กรุณาลองใหม่"
   };
   return map[error?.code] || map[error?.message] || error?.message || "เชื่อมระบบออนไลน์ไม่สำเร็จ";
 }
@@ -453,7 +456,7 @@ window.TeacherQuestOnline={
   avatarOptions:AVATAR_OPTIONS,normalizeProfile,
   isConfigured:()=>configured
 };
-window.teacherQuestOnlineDebug={simulate:simulateForTests,getState:publicState,flushPresence};
+window.teacherQuestOnlineDebug={simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError};
 
 window.addEventListener("pagehide",()=>{void leaveWorld();});
 emit();
