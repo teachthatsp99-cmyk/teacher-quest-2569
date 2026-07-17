@@ -115,14 +115,15 @@ function randomRaidCode(){
   return [...bytes].map((value,index)=>RAID_CODE_ALPHABET[(value || Math.floor(Math.random()*256)+index)%RAID_CODE_ALPHABET.length]).join("");
 }
 
-function raidMemberPayload({joinedAt=Date.now(),ready=false}={}){
+function raidMemberPayload({joinedAt=null,ready=false}={}){
+  const serverNow=databaseModule?.serverTimestamp?.() || Date.now();
   return {
     nickname:state.profile.nickname,
     avatar:state.profile.avatar,
     score:0,
     correct:0,
-    joinedAt:Number(joinedAt)||Date.now(),
-    lastSeen:Date.now(),
+    joinedAt:joinedAt ?? serverNow,
+    lastSeen:serverNow,
     ready:Boolean(ready),
     emote:"",
     emoteAt:0
@@ -269,7 +270,7 @@ function avatarMarkup(profile=state.profile,className=""){
 function friendlyError(error){
   const rawError=`${String(error?.code || "")} ${String(error?.message || "")}`;
   if(/permission[_\s-]*denied/i.test(rawError)){
-    return "Firebase ปฏิเสธสิทธิ์: เปิด Realtime Database → Rules วางไฟล์ database.rules.json แล้วกด Publish";
+    return "Firebase ปฏิเสธสิทธิ์ในการทำรายการนี้: รีโหลดเว็บและเข้าสู่ระบบ Google ใหม่ หากเพิ่งแก้ Realtime Database → Rules ให้ตรวจว่ากด Publish แล้ว";
   }
   const map={
     "auth/operation-not-allowed":"ยังไม่ได้เปิด Anonymous หรือ Google Sign-in ใน Firebase",
@@ -675,6 +676,16 @@ async function updateProfile(value){
   return publicState();
 }
 
+async function finalizeGoogleSignIn(user){
+  if(!user || user.isAnonymous) throw new Error("Google ไม่ส่งข้อมูลบัญชีกลับมา กรุณาลองใหม่");
+  await user.getIdToken(true);
+  if(attachingUid===user.uid && attachPromise){
+    try{await attachPromise;}catch(error){/* Retry below with the refreshed Google token. */}
+  }
+  attachedUid=null;
+  return attachUser(user);
+}
+
 async function signInGoogle(){
   if(!configured) throw new Error("กรุณาตั้งค่า Firebase ก่อน");
   await init();
@@ -688,7 +699,7 @@ async function signInGoogle(){
       ? await authModule.linkWithPopup(auth.currentUser,provider)
       : await authModule.signInWithPopup(auth,provider);
     signingIn=false;
-    if(!result.user) throw new Error("Google ไม่ส่งข้อมูลบัญชีกลับมา กรุณาลองใหม่");
+    await finalizeGoogleSignIn(result.user);
   }catch(error){
     signingIn=false;
     if(error?.code==="auth/credential-already-in-use"){
@@ -699,7 +710,7 @@ async function signInGoogle(){
         await removeOnlineConnection();
         clearProgressSync();
         const result=await authModule.signInWithCredential(auth,credential);
-        if(!result.user) throw new Error("Google ไม่ส่งข้อมูลบัญชีกลับมา กรุณาลองใหม่");
+        await finalizeGoogleSignIn(result.user);
       }catch(signInError){
         if(state.user && state.connected){
           await registerOnlineConnection();
@@ -732,6 +743,7 @@ async function signOut(){
 
 async function reconnect(){
   if(!auth?.currentUser || auth.currentUser.isAnonymous) throw new Error("กรุณาเข้าสู่ระบบด้วย Google ก่อน");
+  await auth.currentUser.getIdToken(true);
   attachedUid=null;
   return attachUser(auth.currentUser);
 }
@@ -833,17 +845,17 @@ function subscribeRaid(code){
 async function createRaid({moduleId="all"}={}){
   requireRaidOnline();
   if(state.raid) await leaveRaid();
-  const now=Date.now();
   const safeModule=validRaidModule(moduleId);
   let lastError=null;
   for(let attempt=0;attempt<6;attempt++){
     const code=randomRaidCode();
     const roomRef=databaseModule.ref(database,`raids/${code}`);
-    const member=raidMemberPayload({joinedAt:now,ready:true});
+    const createdAt=databaseModule.serverTimestamp();
+    const member=raidMemberPayload({joinedAt:createdAt,ready:true});
     const payload={
       meta:{
         hostUid:state.user.uid,status:"lobby",bossHp:RAID_BOSS_HP,bossMax:RAID_BOSS_HP,
-        moduleId:safeModule,questionSeed:Math.floor(1+Math.random()*2147483646),createdAt:now,startedAt:0
+        moduleId:safeModule,questionSeed:Math.floor(1+Math.random()*2147483646),createdAt,startedAt:0
       },
       members:{[state.user.uid]:member}
     };
@@ -866,7 +878,7 @@ async function joinRaid(value,{restoring=false}={}){
   if(code.length!==RAID_CODE_LENGTH) throw new Error("รหัสห้องต้องมี 6 ตัว");
   if(state.raid?.code===code) return publicState();
   if(state.raid) await leaveRaid();
-  const joinedAt=Date.now();
+  const joinedAt=databaseModule.serverTimestamp();
   const memberRef=databaseModule.ref(database,`raids/${code}/members/${state.user.uid}`);
   try{
     await databaseModule.set(memberRef,raidMemberPayload({joinedAt}));
@@ -900,9 +912,13 @@ async function startRaid(){
   requireRaidOnline();
   if(!state.raid || !state.raid.isHost) throw new Error("เฉพาะหัวหน้าห้องเท่านั้นที่เริ่ม Raid ได้");
   if(state.raid.meta.status!=="lobby") return publicState();
-  await databaseModule.update(databaseModule.ref(database,`raids/${state.raid.code}/meta`),{
-    status:"active",startedAt:databaseModule.serverTimestamp()
-  });
+  try{
+    await databaseModule.update(databaseModule.ref(database,`raids/${state.raid.code}/meta`),{
+      status:"active",startedAt:databaseModule.serverTimestamp()
+    });
+  }catch(error){
+    throw new Error(friendlyError(error));
+  }
   try{await raidRoomDisconnect?.cancel();}catch(error){/* Ignore stale connection. */}
   raidRoomDisconnect=null;
   await setupRaidDisconnect({hostLobby:false});

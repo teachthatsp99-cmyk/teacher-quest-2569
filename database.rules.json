@@ -103,7 +103,7 @@
           "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() >= now - 120000 && newData.val() <= now + 120000) || (data.exists() && newData.val() === data.val()))" },
           "startedAt": {
             ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('meta').child('hostUid').val() === auth.uid",
-            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (data.val() === 0 && newData.val() >= now - 120000 && newData.val() <= now + 120000 && root.child('raids').child($room).child('meta').child('status').val() === 'active'))"
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (data.val() === 0 && newData.val() >= now - 120000 && newData.val() <= now + 120000 && (root.child('raids').child($room).child('meta').child('status').val() === 'lobby' || root.child('raids').child($room).child('meta').child('status').val() === 'active')))"
           },
           "$other": { ".validate": false }
         },

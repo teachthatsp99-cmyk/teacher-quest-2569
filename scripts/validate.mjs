@@ -141,6 +141,8 @@ try{
   if(!rulesText.includes("auth.token.firebase.identities['google.com'] != null")) fail('database rules do not require a linked Google identity');
   if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
   if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
+  const raidStartedAtRule=rules.rules?.raids?.['$room']?.meta?.startedAt?.['.validate'] || '';
+  if(!(raidStartedAtRule.includes("status').val() === 'lobby'") && raidStartedAtRule.includes("status').val() === 'active'"))) fail('raid rules must allow the atomic lobby-to-active start transition');
   const expressions=[];
   const collectRuleExpressions=value=>{
     if(!value || typeof value!=='object') return;

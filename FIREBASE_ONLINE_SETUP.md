@@ -62,6 +62,8 @@ Firebase Web Config เป็นรหัสระบุโปรเจกต์
 - Authentication → Settings → Authorized domains: ต้องมี `teachthatsp99-cmyk.github.io`
 - Realtime Database → Rules: ต้องเป็นเนื้อหาเดียวกับ `database.rules.json` และกด **Publish** แล้ว
 
+หากขึ้น `Firebase ปฏิเสธสิทธิ์` หลัง Publish ให้รีโหลดหน้าเว็บ ออกจากระบบ แล้วเข้าสู่ระบบ Google ใหม่หนึ่งครั้ง เพื่อให้ Firebase ออกรหัสยืนยันตัวตนที่มีสิทธิ์ Google ชุดล่าสุด จากนั้นสร้างห้อง Raid ใหม่ ไม่ต้องรอให้ Rules มีผลและไม่ต้องวางซ้ำหลายรอบ
+
 ## 5. ทดสอบก่อนเปิดใช้จริง
 
 1. เปิดเว็บจาก GitHub Pages แล้วดูปุ่มสถานะมุมขวาบน
