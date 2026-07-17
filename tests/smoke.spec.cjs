@@ -423,6 +423,10 @@ test('Google login lifecycle prevents duplicate profile attachment and resets on
   expect(source).toContain('databaseModule.runTransaction(profileRef');
   expect(source).toContain('function clearCounterSubscriptions()');
   expect(source).toContain('async function reconnect()');
+  expect(source).toContain('async function finalizeGoogleSignIn(user)');
+  expect(source).toContain('await user.getIdToken(true)');
+  expect(source).toContain('if(attachingUid===user.uid && attachPromise)');
+  expect(signInSection).toContain('await finalizeGoogleSignIn(result.user)');
   expect(signInSection).not.toContain('await attachUser(result.user)');
 });
 
@@ -461,7 +465,24 @@ test('Firebase errors tell the owner exactly which console setting to fix',async
   }));
   expect(messages.rules).toContain('Realtime Database → Rules');
   expect(messages.rules).toContain('กด Publish');
+  expect(messages.rules).toContain('เข้าสู่ระบบ Google ใหม่');
   expect(messages.domain).toContain('Authorized domains');
+});
+
+test('Raid rules permit an atomic lobby-to-active start and use server timestamps',async({page})=>{
+  const [rulesResponse,onlineResponse]=await Promise.all([
+    page.request.get(`${url}/database.rules.json`),
+    page.request.get(`${url}/online.js`)
+  ]);
+  expect(rulesResponse.ok()).toBe(true);
+  expect(onlineResponse.ok()).toBe(true);
+  const rules=await rulesResponse.json();
+  const startedAt=rules.rules.raids['$room'].meta.startedAt['.validate'];
+  const online=await onlineResponse.text();
+  expect(startedAt).toContain("status').val() === 'lobby'");
+  expect(startedAt).toContain("status').val() === 'active'");
+  expect(online).toContain('const createdAt=databaseModule.serverTimestamp()');
+  expect(online).toContain('await user.getIdToken(true)');
 });
 
 test('online presence renders simulated friends only in the active pixel world',async({page})=>{
