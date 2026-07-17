@@ -1088,10 +1088,11 @@ function openOnlineDialog(){
   const draft=clone(onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}});
   const statusText=onlineState.phase==="online" ? "เชื่อมต่อ Firebase แล้ว" : onlineState.phase==="connecting" ? "กำลังเชื่อม Firebase" : onlineState.phase==="error" ? "เชื่อมต่อไม่สำเร็จ" : "โหมดออฟไลน์ — แต่งตัวได้ แต่ยังไม่เห็นเพื่อน";
   const setupNotice=!onlineState.configured
-    ? `<div class="online-alert"><strong>เหลือผูก Firebase Project ฟรีหนึ่งครั้ง</strong><br>โค้ดระบบออนไลน์พร้อมแล้ว เมื่อใส่ Web App Config ผู้เล่นจะเข้าแบบ Guest และพบกันในแผนที่อัตโนมัติ</div>`
+    ? `<div class="online-alert"><strong>เหลือผูก Firebase Project ฟรีหนึ่งครั้ง</strong><br>โค้ดระบบออนไลน์พร้อมแล้ว เมื่อใส่ Web App Config ผู้เล่นจะเข้าสู่ระบบด้วย Google และพบกันในแผนที่</div>`
     : onlineState.error ? `<div class="online-alert error">${esc(onlineState.error)}</div>` : "";
   const googleConnected=onlineState.user && !onlineState.user.isAnonymous;
-  openModal(`<div class="eyebrow">ONLINE PIXEL ID • CLOUD SAVE</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${googleConnected ? '<button class="btn small dark" type="button" id="signOutGoogle">ออกจากระบบ</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><p class="online-help">Google ID ใช้บันทึกคะแนน ข้อที่เคยทำ บุ๊กมาร์ก ประวัติสอบ และตำแหน่งขึ้น Cloud ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม โดยไม่เห็นอีเมล</p></form>`);
+  const retryButton=googleConnected && onlineState.phase==="error" ? '<button class="btn small sky" type="button" id="retryOnline">ลองเชื่อมต่อใหม่</button>' : "";
+  openModal(`<div class="eyebrow">ONLINE PIXEL ID • CLOUD SAVE</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${retryButton}${googleConnected ? '<button class="btn small dark" type="button" id="signOutGoogle">ออกจากระบบ</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><p class="online-help">Google ID ใช้บันทึกคะแนน ข้อที่เคยทำ บุ๊กมาร์ก ประวัติสอบ และตำแหน่งขึ้น Cloud ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม โดยไม่เห็นอีเมล</p></form>`);
   const refreshDraft=()=>{
     $("#onlineAvatarPreview").innerHTML=api?.avatarMarkup?.(draft,"large") || "";
     $$("[data-avatar-group]",modalBody).forEach(button=>{
@@ -1127,6 +1128,21 @@ function openOnlineDialog(){
     await api.signOut();
     closeModal();
     showToast("ออกจากระบบแล้ว");
+  });
+  $("#retryOnline")?.addEventListener("click",async event=>{
+    const button=event.currentTarget;
+    button.disabled=true;
+    button.textContent="กำลังเชื่อมต่อ…";
+    try{
+      onlineState=await api.reconnect();
+      updateOnlineHud();
+      closeModal();
+      showToast(onlineState.phase==="online" ? "กลับมาออนไลน์แล้ว" : onlineState.error || "ยังเชื่อมต่อไม่สำเร็จ");
+    }catch(error){
+      button.disabled=false;
+      button.textContent="ลองเชื่อมต่อใหม่";
+      showToast(error.message || "ยังเชื่อมต่อไม่สำเร็จ");
+    }
   });
 }
 

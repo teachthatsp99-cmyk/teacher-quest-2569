@@ -128,7 +128,7 @@ for(const feature of ['startBattle','beginExam','renderReview','renderAdventure'
 for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
-for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required']){
+for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');

@@ -401,6 +401,29 @@ test('configured production mode requires Google before the game becomes interac
   await expect(page.locator('#authGate')).toBeHidden();
   await expect(page.locator('body')).not.toHaveClass(/auth-locked/);
   expect(await page.locator('.app-shell').evaluate(element=>element.inert)).toBe(false);
+
+  await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,
+    phase:'error',
+    connected:false,
+    user:{uid:'google-test',isAnonymous:false,provider:'google'},
+    error:'Firebase ปฏิเสธสิทธิ์'
+  }));
+  await page.locator('#onlineBtn').click();
+  await expect(page.locator('#retryOnline')).toBeVisible();
+  await expect(page.locator('.online-alert.error')).toContainText('Firebase ปฏิเสธสิทธิ์');
+});
+
+test('Google login lifecycle prevents duplicate profile attachment and resets online listeners',async({page})=>{
+  const response=await page.request.get(`${url}/online.js`);
+  expect(response.ok()).toBe(true);
+  const source=await response.text();
+  const signInSection=source.slice(source.indexOf('async function signInGoogle'),source.indexOf('async function signOut'));
+  expect(source).toContain('let attachPromise=null');
+  expect(source).toContain('databaseModule.runTransaction(profileRef');
+  expect(source).toContain('function clearCounterSubscriptions()');
+  expect(source).toContain('async function reconnect()');
+  expect(signInSection).not.toContain('await attachUser(result.user)');
 });
 
 test('cloud progress bundle restores game history and adventure position',async({page})=>{
