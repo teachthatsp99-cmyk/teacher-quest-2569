@@ -343,6 +343,42 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   expect(pageErrors).toEqual([]);
 });
 
+test('adventure selection, readable labels and map foundation stay synchronized',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(initial.mapId).toBe('academy-plaza');
+  expect(initial.worldVersion).toBe(2);
+  expect(initial.mapIds).toEqual(['academy-plaza']);
+  expect(initial.playerLabel).toMatch(/^คุณ • /);
+  await expect(page.locator('.adventure-mini-legend')).toContainText('คุณ');
+  await expect(page.locator('.adventure-mini-legend')).toContainText('เพื่อน');
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('research'))).toBe(true);
+  await page.evaluate(()=>window.teacherQuestAdventureDebug.interact());
+  const complete=page.locator('[data-adventure-mode="complete"]');
+  const quick=page.locator('[data-adventure-mode="quick"]');
+  const boss=page.locator('[data-adventure-mode="boss"]');
+  await expect(complete).toBeFocused();
+  await expect(complete).toHaveClass(/active-choice/);
+  await page.keyboard.press('ArrowRight');
+  await expect(quick).toBeFocused();
+  await expect(quick).toHaveClass(/active-choice/);
+  await expect(complete).not.toHaveClass(/active-choice/);
+  await boss.hover();
+  await expect(boss).toHaveClass(/active-choice/);
+  await expect(quick).not.toHaveClass(/active-choice/);
+  await page.keyboard.press('Home');
+  await expect(complete).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToTree(0))).toBe(true);
+  const byTree=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(byTree.fadedTrees).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
+});
+
 test('touch d-pad holds movement and adventure position survives navigation',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto(url,{waitUntil:'networkidle'});
@@ -365,6 +401,9 @@ test('touch d-pad holds movement and adventure position survives navigation',asy
   await page.locator('[data-view="adventure"]').first().click();
   const restored=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(Math.abs(restored.x-tapped.x)).toBeLessThan(15);
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
+  expect(stored.version).toBe(2);
+  expect(stored.mapId).toBe('academy-plaza');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });
 

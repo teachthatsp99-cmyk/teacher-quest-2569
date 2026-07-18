@@ -16,6 +16,7 @@
 .adventure-progress span{font-size:10px;color:#dce3f5;font-weight:800}
 .adventure-mini-wrap{position:relative;padding:5px;background:rgba(7,12,28,.9);border:3px solid #080a13;box-shadow:4px 4px 0 rgba(2,4,13,.78)}
 .adventure-mini-wrap canvas{display:block;width:176px;height:124px;image-rendering:pixelated}
+.adventure-mini-legend{position:absolute;left:7px;bottom:6px;display:flex;gap:4px;background:rgba(8,13,29,.9);border:2px solid #03050d;padding:2px 4px;font:900 7px monospace}.adventure-mini-legend b{color:#fff4b2}.adventure-mini-legend i{color:#c9d7ef;font-style:normal}
 .adventure-mini-label{position:absolute;right:8px;bottom:6px;background:#080d1d;color:#fff5c7;border:2px solid #03050d;padding:2px 5px;font:900 9px monospace}
 .adventure-prompt{position:absolute;z-index:6;left:50%;bottom:17px;display:flex;align-items:center;gap:9px;max-width:calc(100% - 32px);padding:8px 13px;background:rgba(7,11,24,.94);border:3px solid #03050d;box-shadow:4px 4px 0 rgba(2,4,13,.8);color:#fff6d6;font-weight:900;font-size:13px;transform:translate(-50%,25px);opacity:0;transition:transform .15s,opacity .15s;pointer-events:none}
 .adventure-prompt.visible{transform:translate(-50%,0);opacity:1}
@@ -30,7 +31,10 @@
 .adventure-dialogue-stats span{min-width:112px;padding:7px 9px;background:#0a1025;border:2px solid #03050d;color:#b9c7e2;font-size:10px}
 .adventure-dialogue-stats b{display:block;color:var(--sky);font-size:20px;line-height:1.05}
 .adventure-dialogue-actions{display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;margin-top:11px}
-.adventure-dialogue-actions .btn{font-size:11px;padding:7px 10px;box-shadow:3px 3px 0 var(--line)}
+.adventure-dialogue-actions .btn{position:relative;font-size:11px;padding:7px 10px;box-shadow:3px 3px 0 var(--line);outline:0}
+.adventure-dialogue-actions .btn:focus-visible{outline:0}
+.adventure-dialogue-actions .btn.active-choice{z-index:1;box-shadow:inset 0 0 0 4px var(--sky),5px 5px 0 var(--line);transform:translate(-1px,-1px)}
+.adventure-dialogue-actions .btn.active-choice:before{content:"";position:absolute;inset:-7px;border:3px solid var(--sky);pointer-events:none}
 .adventure-choice{display:grid;text-align:left;gap:1px}
 .adventure-choice strong{font-size:12px}
 .adventure-choice small{font-size:9px;opacity:.8}
