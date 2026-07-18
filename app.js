@@ -75,6 +75,10 @@ function moduleIconMarkup(item,className=""){
 }
 window.teacherQuestModuleIcon = moduleIconMarkup;
 const questionType = question => question.category || question.type;
+const formatReviewDate=iso=>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(iso||""))) return "ไม่ระบุ";
+  return new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"short",year:"numeric"}).format(new Date(`${iso}T12:00:00+07:00`));
+};
 const sourceMarkup = question => {
   const status={
     "official-current":["ตรงจากแหล่งทางการ","official"],
@@ -91,7 +95,12 @@ const sourceMarkup = question => {
     : question.verificationStatus === "page-reference" || question.verificationStatus === "exact-reference"
       ? "ระบุตำแหน่งจาก PDF ที่ส่ง • ลิงก์ภายนอกใช้ตรวจเทียบ"
       : "ลิงก์ภายนอกใช้สำหรับตรวจเทียบ ไม่ใช่หน้าของไฟล์ PDF";
-  return `<div class="citation-card ${status[1]}"><div class="citation-head"><span>หลักฐานข้อ ${question.id}</span><strong>${status[0]}</strong></div><p><b>เอกสาร:</b> ${esc(question.sourceDocument || question.source)}</p><p><b>ตำแหน่ง:</b> ${esc(question.sourceLocator || question.type)}</p><div class="citation-foot"><span>${evidenceNote}</span>${link}</div></div>`;
+  const freshnessStatus={
+    current:["อยู่ในรอบตรวจ","current"],
+    "review-soon":["ใกล้ถึงกำหนดตรวจซ้ำ","soon"],
+    "review-required":["ถึงกำหนดตรวจซ้ำ","required"]
+  }[question.freshnessStatus] || ["มีรอบตรวจทบทวน","current"];
+  return `<div class="citation-card ${status[1]}"><div class="citation-head"><span>หลักฐานข้อ ${question.id}</span><strong>${status[0]}</strong></div><p><b>เอกสาร:</b> ${esc(question.sourceDocument || question.source)}</p><p><b>ตำแหน่ง:</b> ${esc(question.sourceLocator || question.type)}</p><div class="citation-freshness ${freshnessStatus[1]}"><strong>${esc(question.freshnessLabel || "เนื้อหาหลักคงที่")}</strong><span>${freshnessStatus[0]} • ตรวจ ${formatReviewDate(question.lastReviewedOn)} • ทบทวนภายใน ${formatReviewDate(question.reviewDueOn)}</span></div><div class="citation-foot"><span>${evidenceNote}</span>${link}</div></div>`;
 };
 window.teacherQuestSourceMarkup=sourceMarkup;
 
@@ -1488,7 +1497,9 @@ function startCustomBattle(pool,hp){
 }
 
 function renderCodex(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>ภาพรวมเอกสารของแต่ละหมวด ส่วนตำแหน่งหน้าและหัวข้อที่ใช้จริงจะแสดงหลังตอบทุกข้อ</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><p><b>${source.questionCount} ข้อ</b> • ${source.documents.length ? `${source.documents.length} เอกสารในชุดอ้างอิง` : "ตรวจจากหน่วยงานทางการ"}</p>${source.documents.length ? `<ul class="source-document-list">${source.documents.map(document=>`<li>${esc(document)}</li>`).join("")}</ul>` : ""}<div class="source-links"><a href="${source.url}" target="_blank" rel="noopener" aria-label="เปิดแหล่งตรวจเทียบ: ${esc(source.title)}">เปิดแหล่งตรวจเทียบ ↗</a></div></article>`).join("")}</div></section>`;
+  const audit=D.questionBankAudit;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>ศูนย์ตรวจหลักฐาน</h2><p>บอกระดับความแม่นของแหล่งอ้างอิงและรอบทบทวน ไม่ใช้เลขหน้า/มาตราที่ไม่ได้ตรวจจากต้นฉบับ</p></div><button class="btn small pink" id="freshnessDrill">ฝึกข่าวและนโยบายล่าสุด</button></div><section class="evidence-audit" aria-label="สรุปคุณภาพแหล่งอ้างอิง"><article><b>${audit.pinpointReferenceCount}</b><span>ข้อชี้จุดได้<br>หน้าเอกสารหรือแหล่งตรง</span></article><article><b>${audit.topicReferenceCount}</b><span>ข้ออ้างระดับหัวข้อ<br>ไม่สร้างเลขหน้าปลอม</span></article><article><b>${audit.appliedReferenceCount}</b><span>โจทย์ประยุกต์<br>อิงหลักการหลายส่วน</span></article><article class="fresh"><b>${audit.timeSensitiveCount}</b><span>ข้อมูลเปลี่ยนเร็ว<br>ทบทวนทุก 30 วัน</span></article></section><div class="freshness-legend"><span class="stable">${audit.stableCount} เนื้อหาหลักคงที่</span><span class="law">${audit.lawWatchCount} กฎหมาย/นโยบาย</span><span class="fast">${audit.timeSensitiveCount} ข้อมูลเปลี่ยนเร็ว</span><small>ตรวจโครงสร้างหลักฐานล่าสุด ${formatReviewDate(audit.evidenceReviewedOn)} • รายละเอียดวันครบกำหนดอยู่หลังตอบแต่ละข้อ</small></div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>ภาพรวมเอกสารของแต่ละหมวด ส่วนตำแหน่งหน้า หัวข้อ และวันทบทวนจะแสดงหลังตอบทุกข้อ</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><p><b>${source.questionCount} ข้อ</b> • ${source.documents.length ? `${source.documents.length} เอกสารในชุดอ้างอิง` : "ตรวจจากหน่วยงานทางการ"}${source.timeSensitiveCount ? ` • <strong class="source-fresh-count">${source.timeSensitiveCount} ข้อเปลี่ยนเร็ว</strong>` : ""}</p>${source.documents.length ? `<ul class="source-document-list">${source.documents.map(document=>`<li>${esc(document)}</li>`).join("")}</ul>` : ""}<div class="source-links"><a href="${source.url}" target="_blank" rel="noopener" aria-label="เปิดแหล่งตรวจเทียบ: ${esc(source.title)}">เปิดแหล่งตรวจเทียบ ↗</a></div></article>`).join("")}</div></section>`;
+  $("#freshnessDrill").onclick=()=>{state.lastModule="current";saveState();go("practice");};
 }
 
 function renderShop(){

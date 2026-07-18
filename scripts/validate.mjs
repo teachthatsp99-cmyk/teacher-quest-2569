@@ -16,7 +16,7 @@ const data = context.window.GAME_DATA;
 const citationIndex = context.window.TEACHER_QUEST_CITATION_INDEX || {};
 
 if(!data) fail('GAME_DATA was not created');
-if(data?.version !== '4.3.1') fail(`expected data version 4.3.1, got ${data?.version}`);
+if(data?.version !== '4.4.0') fail(`expected data version 4.4.0, got ${data?.version}`);
 if(!Array.isArray(data?.modules) || data.modules.length !== 21) fail(`expected 21 modules, got ${data?.modules?.length}`);
 if(!Array.isArray(data?.questions) || data.questions.length !== 400) fail(`expected exactly 400 questions, got ${data?.questions?.length}`);
 
@@ -66,6 +66,10 @@ for(const question of questions){
   if(!['official-current','exact-reference','page-reference','topic-reference','applied-reference'].includes(question.verificationStatus)) fail(`question ${question.id} has invalid verification status`);
   if(question.verificationStatus === 'official-current' && !question.sourceDirect) fail(`question ${question.id} claims an official direct source without a direct link`);
   if(question.verificationStatus === 'page-reference' && (!Number.isInteger(question.sourcePage) || question.sourcePage < 1 || !/^หน้า \d+ •/.test(question.sourceLocator))) fail(`question ${question.id} has an invalid page-level citation`);
+  if(!['time-sensitive','law-watch','stable'].includes(question.freshnessClass)) fail(`question ${question.id} has invalid freshness class`);
+  if(!['current','review-soon','review-required'].includes(question.freshnessStatus)) fail(`question ${question.id} has invalid freshness status`);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(question.lastReviewedOn || '') || !/^\d{4}-\d{2}-\d{2}$/.test(question.reviewDueOn || '')) fail(`question ${question.id} has invalid review dates`);
+  if(String(question.reviewDueOn) <= String(question.lastReviewedOn)) fail(`question ${question.id} review deadline must follow its review date`);
 
   const stem = normalize(question.question);
   if(stems.has(stem)) fail(`duplicate question stem at id ${question.id}`);
@@ -117,13 +121,17 @@ if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.ref
 if(Object.keys(citationIndex).length !== 207) fail(`expected 207 page-level citation index entries, got ${Object.keys(citationIndex).length}`);
 if(data?.questionBankAudit?.pageReferenceCount !== 207) fail(`expected 207 page references, got ${data?.questionBankAudit?.pageReferenceCount}`);
 if(data?.questionBankAudit?.exactReferenceCount !== 4 || data?.questionBankAudit?.appliedReferenceCount !== 8 || data?.questionBankAudit?.topicReferenceCount !== 101) fail('citation status totals changed unexpectedly');
+if(data?.questionBankAudit?.pinpointReferenceCount !== 291) fail(`expected 291 pinpoint references, got ${data?.questionBankAudit?.pinpointReferenceCount}`);
+if((data?.questionBankAudit?.timeSensitiveCount || 0)+(data?.questionBankAudit?.lawWatchCount || 0)+(data?.questionBankAudit?.stableCount || 0)!==questions.length) fail('freshness classes do not cover the full bank');
+if(data?.questionBankAudit?.timeSensitiveCount !== 48 || data?.questionBankAudit?.lawWatchCount !== 153 || data?.questionBankAudit?.stableCount !== 199) fail('freshness class totals changed unexpectedly');
+if(data?.questionBankAudit?.reviewPolicy?.['time-sensitive']?.days !== 30 || data?.questionBankAudit?.reviewPolicy?.['law-watch']?.days !== 120 || data?.questionBankAudit?.reviewPolicy?.stable?.days !== 365) fail('review cadence is incomplete');
 
 const html = fs.readFileSync('index.html','utf8');
 for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','economy.css','citations.css','citation-index.js','data.js','economy-core.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
-for(const asset of ['database.rules.json','FIREBASE_ONLINE_SETUP.md']) if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
+for(const asset of ['database.rules.json','FIREBASE_ONLINE_SETUP.md','CONTENT_REVIEW.md']) if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 for(const retired of ['cloud-sync.js','firebase-config.js','v4-cleanup.js','FIREBASE_SETUP.md','firestore.rules']){
   if(fs.existsSync(retired)) fail(`retired file still exists: ${retired}`);
   if(html.includes(retired)) fail(`index.html still references retired file ${retired}`);
@@ -221,7 +229,7 @@ if(/service_account|private_key|BEGIN PRIVATE KEY/i.test(onlineConfig)) fail('on
 for(const value of ['teacher-quest-2569.firebaseapp.com','teacher-quest-2569-default-rtdb.asia-southeast1.firebasedatabase.app','localHosts.has(location.hostname)?null:productionConfig']){
   if(!onlineConfig.includes(value)) fail(`online config is missing ${value}`);
 }
-for(const feature of ['balancedSample','verificationStatus','sourceUrl','SMART DRILL']){
+for(const feature of ['balancedSample','verificationStatus','sourceUrl','freshnessClass','reviewDueOn','SMART DRILL']){
   if(!v4.includes(feature) && !dataSource.includes(feature)) fail(`V4/data is missing ${feature}`);
 }
 

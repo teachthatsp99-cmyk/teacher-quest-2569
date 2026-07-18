@@ -155,6 +155,39 @@ test('English and Thai culture are separate modules with truthful counts and doc
   await expect(page.locator('#examCount')).toHaveValue('12');
 });
 
+test('source audit separates pinpoint, topic, applied and time-sensitive evidence',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  const audit=await page.evaluate(()=>{
+    const data=window.GAME_DATA;
+    const current=data.questions.find(question=>question.id===351);
+    return {
+      pinpoint:data.questionBankAudit.pinpointReferenceCount,
+      topic:data.questionBankAudit.topicReferenceCount,
+      applied:data.questionBankAudit.appliedReferenceCount,
+      freshness:[data.questionBankAudit.timeSensitiveCount,data.questionBankAudit.lawWatchCount,data.questionBankAudit.stableCount],
+      current:{className:current.freshnessClass,status:current.freshnessStatus,last:current.lastReviewedOn,due:current.reviewDueOn,markup:window.teacherQuestSourceMarkup(current)}
+    };
+  });
+  expect(audit.pinpoint).toBe(291);
+  expect(audit.topic).toBe(101);
+  expect(audit.applied).toBe(8);
+  expect(audit.freshness).toEqual([48,153,199]);
+  expect(audit.current.className).toBe('time-sensitive');
+  expect(audit.current.status).toBe('current');
+  expect(audit.current.last).toBe('2026-07-16');
+  expect(audit.current.due).toBe('2026-08-15');
+  expect(audit.current.markup).toContain('ข้อมูลเปลี่ยนเร็ว');
+  expect(audit.current.markup).toContain('ทบทวนภายใน');
+
+  await page.locator('[data-view="codex"]').click();
+  await expect(page.locator('.evidence-audit article')).toHaveCount(4);
+  await expect(page.locator('.evidence-audit')).toContainText('291');
+  await expect(page.locator('.freshness-legend')).toContainText('48 ข้อมูลเปลี่ยนเร็ว');
+  await page.locator('#freshnessDrill').click();
+  await expect(page.locator('#practiceModule')).toHaveValue('current');
+  await expect(page.locator('#completePoolText')).toContainText('20 ข้อ');
+});
+
 test('soundtrack raises the tempo for a boss encounter and exposes the current theme',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   await page.locator('[data-view="exam"]').click();

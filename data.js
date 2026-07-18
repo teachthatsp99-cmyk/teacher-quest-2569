@@ -1,5 +1,11 @@
 (()=>{
 const VERIFIED_AT="16 กรกฎาคม 2569";
+const EVIDENCE_REVIEWED_ON="2026-07-18";
+const CONTENT_REVIEW_POLICY=Object.freeze({
+  "time-sensitive":{label:"ข้อมูลเปลี่ยนเร็ว",days:30},
+  "law-watch":{label:"กฎหมาย/นโยบาย ต้องติดตามฉบับแก้ไข",days:120},
+  stable:{label:"เนื้อหาหลักคงที่",days:365}
+});
 const modules=[
 {id:"learn",title:"ศาสตร์การสอน",icon:"◆",boss:"จอมมารห้องเรียน",summary:"ผู้เรียนเป็นสำคัญ การคิดวิเคราะห์ การออกแบบกิจกรรม และการสะท้อนผล",source:"หลักการสอนที่เน้นการคิดวิเคราะห์และผู้เรียนเป็นสำคัญ",official:"https://www.unesco.org/en/education"},
 {id:"curriculum",title:"หลักสูตรและอาชีวศึกษา",icon:"▤",boss:"ผู้พิทักษ์หลักสูตร",summary:"สมรรถนะ การพัฒนาหลักสูตร และการจัดการเรียนรู้อาชีวศึกษา",source:"หลักสูตรและการพัฒนาหลักสูตร อาชีวศึกษา",official:"https://bsq.vec.go.th/"},
@@ -1098,6 +1104,31 @@ const citationOverrides=new Map([
   [382,{sourceLocator:"หน้า 4–6 • Part II: Structure — first conditional",verificationStatus:"topic-reference"}]
 ]);
 const citationIndex=window.TEACHER_QUEST_CITATION_INDEX || {};
+const lawWatchModules=new Set(["eduact","child","disability","civil","ksp","voclaw","policy","admin","quality"]);
+const timeSensitivePattern=/ปัจจุบัน|ปี 2569|พ\.ศ\. 2569|พ\.ศ\. 2568|2569–2570|ไตรมาส|เงินเฟ้อ|เศรษฐกิจไทย|หนี้สาธารณะ|AI Governance|AIGPC|บุคคลดำรงตำแหน่ง|หลักสูตรประถมศึกษาตอนต้น|หนังสือเวียน|ว \d+\/2569/;
+const isoFromVerifiedAt=value=>String(value||"").startsWith("15 ")?"2026-07-15":String(value||"").startsWith("16 ")?"2026-07-16":EVIDENCE_REVIEWED_ON;
+const addDaysIso=(iso,days)=>{
+  const date=new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate()+days);
+  return date.toISOString().slice(0,10);
+};
+const freshnessOf=question=>{
+  const searchable=`${question.type} ${question.question} ${question.explanation}`;
+  const freshnessClass=question.module==="current"||timeSensitivePattern.test(searchable)
+    ? "time-sensitive"
+    : lawWatchModules.has(question.module)?"law-watch":"stable";
+  const policy=CONTENT_REVIEW_POLICY[freshnessClass];
+  const lastReviewedOn=question.verifiedAt?isoFromVerifiedAt(question.verifiedAt):EVIDENCE_REVIEWED_ON;
+  const reviewDueOn=addDaysIso(lastReviewedOn,policy.days);
+  const daysRemaining=Math.ceil((new Date(`${reviewDueOn}T23:59:59+07:00`).getTime()-Date.now())/86400000);
+  return {
+    freshnessClass,
+    freshnessLabel:policy.label,
+    lastReviewedOn,
+    reviewDueOn,
+    freshnessStatus:daysRemaining<0?"review-required":daysRemaining<=14?"review-soon":"current"
+  };
+};
 questions.forEach(question=>{
   const module=modules.find(item=>item.id===question.module);
   const explicitSourceUrl=Boolean(question.sourceUrl);
@@ -1110,8 +1141,9 @@ questions.forEach(question=>{
     : `หัวข้อในเอกสาร • ${question.type}`;
   question.verificationStatus=question.sourceDirect ? "official-current" : "topic-reference";
   Object.assign(question,citationIndex[question.id] || {},citationOverrides.get(question.id) || {});
+  Object.assign(question,freshnessOf(question));
 });
-const questionBankAudit={version:"4.3.1",questionCount:questions.length,moduleCount:modules.length,uploadedDocumentCount:sourceInventory.length,uniqueDocumentCount:sourceInventory.filter(item=>item.status!=="duplicate").length,answerDistribution:{ก:questions.filter(q=>q.answer===0).length,ข:questions.filter(q=>q.answer===1).length,ค:questions.filter(q=>q.answer===2).length,ง:questions.filter(q=>q.answer===3).length},categoryDistribution:Object.fromEntries([...new Set(questions.map(q=>q.category))].map(category=>[category,questions.filter(q=>q.category===category).length])),verifiedCount:questions.filter(q=>q.verificationStatus==="official-current").length,referenceBackedCount:questions.filter(q=>q.verificationStatus!=="official-current").length,pageReferenceCount:questions.filter(q=>q.verificationStatus==="page-reference").length,exactReferenceCount:questions.filter(q=>q.verificationStatus==="exact-reference").length,topicReferenceCount:questions.filter(q=>q.verificationStatus==="topic-reference").length,appliedReferenceCount:questions.filter(q=>q.verificationStatus==="applied-reference").length,sourceCoverage:modules.map(module=>({module:module.id,source:module.source,sourceUrl:module.official,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(q=>q.module===module.id).length})),sourceInventory,standards:["ปรับตัวเลือกเพื่อลดเบาะแสจากความยาวและคำสุดโต่ง","ตำแหน่งเฉลยสมดุลทั้งสี่ตัวเลือก","ทุกข้อระบุเอกสารชุดอ้างอิงพร้อมตำแหน่งหัวข้อ และแยกลิงก์ตรงออกจากลิงก์ตรวจเทียบ","ผูกหน้าเอกสารเฉพาะคู่ที่ผ่านเกณฑ์ข้อความรายหน้า และคงป้ายหัวข้อเมื่อหลักฐานยังคลุมเครือ","คลัง 400 ข้อใน 21 หมวด โดยจำนวนต่อหมวดอ่านจากคลังจริงและครบ 3 ระดับความยาก","ภารกิจหลักของแต่ละด่านทำครบทั้งคลังโดยไม่ซ้ำในภารกิจเดียว"]};
+const questionBankAudit={version:"4.4.0",questionCount:questions.length,moduleCount:modules.length,uploadedDocumentCount:sourceInventory.length,uniqueDocumentCount:sourceInventory.filter(item=>item.status!=="duplicate").length,evidenceReviewedOn:EVIDENCE_REVIEWED_ON,answerDistribution:{ก:questions.filter(q=>q.answer===0).length,ข:questions.filter(q=>q.answer===1).length,ค:questions.filter(q=>q.answer===2).length,ง:questions.filter(q=>q.answer===3).length},categoryDistribution:Object.fromEntries([...new Set(questions.map(q=>q.category))].map(category=>[category,questions.filter(q=>q.category===category).length])),verifiedCount:questions.filter(q=>q.verificationStatus==="official-current").length,referenceBackedCount:questions.filter(q=>q.verificationStatus!=="official-current").length,pageReferenceCount:questions.filter(q=>q.verificationStatus==="page-reference").length,exactReferenceCount:questions.filter(q=>q.verificationStatus==="exact-reference").length,topicReferenceCount:questions.filter(q=>q.verificationStatus==="topic-reference").length,appliedReferenceCount:questions.filter(q=>q.verificationStatus==="applied-reference").length,pinpointReferenceCount:questions.filter(q=>["official-current","exact-reference","page-reference"].includes(q.verificationStatus)).length,timeSensitiveCount:questions.filter(q=>q.freshnessClass==="time-sensitive").length,lawWatchCount:questions.filter(q=>q.freshnessClass==="law-watch").length,stableCount:questions.filter(q=>q.freshnessClass==="stable").length,reviewRequiredCount:questions.filter(q=>q.freshnessStatus==="review-required").length,sourceCoverage:modules.map(module=>({module:module.id,source:module.source,sourceUrl:module.official,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(q=>q.module===module.id).length,timeSensitiveCount:questions.filter(q=>q.module===module.id&&q.freshnessClass==="time-sensitive").length})),sourceInventory,reviewPolicy:CONTENT_REVIEW_POLICY,standards:["ปรับตัวเลือกเพื่อลดเบาะแสจากความยาวและคำสุดโต่ง","ตำแหน่งเฉลยสมดุลทั้งสี่ตัวเลือก","ทุกข้อระบุเอกสารชุดอ้างอิงพร้อมตำแหน่งหัวข้อ และแยกลิงก์ตรงออกจากลิงก์ตรวจเทียบ","ผูกหน้าเอกสารเฉพาะคู่ที่ผ่านเกณฑ์ข้อความรายหน้า และคงป้ายหัวข้อเมื่อหลักฐานยังคลุมเครือ","แสดงวันตรวจและวันครบกำหนดทบทวน โดยแยกข้อมูลเปลี่ยนเร็ว กฎหมาย/นโยบาย และเนื้อหาหลักคงที่","คลัง 400 ข้อใน 21 หมวด โดยจำนวนต่อหมวดอ่านจากคลังจริงและครบ 3 ระดับความยาก","ภารกิจหลักของแต่ละด่านทำครบทั้งคลังโดยไม่ซ้ำในภารกิจเดียว"]};
 const codex=[
 {title:"สูตร 9–12–15",icon:"#",items:["ภาคบังคับ 9 ปี","สิทธิขั้นพื้นฐานตาม พ.ร.บ. ไม่น้อยกว่า 12 ปี","นโยบาย/คำสั่งการศึกษาฟรี 15 ปี ต้องแยกจากตัวบท"]},
 {title:"สามรูปแบบการศึกษา",icon:"△",items:["ในระบบ","นอกระบบ","ตามอัธยาศัย","ผลการเรียนและประสบการณ์สามารถเทียบโอนได้ตามหลักเกณฑ์"]},
@@ -1120,6 +1152,6 @@ const codex=[
 {title:"AI อย่างรับผิดชอบ",icon:"⚙",items:["ไม่ใส่ข้อมูลส่วนบุคคลโดยไม่จำเป็น","ตรวจข้อเท็จจริงและอคติ","เปิดเผยการใช้เมื่อเกี่ยวกับงานประเมิน","มนุษย์รับผิดชอบการตัดสินใจสุดท้าย"]},
 {title:"วงจรวิจัยในชั้นเรียน",icon:"◉",items:["ระบุปัญหาจากหลักฐาน","วางแผน","ปฏิบัติและเก็บข้อมูล","สะท้อนผลและปรับรอบต่อไป"]}
 ];
-const sources=modules.map(module=>({title:module.title,url:module.official,note:module.source,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(question=>question.module===module.id).length}));
-window.GAME_DATA={version:"4.3.1",verifiedAt:VERIFIED_AT,modules,questions,questionBankAudit,codex,sources};
+const sources=modules.map(module=>({title:module.title,url:module.official,note:module.source,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(question=>question.module===module.id).length,timeSensitiveCount:questions.filter(question=>question.module===module.id&&question.freshnessClass==="time-sensitive").length}));
+window.GAME_DATA={version:"4.4.0",verifiedAt:VERIFIED_AT,modules,questions,questionBankAudit,codex,sources};
 })();
