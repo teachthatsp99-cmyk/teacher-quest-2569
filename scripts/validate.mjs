@@ -137,7 +137,7 @@ const v4 = fs.readFileSync('v4.js','utf8');
 for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES','renderShop','teacherQuestEconomyDebug','ECONOMY.consume']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','data-emote','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','startAction','switchMap','training-grove','active-choice']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','data-emote','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','startAction','switchMap','training-grove','law-archive','future-campus','MODULE_MAPS','active-choice']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
 for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)']){
@@ -164,10 +164,10 @@ try{
   vm.createContext(worldContext);
   vm.runInContext(fs.readFileSync('world-core.js','utf8'),worldContext,{filename:'world-core.js'});
   const worldCore=worldContext.window.TeacherQuestWorldCore;
-  const registry=worldCore?.createMapRegistry?.([{id:'academy-plaza',title:'โลกครูเควสต์',width:2048,height:1536,spawn:{x:1024,y:812}},{id:'training-grove',title:'ป่าฝึก',width:2048,height:1536,spawn:{x:1024,y:930}}]);
+  const registry=worldCore?.createMapRegistry?.([{id:'academy-plaza',title:'โลกครูเควสต์',width:2048,height:1536,spawn:{x:1024,y:812}},{id:'training-grove',title:'ป่าฝึก',width:2048,height:1536,spawn:{x:1024,y:930}},{id:'law-archive',title:'โลกกฎหมาย',width:2048,height:1536,spawn:{x:1024,y:930}},{id:'future-campus',title:'โลกอนาคต',width:2048,height:1536,spawn:{x:1024,y:930}}]);
   const migrated=registry?.normalizePosition?.({x:1200,y:900,direction:'left'});
-  if(worldCore?.version!==3 || registry?.defaultMapId!=='academy-plaza' || registry?.ids?.length!==2) fail('world core registry is not initialized at version 3 with two maps');
-  if(migrated?.mapId!=='academy-plaza' || migrated?.version!==3 || migrated?.x!==1200 || migrated?.direction!=='left') fail('world core cannot migrate the legacy single-map position');
+  if(worldCore?.version!==4 || registry?.defaultMapId!=='academy-plaza' || registry?.ids?.length!==4) fail('world core registry is not initialized at version 4 with four maps');
+  if(migrated?.mapId!=='academy-plaza' || migrated?.version!==4 || migrated?.x!==1200 || migrated?.direction!=='left') fail('world core cannot migrate the legacy single-map position');
   const bounded=registry?.normalizePosition?.({mapId:'missing-map',x:-50,y:99999,direction:'invalid'});
   if(bounded?.mapId!=='academy-plaza' || bounded?.x!==40 || bounded?.y!==1504 || bounded?.direction!=='down') fail('world core does not clamp or recover invalid position data');
   const codec=registry?.exploration?.('academy-plaza');
@@ -186,6 +186,7 @@ try{
   if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
   if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
   if(!rulesText.includes("$zone === 'training-grove'")) fail('database rules do not allow the Phase 2 training map presence zone');
+  if(!rulesText.includes("$zone === 'law-archive'") || !rulesText.includes("$zone === 'future-campus'")) fail('database rules do not allow the Phase 6 thematic map presence zones');
   if(!rulesText.includes("newData.val() === 'crown'")) fail('database rules do not allow the Phase 3 accessory allowlist');
   if(!rulesText.includes("newData.val() === 'spin'")) fail('database rules do not allow the Phase 3 action allowlist');
   if(!rulesText.includes("newData.val() === 'english'")) fail('database rules do not allow the split English raid module');

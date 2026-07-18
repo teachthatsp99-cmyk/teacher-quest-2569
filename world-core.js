@@ -1,7 +1,7 @@
 (()=>{
 "use strict";
 
-const WORLD_STATE_VERSION=3;
+const WORLD_STATE_VERSION=4;
 const EXPLORATION_CELL_SIZE=64;
 const DIRECTIONS=Object.freeze(["up","down","left","right"]);
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,Number(value)||0));

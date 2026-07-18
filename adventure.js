@@ -8,10 +8,20 @@ const WORLD_CORE = window.TeacherQuestWorldCore;
 if(!WORLD_CORE) throw new Error("TeacherQuestWorldCore must load before adventure.js");
 const ACADEMY_MAP_ID="academy-plaza";
 const TRAINING_MAP_ID="training-grove";
+const LAW_MAP_ID="law-archive";
+const FUTURE_MAP_ID="future-campus";
 const MAP_REGISTRY = WORLD_CORE.createMapRegistry([
   {id:ACADEMY_MAP_ID,title:"โลกครูเควสต์",short:"ศูนย์กลาง",width:2048,height:1536,tile:32,spawn:{x:1024,y:812},musicScene:"plaza"},
-  {id:TRAINING_MAP_ID,title:"ป่าฝึกเอาตัวรอด",short:"สนามกระโดด",width:2048,height:1536,tile:32,spawn:{x:1024,y:930},musicScene:"district1"}
+  {id:TRAINING_MAP_ID,title:"ป่าฝึกเอาตัวรอด",short:"สนามกระโดด",width:2048,height:1536,tile:32,spawn:{x:1024,y:930},musicScene:"district1"},
+  {id:LAW_MAP_ID,title:"นครคัมภีร์กฎหมาย",short:"โลกกฎหมาย",width:2048,height:1536,tile:32,spawn:{x:1024,y:930},musicScene:"district2"},
+  {id:FUTURE_MAP_ID,title:"มหานครอนาคตการศึกษา",short:"โลกอนาคต",width:2048,height:1536,tile:32,spawn:{x:1024,y:930},musicScene:"district3"}
 ]);
+const MAP_META=Object.freeze({
+  [ACADEMY_MAP_ID]:Object.freeze({icon:"⌂",color:"#ffd45c",description:"ศูนย์กลางศาสตร์ครูและประตูเชื่อมโลก"}),
+  [TRAINING_MAP_ID]:Object.freeze({icon:"J",color:"#58e7b2",description:"สนามฝึกกระโดด ทางลัด และการสำรวจ"}),
+  [LAW_MAP_ID]:Object.freeze({icon:"§",color:"#ff9b6a",description:"กฎหมายการศึกษา วิชาชีพ และการบริหารราชการ"}),
+  [FUTURE_MAP_ID]:Object.freeze({icon:"✦",color:"#a88cff",description:"ภาษา วัฒนธรรม นวัตกรรม คุณภาพ และเหตุการณ์ปัจจุบัน"})
+});
 const DEFAULT_MAP = MAP_REGISTRY.get(MAP_REGISTRY.defaultMapId);
 const WORLD_WIDTH = DEFAULT_MAP.width;
 const WORLD_HEIGHT = DEFAULT_MAP.height;
@@ -40,13 +50,16 @@ const DISTRICTS = Object.freeze([
   {name:"ป้อมอนาคตการศึกษา",short:"อนาคต",color:"#a88cff",x:1024,y:768,w:1024,h:768,hub:{x:1536,y:1152}}
 ]);
 
-const PORTAL_POSITIONS = Object.freeze([
-  {x:224,y:208},{x:480,y:192},{x:752,y:272},{x:304,y:512},{x:688,y:528},
-  {x:1280,y:208},{x:1536,y:192},{x:1816,y:288},{x:1304,y:520},{x:1696,y:520},
-  {x:224,y:1000},{x:496,y:976},{x:760,y:1096},{x:304,y:1320},{x:704,y:1328},
-  {x:1280,y:992},{x:1552,y:976},{x:1816,y:1096},{x:1312,y:1320},{x:1712,y:1328},
-  {x:1930,y:1328}
+const THEMED_PORTAL_POSITIONS = Object.freeze([
+  {x:376,y:300},{x:752,y:288},{x:1296,y:288},{x:1672,y:300},
+  {x:360,y:1136},{x:752,y:1184},{x:1296,y:1184},{x:1688,y:1136}
 ]);
+const MODULE_MAPS=Object.freeze({
+  [ACADEMY_MAP_ID]:Object.freeze(["learn","curriculum","measure","research","psych","student","classroom","profession"]),
+  [LAW_MAP_ID]:Object.freeze(["eduact","child","disability","civil","ksp","voclaw","admin"]),
+  [FUTURE_MAP_ID]:Object.freeze(["media","culture","english","policy","quality","current"])
+});
+const MAP_DISTRICT_INDEX=Object.freeze({[ACADEMY_MAP_ID]:0,[LAW_MAP_ID]:2,[FUTURE_MAP_ID]:3});
 
 const BUILDINGS = Object.freeze([
   {x:872,y:596,w:304,h:150,kind:"academy",name:"สถาบันครูเควสต์"},
@@ -83,6 +96,24 @@ const TRAINING_BUILDINGS = Object.freeze([
   {x:300,y:884,w:154,h:108,kind:"house",name:"ค่ายพักนักสำรวจ"},
   {x:1594,y:884,w:154,h:108,kind:"house",name:"ฐานฝึกทางลัด"}
 ]);
+const LAW_BUILDINGS = Object.freeze([
+  {x:856,y:548,w:336,h:168,kind:"archive",name:"หอจดหมายเหตุกฎหมาย"},
+  {x:256,y:724,w:190,h:126,kind:"archive",name:"ศาลาครูและบุคลากร"},
+  {x:1602,y:724,w:190,h:126,kind:"fort",name:"ป้อมบริหารการศึกษา"}
+]);
+const LAW_WATER = Object.freeze([
+  {x:72,y:84,w:600,h:222},{x:1376,y:84,w:600,h:222},
+  {x:96,y:1272,w:520,h:168},{x:1432,y:1272,w:520,h:168}
+]);
+const FUTURE_BUILDINGS = Object.freeze([
+  {x:856,y:548,w:336,h:168,kind:"lab",name:"สถาบันอนาคตการศึกษา"},
+  {x:250,y:720,w:200,h:130,kind:"lab",name:"หอเทคโนโลยีและสื่อ"},
+  {x:1598,y:720,w:200,h:130,kind:"fort",name:"ศูนย์นโยบาย 2569"}
+]);
+const FUTURE_WATER = Object.freeze([
+  {x:56,y:72,w:420,h:200},{x:1572,y:72,w:420,h:200},
+  {x:720,y:1260,w:608,h:180}
+]);
 const LOW_BARRIERS = Object.freeze({
   [ACADEMY_MAP_ID]:[
     {x:1210,y:794,w:18,h:116,label:"รั้วทางลัด"}
@@ -92,14 +123,24 @@ const LOW_BARRIERS = Object.freeze({
     {x:760,y:1008,w:220,h:18,label:"แนวรั้วฝึก 2"},
     {x:1070,y:1008,w:220,h:18,label:"แนวรั้วฝึก 3"},
     {x:1376,y:720,w:18,h:210,label:"แนวรั้วฝึก 4"}
-  ]
+  ],
+  [LAW_MAP_ID]:[],
+  [FUTURE_MAP_ID]:[]
 });
 const WORLD_GATES = Object.freeze({
   [ACADEMY_MAP_ID]:[
-    {id:"gate-training",x:1280,y:850,name:"ป่าฝึกเอาตัวรอด",targetMap:TRAINING_MAP_ID,target:{x:1024,y:930,direction:"up"},color:"#58e7b2"}
+    {id:"gate-training",x:1280,y:850,name:"ป่าฝึกเอาตัวรอด",targetMap:TRAINING_MAP_ID,target:{x:1024,y:930,direction:"up"},color:"#58e7b2"},
+    {id:"gate-law",x:768,y:850,name:"นครคัมภีร์กฎหมาย",targetMap:LAW_MAP_ID,target:{x:1024,y:930,direction:"up"},color:"#ff9b6a"},
+    {id:"gate-future",x:1024,y:1012,name:"มหานครอนาคตการศึกษา",targetMap:FUTURE_MAP_ID,target:{x:1024,y:930,direction:"up"},color:"#a88cff"}
   ],
   [TRAINING_MAP_ID]:[
     {id:"gate-academy",x:1024,y:790,name:"กลับโลกครูเควสต์",targetMap:ACADEMY_MAP_ID,target:{x:1280,y:910,direction:"down"},color:"#ffd45c"}
+  ],
+  [LAW_MAP_ID]:[
+    {id:"gate-academy",x:1024,y:790,name:"กลับโลกครูเควสต์",targetMap:ACADEMY_MAP_ID,target:{x:768,y:910,direction:"down"},color:"#ffd45c"}
+  ],
+  [FUTURE_MAP_ID]:[
+    {id:"gate-academy",x:1024,y:790,name:"กลับโลกครูเควสต์",targetMap:ACADEMY_MAP_ID,target:{x:1024,y:1068,direction:"down"},color:"#ffd45c"}
   ]
 });
 
@@ -117,6 +158,14 @@ const NPC_DEFINITIONS = Object.freeze([
 const TRAINING_NPCS = Object.freeze([
   {id:"jump-coach",x:1160,y:938,name:"ครูฝึกกระโดด",role:"บทเรียนการเคลื่อนไหว",color:"#58e7b2",dialogue:"กด SPACE หรือ J ได้แม้แป้นพิมพ์เป็นภาษาไทย ใช้กระโดดข้ามรั้วเตี้ยเพื่อเปิดทางลัด ส่วน E/ำ และ ENTER ใช้พูดคุยหรือเข้าประตู",action:"district"},
   {id:"path-scout",x:1540,y:1030,name:"นักสำรวจทางลัด",role:"ผู้ดูแลป่าฝึก",color:"#a88cff",dialogue:"พื้นที่ที่เดินผ่านจะถูกเปิดบนมินิแมพ จุดสำคัญจะปรากฏต่อเมื่อคุณสำรวจพบแล้ว ความคืบหน้านี้บันทึกไปกับ Cloud Save",action:"district"}
+]);
+const LAW_NPCS = Object.freeze([
+  {id:"law-keeper",x:1160,y:930,name:"ผู้พิทักษ์มาตรา",role:"ผู้ดูแลโลกกฎหมาย",color:"#ff9b6a",dialogue:"ประตูในโลกนี้รวบรวมกฎหมายการศึกษา กฎหมายวิชาชีพ และการบริหารราชการ อ่านเงื่อนไขและถ้อยคำให้ครบก่อนเลือกคำตอบ",action:"district"},
+  {id:"law-librarian",x:884,y:930,name:"บรรณารักษ์ราชกิจจา",role:"ผู้ตรวจแหล่งอ้างอิง",color:"#ffd45c",dialogue:"หลังตอบแต่ละข้อ ระบบจะแสดงเอกสาร หน้า หรือหัวข้อที่ตรวจพบ และแยกลิงก์ทางการออกจากเอกสารแนวข้อสอบอย่างชัดเจน",action:"codex"}
+]);
+const FUTURE_NPCS = Object.freeze([
+  {id:"future-ranger",x:1160,y:930,name:"ผู้สังเกตการณ์ 2569",role:"ผู้ดูแลโลกอนาคต",color:"#a88cff",dialogue:"โลกนี้รวมภาษา วัฒนธรรม นวัตกรรม คุณภาพ นโยบาย และเหตุการณ์ปัจจุบัน ข้อมูลที่เปลี่ยนได้จะมีวันที่ตรวจสอบกำกับ",action:"district"},
+  {id:"future-engineer",x:884,y:930,name:"วิศวกรสื่อการเรียนรู้",role:"ห้องทดลองนวัตกรรม",color:"#58e7b2",dialogue:"สำรวจประตูแต่ละแขนงเพื่อฝึกทั้งหลักการและสถานการณ์ประยุกต์ เพลงและบรรยากาศของโลกนี้จะต่างจากเขตกฎหมาย",action:"district"}
 ]);
 
 function loadAdventureState(){
@@ -157,19 +206,14 @@ function rectContains(rect,x,y,padding=0){
   return x >= rect.x-padding && x <= rect.x+rect.w+padding && y >= rect.y-padding && y <= rect.y+rect.h+padding;
 }
 
-function makeRoads(portals){
-  const roads = [
+function makeThemedRoads(portals){
+  const roads=[
     {x:0,y:744,w:WORLD_WIDTH,h:56,main:true},
     {x:996,y:0,w:56,h:WORLD_HEIGHT,main:true}
   ];
-  DISTRICTS.forEach((district,index) => {
-    const districtPortals = portals.filter(portal=>portal.district===index);
-    roads.push({x:Math.min(district.hub.x,1024)-24,y:district.hub.y-24,w:Math.abs(1024-district.hub.x)+48,h:48});
-    roads.push({x:district.hub.x-24,y:Math.min(district.hub.y,772)-24,w:48,h:Math.abs(772-district.hub.y)+48});
-    districtPortals.forEach(portal => {
-      roads.push({x:Math.min(portal.x,district.hub.x)-18,y:portal.y-18,w:Math.abs(district.hub.x-portal.x)+36,h:36});
-      roads.push({x:district.hub.x-18,y:Math.min(portal.y,district.hub.y)-18,w:36,h:Math.abs(district.hub.y-portal.y)+36});
-    });
+  portals.forEach(portal=>{
+    roads.push({x:Math.min(portal.x,1024)-18,y:portal.y-18,w:Math.abs(1024-portal.x)+36,h:36});
+    roads.push({x:1006,y:Math.min(portal.y,772)-18,w:36,h:Math.abs(772-portal.y)+36});
   });
   return roads;
 }
@@ -202,12 +246,14 @@ function districtAt(x,y){
 
 function locationNameAt(mapId,x,y){
   if(mapId===TRAINING_MAP_ID) return "ป่าฝึกเอาตัวรอด";
+  if(mapId===LAW_MAP_ID) return "นครคัมภีร์กฎหมาย";
+  if(mapId===FUTURE_MAP_ID) return "มหานครอนาคตการศึกษา";
   if(x>=816&&x<=1232&&y>=520&&y<=976) return "ลานสถาบันครูเควสต์";
   return districtAt(x,y).name;
 }
 
 function musicSceneAt(mapId,x,y){
-  if(mapId===TRAINING_MAP_ID) return "district1";
+  if(mapId!==ACADEMY_MAP_ID) return MAP_REGISTRY.get(mapId).musicScene;
   if(x>=816&&x<=1232&&y>=520&&y<=976) return "plaza";
   return `district${DISTRICTS.indexOf(districtAt(x,y))}`;
 }
@@ -232,6 +278,7 @@ function createTeacherQuestAdventure(options={}){
   const miniCanvas = root.querySelector("#adventureMiniMap");
   const mini = miniCanvas?.getContext("2d");
   const prompt = root.querySelector("#adventurePrompt");
+  const worldTitle = root.querySelector("#adventureWorldTitle");
   const districtLabel = root.querySelector("#adventureDistrict");
   const objective = root.querySelector("#adventureObjective");
   const progressText = root.querySelector("#adventureProgressText");
@@ -249,20 +296,36 @@ function createTeacherQuestAdventure(options={}){
   let activeMap=MAP_REGISTRY.get(player.mapId);
   const camera = {x:clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH),y:clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT)};
   const modules = options.modules || [];
-  const portals = modules.map((module,index) => ({...PORTAL_POSITIONS[index],module,index,district:Math.min(DISTRICTS.length-1,Math.floor(index/5))}));
+  const portals = modules.map((module,index) => {
+    const mapId=Object.keys(MODULE_MAPS).find(id=>MODULE_MAPS[id].includes(module.id))||ACADEMY_MAP_ID;
+    const mapIndex=Math.max(0,MODULE_MAPS[mapId].indexOf(module.id));
+    return {...THEMED_PORTAL_POSITIONS[mapIndex%THEMED_PORTAL_POSITIONS.length],module,index,mapId,district:MAP_DISTRICT_INDEX[mapId]??0};
+  });
   const statsCache = new Map();
-  const academyRoads = makeRoads(portals);
-  const academyNpcs = NPC_DEFINITIONS.map(npc => ({...npc,type:"npc"}));
+  const portalsFor=mapId=>portals.filter(portal=>portal.mapId===mapId);
+  const academyPortals=portalsFor(ACADEMY_MAP_ID);
+  const lawPortals=portalsFor(LAW_MAP_ID);
+  const futurePortals=portalsFor(FUTURE_MAP_ID);
+  const academyRoads = makeThemedRoads(academyPortals);
+  const lawRoads = makeThemedRoads(lawPortals);
+  const futureRoads = makeThemedRoads(futurePortals);
+  const academyNpcs = NPC_DEFINITIONS.filter(npc=>!["inventor","judge","ranger"].includes(npc.id)).map(npc => ({...npc,type:"npc"}));
   const trainingNpcs = TRAINING_NPCS.map(npc => ({...npc,type:"npc"}));
-  const academyTrees = makeTrees({portals,roads:academyRoads,npcs:academyNpcs,buildings:BUILDINGS,water:WATER,spawn:MAP_REGISTRY.get(ACADEMY_MAP_ID).spawn});
+  const lawNpcs = LAW_NPCS.map(npc => ({...npc,type:"npc"}));
+  const futureNpcs = FUTURE_NPCS.map(npc => ({...npc,type:"npc"}));
+  const academyTrees = makeTrees({portals:academyPortals,roads:academyRoads,npcs:academyNpcs,buildings:BUILDINGS,water:WATER,spawn:MAP_REGISTRY.get(ACADEMY_MAP_ID).spawn});
   const trainingTrees = makeTrees({roads:TRAINING_ROADS,npcs:trainingNpcs,buildings:TRAINING_BUILDINGS,water:TRAINING_WATER,spawn:MAP_REGISTRY.get(TRAINING_MAP_ID).spawn,salt:37,density:.54});
+  const lawTrees = makeTrees({portals:lawPortals,roads:lawRoads,npcs:lawNpcs,buildings:LAW_BUILDINGS,water:LAW_WATER,spawn:MAP_REGISTRY.get(LAW_MAP_ID).spawn,salt:71,density:.57});
+  const futureTrees = makeTrees({portals:futurePortals,roads:futureRoads,npcs:futureNpcs,buildings:FUTURE_BUILDINGS,water:FUTURE_WATER,spawn:MAP_REGISTRY.get(FUTURE_MAP_ID).spawn,salt:109,density:.59});
   const buildObstacles=(buildings,trees)=>[
     ...buildings.map(building => ({x:building.x+8,y:building.y+36,w:building.w-16,h:building.h-38})),
     ...trees.map(tree => ({x:tree.x-10,y:tree.y-8,w:20,h:17}))
   ];
   const scenes={
-    [ACADEMY_MAP_ID]:{map:MAP_REGISTRY.get(ACADEMY_MAP_ID),portals,npcs:academyNpcs,roads:academyRoads,trees:academyTrees,buildings:BUILDINGS,water:WATER,gates:WORLD_GATES[ACADEMY_MAP_ID],barriers:LOW_BARRIERS[ACADEMY_MAP_ID],obstacles:buildObstacles(BUILDINGS,academyTrees),palette:["#3c8351","#34805d","#507b49","#3d7161"],road:["#c79e5a","#bd914d"]},
-    [TRAINING_MAP_ID]:{map:MAP_REGISTRY.get(TRAINING_MAP_ID),portals:[],npcs:trainingNpcs,roads:TRAINING_ROADS,trees:trainingTrees,buildings:TRAINING_BUILDINGS,water:TRAINING_WATER,gates:WORLD_GATES[TRAINING_MAP_ID],barriers:LOW_BARRIERS[TRAINING_MAP_ID],obstacles:buildObstacles(TRAINING_BUILDINGS,trainingTrees),palette:["#254f3d","#275948","#31583b","#294b44"],road:["#8e7653","#816747"]}
+    [ACADEMY_MAP_ID]:{map:MAP_REGISTRY.get(ACADEMY_MAP_ID),portals:academyPortals,npcs:academyNpcs,roads:academyRoads,trees:academyTrees,buildings:BUILDINGS,water:WATER,gates:WORLD_GATES[ACADEMY_MAP_ID],barriers:LOW_BARRIERS[ACADEMY_MAP_ID],obstacles:buildObstacles(BUILDINGS,academyTrees),palette:["#3c8351","#34805d","#507b49","#3d7161"],road:["#c79e5a","#bd914d"],sign:"ศูนย์กลางหลายโลก",color:"#ffd45c",salt:0},
+    [TRAINING_MAP_ID]:{map:MAP_REGISTRY.get(TRAINING_MAP_ID),portals:[],npcs:trainingNpcs,roads:TRAINING_ROADS,trees:trainingTrees,buildings:TRAINING_BUILDINGS,water:TRAINING_WATER,gates:WORLD_GATES[TRAINING_MAP_ID],barriers:LOW_BARRIERS[TRAINING_MAP_ID],obstacles:buildObstacles(TRAINING_BUILDINGS,trainingTrees),palette:["#254f3d","#275948","#31583b","#294b44"],road:["#8e7653","#816747"],sign:"สนามกระโดด",color:"#58e7b2",salt:37},
+    [LAW_MAP_ID]:{map:MAP_REGISTRY.get(LAW_MAP_ID),portals:lawPortals,npcs:lawNpcs,roads:lawRoads,trees:lawTrees,buildings:LAW_BUILDINGS,water:LAW_WATER,gates:WORLD_GATES[LAW_MAP_ID],barriers:LOW_BARRIERS[LAW_MAP_ID],obstacles:buildObstacles(LAW_BUILDINGS,lawTrees),palette:["#5e473b","#634d3c","#4c5141","#59443e"],road:["#b88355","#9b6848"],sign:"นครคัมภีร์",color:"#ff9b6a",salt:71},
+    [FUTURE_MAP_ID]:{map:MAP_REGISTRY.get(FUTURE_MAP_ID),portals:futurePortals,npcs:futureNpcs,roads:futureRoads,trees:futureTrees,buildings:FUTURE_BUILDINGS,water:FUTURE_WATER,gates:WORLD_GATES[FUTURE_MAP_ID],barriers:LOW_BARRIERS[FUTURE_MAP_ID],obstacles:buildObstacles(FUTURE_BUILDINGS,futureTrees),palette:["#334c61","#34566a","#3d4d68","#31485b"],road:["#6a78a8","#596895"],sign:"มหานครอนาคต",color:"#a88cff",salt:109}
   };
   const explorationSets=new Map(MAP_REGISTRY.ids.map(mapId=>[mapId,MAP_REGISTRY.exploration(mapId).decode(storedState.exploration?.[mapId])]));
   let explorationDirty=false;
@@ -521,9 +584,7 @@ function createTeacherQuestAdventure(options={}){
     const destination=MAP_REGISTRY.get(gate.targetMap);
     dialogueEyebrow.textContent="WORLD GATE • ทางเชื่อมหลายแผนที่";
     dialogueTitle.textContent=gate.name;
-    dialogueText.textContent=gate.targetMap===TRAINING_MAP_ID
-      ? "เข้าสู่สนามฝึกที่มีหมอกบดบัง ทางลัด และรั้วเตี้ยสำหรับฝึกกระโดด ความคืบหน้าการสำรวจจะถูกบันทึกไว้"
-      : `กลับสู่ศูนย์กลางและประตูข้อสอบ ${modules.length} ด่าน โดยตำแหน่งและพื้นที่ที่เคยสำรวจยังคงอยู่`;
+    dialogueText.textContent=`${MAP_META[destination.id]?.description||"พื้นที่ใหม่ของครูเควสต์"} ความคืบหน้า หมอกที่เปิด และตำแหน่งล่าสุดของแต่ละโลกจะถูกบันทึกไว้`;
     dialogueStats.innerHTML=`<span><b>${explorationPercent(destination.id)}%</b> สำรวจแล้ว</span><span><b>${destination.short}</b> จุดหมาย</span>`;
     dialogueActions.innerHTML=`<button class="btn mint" data-gate-travel>เดินทางไป ${escapeHtml(destination.title)}</button><button class="btn dark" data-dialogue-close>อยู่ที่นี่ต่อ</button>`;
     dialogueActions.querySelector("[data-gate-travel]")?.addEventListener("click",()=>{
@@ -543,7 +604,7 @@ function createTeacherQuestAdventure(options={}){
     dialogueActions.innerHTML = npc.action in actionLabels
       ? `<button class="btn mint" data-npc-action="${npc.action}">${actionLabels[npc.action]}</button><button class="btn dark" data-dialogue-close>คุยจบ</button>`
       : npc.action === "help"
-        ? `<button class="btn mint" data-map-open>เปิดแผนที่ 4 เขต</button><button class="btn dark" data-dialogue-close>เข้าใจแล้ว</button>`
+        ? `<button class="btn mint" data-map-open>เปิดแผนที่ 4 โลก</button><button class="btn dark" data-dialogue-close>เข้าใจแล้ว</button>`
         : `<button class="btn dark" data-dialogue-close>ขอบคุณสำหรับคำแนะนำ</button>`;
     dialogueActions.querySelector("[data-npc-action]")?.addEventListener("click",event => {
       savePosition(player,explorationSets);
@@ -591,20 +652,24 @@ function createTeacherQuestAdventure(options={}){
     if(description) description.textContent=`สำรวจแล้ว ${explorationPercent()}% • จุดสำคัญจะแสดงเมื่อค้นพบ`;
     const maps=`<section class="map-world-summary">${MAP_REGISTRY.ids.map(mapId=>{
       const map=MAP_REGISTRY.get(mapId);
+      const meta=MAP_META[mapId]||MAP_META[ACADEMY_MAP_ID];
       const percent=explorationPercent(mapId);
       const discovered=percent>0||mapId===activeMap.id;
-      return `<div class="map-world-card ${mapId===activeMap.id?"active":""} ${discovered?"":"locked"}"><span>${mapId===ACADEMY_MAP_ID?"⌂":"♜"}</span><b>${discovered?escapeHtml(map.title):"พื้นที่ลับยังไม่ค้นพบ"}</b><small>${discovered?`${percent}% สำรวจแล้ว`:"ค้นหาประตูเชื่อมโลก"}</small></div>`;
+      return `<div class="map-world-card ${mapId===activeMap.id?"active":""} ${discovered?"":"locked"}" style="--map-color:${meta.color}"><span>${discovered?meta.icon:"?"}</span><b>${discovered?escapeHtml(map.title):"พื้นที่ลับยังไม่ค้นพบ"}</b><small>${discovered?`${percent}% สำรวจแล้ว`:"ค้นหาประตูเชื่อมโลก"}</small></div>`;
     }).join("")}</section>`;
-    const content=activeMap.id===ACADEMY_MAP_ID
-      ? DISTRICTS.map((district,districtIndex) => {
-          const districtPortals = portals.filter(portal=>portal.district===districtIndex);
-          return `<section class="map-district" style="--district:${district.color}"><h4>${escapeHtml(district.name)}</h4>${districtPortals.map(portal => {
-            const stats = statsFor(portal);
-            const discovered=isExploredAt(portal.x,portal.y,ACADEMY_MAP_ID);
-            return `<div class="map-zone ${discovered?"":"undiscovered"} ${stats.done >= stats.total ? "cleared" : stats.done ? "started" : ""}"><span>${discovered?escapeHtml(portal.module.icon):"?"}</span><b>${discovered?escapeHtml(portal.module.title):"ด่านที่ยังไม่ค้นพบ"}</b><small>${discovered?`${stats.done}/${stats.total} • ${stats.accuracy}%`:"สำรวจเพื่อเปิด"}</small></div>`;
-          }).join("")}</section>`;
-        }).join("")
-      : `<section class="map-district training-map-card" style="--district:#58e7b2"><h4>สนามกระโดดและทางลัด</h4><div class="map-zone started"><span>J</span><b>แนวรั้วฝึก ${currentScene().barriers.length} จุด</b><small>SPACE / J</small></div><div class="map-zone ${isExploredAt(currentScene().gates[0].x,currentScene().gates[0].y)?"started":"undiscovered"}"><span>↔</span><b>ประตูกลับโลกหลัก</b><small>${isExploredAt(currentScene().gates[0].x,currentScene().gates[0].y)?"ค้นพบแล้ว":"ยังไม่ค้นพบ"}</small></div></section>`;
+    const scene=currentScene();
+    const meta=MAP_META[activeMap.id]||MAP_META[ACADEMY_MAP_ID];
+    const portalCards=scene.portals.map(portal=>{
+      const stats=statsFor(portal);
+      const discovered=isExploredAt(portal.x,portal.y);
+      return `<div class="map-zone ${discovered?"":"undiscovered"} ${stats.done>=stats.total?"cleared":stats.done?"started":""}"><span>${discovered?escapeHtml(portal.module.icon):"?"}</span><b>${discovered?escapeHtml(portal.module.title):"ด่านที่ยังไม่ค้นพบ"}</b><small>${discovered?`${stats.done}/${stats.total} • ${stats.accuracy}%`:"สำรวจเพื่อเปิด"}</small></div>`;
+    }).join("");
+    const gateCards=scene.gates.map(gate=>{
+      const discovered=isExploredAt(gate.x,gate.y);
+      return `<div class="map-zone ${discovered?"started":"undiscovered"}"><span>${discovered?"↔":"?"}</span><b>${discovered?escapeHtml(gate.name):"ประตูโลกที่ยังไม่ค้นพบ"}</b><small>${discovered?"เดินทางได้แล้ว":"สำรวจเพื่อเปิด"}</small></div>`;
+    }).join("");
+    const trainingCard=activeMap.id===TRAINING_MAP_ID?`<div class="map-zone started"><span>J</span><b>แนวรั้วฝึก ${scene.barriers.length} จุด</b><small>SPACE / J</small></div>`:"";
+    const content=`<section class="map-district ${activeMap.id===TRAINING_MAP_ID?"training-map-card":""}" style="--district:${meta.color}"><h4>${escapeHtml(meta.description)}</h4>${trainingCard}${portalCards}${gateCards}</section>`;
     mapPanel.querySelector(".adventure-map-grid").innerHTML = maps+content;
   }
 
@@ -716,7 +781,7 @@ function createTeacherQuestAdventure(options={}){
           ctx.fillRect(wx+4+(Math.floor(elapsed*12)%8),wy+9,16,3);
           ctx.fillRect(wx+14,wy+23,12,2);
         }else if(road){
-          ctx.fillStyle = seeded(tx,ty,2+(activeMap.id===TRAINING_MAP_ID?37:0))>.55 ? currentScene().road[0] : currentScene().road[1];
+          ctx.fillStyle = seeded(tx,ty,2+currentScene().salt)>.55 ? currentScene().road[0] : currentScene().road[1];
           ctx.fillRect(wx,wy,TILE,TILE);
           ctx.fillStyle = "#a97c42";
           if(seeded(tx,ty,3)>.58) ctx.fillRect(wx+6,wy+8,5,4);
@@ -751,7 +816,7 @@ function createTeacherQuestAdventure(options={}){
     const colors=["#ffd45c","#ff72b4","#e9efff","#8dd9ff"];
     for(let ty=startY;ty<=endY;ty++) for(let tx=startX;tx<=endX;tx++){
       const x=tx*TILE+16,y=ty*TILE+16;
-      const salt=activeMap.id===TRAINING_MAP_ID?37:0;
+      const salt=currentScene().salt;
       if(!isWater(x,y) && !isRoad(x,y) && seeded(tx,ty,15+salt)>.88) drawFlower(x+(tx%3)*4-4,y+(ty%2)*5,colors[(tx+ty+4+salt)%colors.length]);
     }
   }
@@ -1022,13 +1087,9 @@ function createTeacherQuestAdventure(options={}){
       ctx.fillStyle="#081027";ctx.fillRect(tapTarget.x-12-pulse,tapTarget.y-3-pulse,24+pulse*2,6+pulse*2);ctx.fillRect(tapTarget.x-3-pulse,tapTarget.y-12-pulse,6+pulse*2,24+pulse*2);
       ctx.fillStyle="#ffd45c";ctx.fillRect(tapTarget.x-7,tapTarget.y-2,14,4);ctx.fillRect(tapTarget.x-2,tapTarget.y-7,4,14);
     }
-    if(activeMap.id===ACADEMY_MAP_ID){
-      drawSign(1018,776,"ศูนย์กลาง");
-      DISTRICTS.forEach(district => drawSign(district.hub.x,district.hub.y+76,district.short,district.color));
-    }else{
-      drawSign(1024,1030,"สนามกระโดด","#58e7b2");
-      drawSign(1536,1010,"ทางลัด","#a88cff");
-    }
+    drawSign(1024,1030,scene.sign,scene.color);
+    if(activeMap.id===ACADEMY_MAP_ID) DISTRICTS.forEach(district => drawSign(district.hub.x,district.hub.y+76,district.short,district.color));
+    if(activeMap.id===TRAINING_MAP_ID) drawSign(1536,1010,"ทางลัด","#a88cff");
     scene.buildings.forEach(drawBuilding);
     const sprites = [
       ...scene.trees.map(tree => ({y:tree.y,draw:()=>drawTree(tree)})),
@@ -1100,6 +1161,7 @@ function createTeacherQuestAdventure(options={}){
 
   function updateHud(){
     const locationName=locationNameAt(activeMap.id,player.x,player.y);
+    if(worldTitle) worldTitle.textContent=activeMap.title;
     if(locationName!==previousDistrict){
       previousDistrict=locationName;
       if(districtLabel) districtLabel.textContent=locationName;
@@ -1107,13 +1169,15 @@ function createTeacherQuestAdventure(options={}){
     }
     const totals=portals.reduce((result,portal)=>{const stats=statsFor(portal);result.done+=Math.min(stats.done,stats.total);result.total+=stats.total;return result;},{done:0,total:0});
     const explored=explorationPercent();
-    if(progressText) progressText.textContent=`แผนที่ ${explored}% • คลัง ${totals.done}/${totals.total}`;
+    if(progressText) progressText.textContent=`${activeMap.short} ${explored}% • คลัง ${totals.done}/${totals.total}`;
     if(progressBar) progressBar.style.width=`${explored}%`;
-    const unstarted=portals.find(portal=>statsFor(portal).done===0);
+    const scenePortals=currentScene().portals;
+    const unstarted=scenePortals.find(portal=>statsFor(portal).done===0);
     if(objective){
       if(activeMap.id===TRAINING_MAP_ID) objective.textContent="ภารกิจ: กระโดดข้ามรั้วและค้นหาประตูกลับโลกหลัก";
       else if(unstarted) objective.textContent=isExploredAt(unstarted.x,unstarted.y)?`ด่านที่พบแล้ว: ${unstarted.module.icon} ${unstarted.module.title}`:"สำรวจหมอกเพื่อค้นหาด่านข้อสอบที่ยังไม่เคยทำ";
-      else objective.textContent="เยี่ยมมาก! คุณเคยสำรวจครบทุกประตูแล้ว กลับไปเก็บความแม่นให้ถึง 80%";
+      else if(scenePortals.length) objective.textContent="เยี่ยมมาก! คุณเคยสำรวจครบทุกประตูในโลกนี้แล้ว กลับไปเก็บความแม่นให้ถึง 80%";
+      else objective.textContent="สำรวจโลกนี้และค้นหาประตูเดินทางกลับศูนย์กลาง";
     }
   }
 
@@ -1170,7 +1234,7 @@ function createTeacherQuestAdventure(options={}){
     if(typeof options.onPlayerState!=="function") return;
     const district=locationNameAt(activeMap.id,player.x,player.y);
     const action=Date.now()-player.actionAt<1400?player.action:"";
-    const snapshot={mapId:activeMap.id,zone:activeMap.id===TRAINING_MAP_ID?TRAINING_MAP_ID:district,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district,action,actionAt:action?player.actionAt:0};
+    const snapshot={mapId:activeMap.id,zone:activeMap.id===ACADEMY_MAP_ID?district:activeMap.id,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district,action,actionAt:action?player.actionAt:0};
     const fingerprint=`${snapshot.mapId}|${snapshot.zone}|${snapshot.x}|${snapshot.y}|${snapshot.direction}|${Number(snapshot.moving)}|${snapshot.district}|${snapshot.action}|${snapshot.actionAt}`;
     if(force || (fingerprint!==lastPresenceFingerprint && time-lastPresenceTime>=250) || time-lastPresenceTime>=20000){
       lastPresenceTime=time;
@@ -1274,9 +1338,9 @@ function createTeacherQuestAdventure(options={}){
     getState:()=>{
       const scene=currentScene();
       const codec=MAP_REGISTRY.exploration(activeMap.id);
-      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,action:Date.now()-player.actionAt<1400?player.action:"",accessory:normalizedProfile(playerProfile).avatar.accessory,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length};
+      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,action:Date.now()-player.actionAt<1400?player.action:"",accessory:normalizedProfile(playerProfile).avatar.accessory,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length,portalCount:scene.portals.length,gateCount:scene.gates.length};
     },
-    teleportToModule:id=>{if(activeMap.id!==ACADEMY_MAP_ID)switchMap(ACADEMY_MAP_ID);const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
+    teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;if(activeMap.id!==portal.mapId)switchMap(portal.mapId);player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
     teleportToNpc:id=>{const npc=currentScene().npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
     teleportToTree:index=>{const trees=currentScene().trees;const tree=trees[Math.max(0,Math.min(trees.length-1,Number(index)||0))];if(!tree)return false;player.x=clamp(tree.x+28,40,WORLD_WIDTH-40);player.y=clamp(tree.y,64,WORLD_HEIGHT-32);camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
     teleportToGate:index=>{const gate=currentScene().gates[Math.max(0,Math.min(currentScene().gates.length-1,Number(index)||0))];if(!gate)return false;player.x=gate.x;player.y=gate.y+52;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},

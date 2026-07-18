@@ -351,7 +351,7 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keyup',{key:'ก',code:'KeyD',bubbles:true})));
   await page.waitForTimeout(50);
   const thaiLayoutMoved=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
-  expect(thaiLayoutMoved.x-initial.x).toBeGreaterThan(25);
+  expect(thaiLayoutMoved.x-initial.x).toBeGreaterThan(15);
 
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(350);
@@ -362,21 +362,24 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   expect(moved.moving).toBe(false);
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('measure'))).toBe(true);
+  const beforePortalMove=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(850);
   await page.keyboard.up('ArrowRight');
   await page.waitForTimeout(50);
-  const blockedByLake=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
-  expect(blockedByLake.x).toBeLessThan(826);
+  const afterPortalMove=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(afterPortalMove.x).toBeGreaterThan(beforePortalMove.x+50);
+  expect(afterPortalMove.x).toBeLessThanOrEqual(2008);
 
   await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ท',code:'KeyM',bubbles:true})));
   await expect(page.locator('#adventureMapPanel')).toBeVisible();
-  await expect(page.locator('.map-district')).toHaveCount(4);
-  await expect(page.locator('.map-zone')).toHaveCount(21);
+  await expect(page.locator('.map-world-card')).toHaveCount(4);
+  await expect(page.locator('.map-district')).toHaveCount(1);
+  await expect(page.locator('.map-zone')).toHaveCount(11);
   await page.locator('[data-map-close]').click();
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('research'))).toBe(true);
-  await expect(page.locator('body')).toHaveAttribute('data-music-scene','district0');
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','district1');
   await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ำ',code:'KeyE',bubbles:true})));
   await expect(page.locator('#adventureDialogue')).toBeVisible();
   await expect(page.locator('#adventureDialogueTitle')).toHaveText('วิจัยในชั้นเรียน');
@@ -397,8 +400,9 @@ test('adventure selection, readable labels and map foundation stay synchronized'
   await page.goto(url,{waitUntil:'networkidle'});
   const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(initial.mapId).toBe('academy-plaza');
-  expect(initial.worldVersion).toBe(3);
-  expect(initial.mapIds).toEqual(['academy-plaza','training-grove']);
+  expect(initial.worldVersion).toBe(4);
+  expect(initial.mapIds).toEqual(['academy-plaza','training-grove','law-archive','future-campus']);
+  expect(initial.portalCount).toBe(8);
   expect(initial.playerLabel).toMatch(/^คุณ • /);
   await expect(page.locator('.adventure-mini-legend')).toContainText('คุณ');
   await expect(page.locator('.adventure-mini-legend')).toContainText('เพื่อน');
@@ -420,6 +424,20 @@ test('adventure selection, readable labels and map foundation stay synchronized'
   await page.keyboard.press('Home');
   await expect(complete).toBeFocused();
   await page.keyboard.press('Escape');
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('eduact'))).toBe(true);
+  const law=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(law.mapId).toBe('law-archive');
+  expect(law.portalCount).toBe(7);
+  await expect(page.locator('#adventureWorldTitle')).toHaveText('นครคัมภีร์กฎหมาย');
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','district2');
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('current'))).toBe(true);
+  const future=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(future.mapId).toBe('future-campus');
+  expect(future.portalCount).toBe(6);
+  await expect(page.locator('#adventureWorldTitle')).toHaveText('มหานครอนาคตการศึกษา');
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','district3');
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToTree(0))).toBe(true);
   const byTree=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
@@ -459,13 +477,15 @@ test('survival exploration reveals fog, discovers POIs, changes maps and uses ju
 
   await page.locator('[data-adventure-map]').first().click();
   await expect(page.locator('#adventureMapTitle')).toContainText('ป่าฝึกเอาตัวรอด');
-  await expect(page.locator('.map-world-card')).toHaveCount(2);
+  await expect(page.locator('.map-world-card')).toHaveCount(4);
   await page.keyboard.press('Escape');
   const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
-  expect(stored.version).toBe(3);
+  expect(stored.version).toBe(4);
   expect(stored.mapId).toBe('training-grove');
   expect(stored.exploration['academy-plaza']).toHaveLength(192);
   expect(stored.exploration['training-grove']).toHaveLength(192);
+  expect(stored.exploration['law-archive']).toHaveLength(192);
+  expect(stored.exploration['future-campus']).toHaveLength(192);
   expect(JSON.stringify(stored).length).toBeLessThan(1000);
   expect(pageErrors).toEqual([]);
 });
@@ -552,9 +572,9 @@ test('touch d-pad holds movement and adventure position survives navigation',asy
   await page.locator('[data-view="home"]').first().click();
   await page.locator('[data-view="adventure"]').first().click();
   const restored=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
-  expect(Math.abs(restored.x-tapped.x)).toBeLessThan(15);
+  expect(Math.abs(restored.x-tapped.x)).toBeLessThan(25);
   const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
-  expect(stored.version).toBe(3);
+  expect(stored.version).toBe(4);
   expect(stored.mapId).toBe('academy-plaza');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });

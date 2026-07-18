@@ -568,7 +568,7 @@ function renderAdventure(){
       <header class="adventure-intro">
         <div>
           <div class="eyebrow">ADVENTURE MODE • PIXEL WORLD</div>
-          <h1>โลกครูเควสต์</h1>
+          <h1 id="adventureWorldTitle">โลกครูเควสต์</h1>
           <p id="adventureInstructions">มือถือแตะพื้นหรือใช้ D-pad • คีย์บอร์ดใช้ WASD/ลูกศร (ภาษาไทยใช้ ไฟหก) • E/ำ หรือ ENTER โต้ตอบ • SPACE หรือ J/่ กระโดด</p>
         </div>
         <div class="adventure-intro-actions">

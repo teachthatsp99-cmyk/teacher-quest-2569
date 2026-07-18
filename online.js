@@ -18,7 +18,7 @@ const RAID_CODE_LENGTH = 6;
 const RAID_MAX_PLAYERS = 8;
 const RAID_BOSS_HP = 480;
 const RAID_HEARTBEAT = 25000;
-const RAID_RULES_REVISION = "2026-07-18.3";
+const RAID_RULES_REVISION = "2026-07-18.4";
 const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
 const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","english","policy","student","admin","quality","current"]);
@@ -42,7 +42,9 @@ const ZONE_KEYS = Object.freeze({
   "นครนวัตกรรม":"district-1",
   "ป่าคัมภีร์กฎหมาย":"district-2",
   "ป้อมอนาคตการศึกษา":"district-3",
-  "ป่าฝึกเอาตัวรอด":"training-grove"
+  "ป่าฝึกเอาตัวรอด":"training-grove",
+  "นครคัมภีร์กฎหมาย":"law-archive",
+  "มหานครอนาคตการศึกษา":"future-campus"
 });
 const configured = Boolean(CONFIG?.apiKey && CONFIG?.authDomain && CONFIG?.databaseURL && CONFIG?.projectId && CONFIG?.appId);
 const clone = value => JSON.parse(JSON.stringify(value));
