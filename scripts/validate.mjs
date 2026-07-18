@@ -134,13 +134,13 @@ const adventure = fs.readFileSync('adventure.js','utf8');
 const online = fs.readFileSync('online.js','utf8');
 const economy = fs.readFileSync('economy-core.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES','renderShop','teacherQuestEconomyDebug','ECONOMY.consume']){
+for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES','renderShop','teacherQuestEconomyDebug','ECONOMY.consume','openAdminTestPanel','adminTestBtn','adventureChatForm']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','data-emote','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','startAction','switchMap','training-grove','law-archive','future-campus','MODULE_MAPS','active-choice']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','data-emote','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','startAction','switchMap','training-grove','law-archive','future-campus','MODULE_MAPS','active-choice','setZoneMessages','drawChatBubble','revealCurrentMap']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
-for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)']){
+for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)','sendProximityMessage','zoneChat','cleanChatText','admins/']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
@@ -180,13 +180,15 @@ try{
 try{
   const rules=JSON.parse(fs.readFileSync('database.rules.json','utf8'));
   const rulesText=JSON.stringify(rules);
-  for(const path of ['profiles','visitorClaims','online','progress','world','raids']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
+  for(const path of ['profiles','admins','visitorClaims','online','progress','world','zoneChat','raids']) if(!rulesText.includes(`"${path}"`)) fail(`database rules are missing ${path}`);
   if(!rulesText.includes('auth.uid === $uid')) fail('database rules do not enforce per-user writes');
   if(!rulesText.includes("auth.token.firebase.identities['google.com'] != null")) fail('database rules do not require a linked Google identity');
   if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
   if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
   if(!rulesText.includes("$zone === 'training-grove'")) fail('database rules do not allow the Phase 2 training map presence zone');
   if(!rulesText.includes("$zone === 'law-archive'") || !rulesText.includes("$zone === 'future-campus'")) fail('database rules do not allow the Phase 6 thematic map presence zones');
+  if(!rulesText.includes("newData.child('text').val().length <= 80")) fail('proximity chat rules do not cap message length');
+  if(rules.rules?.admins?.['$uid']?.['.write']!==false) fail('client code must not grant or change Test Admin roles');
   if(!rulesText.includes("newData.val() === 'crown'")) fail('database rules do not allow the Phase 3 accessory allowlist');
   if(!rulesText.includes("newData.val() === 'spin'")) fail('database rules do not allow the Phase 3 action allowlist');
   if(!rulesText.includes("newData.val() === 'english'")) fail('database rules do not allow the split English raid module');

@@ -13,12 +13,16 @@ const POSITION_INTERVAL = 650;
 const PRESENCE_HEARTBEAT = 20000;
 const PLAYER_STALE_AFTER = 45000;
 const MAX_ZONE_PLAYERS = 40;
+const MAX_ZONE_MESSAGES = 40;
+const CHAT_MAX_LENGTH = 80;
+const CHAT_STALE_AFTER = 15000;
+const CHAT_SEND_COOLDOWN = 1500;
 const RAID_STORAGE = "teacherQuestRaidRoom_v1";
 const RAID_CODE_LENGTH = 6;
 const RAID_MAX_PLAYERS = 8;
 const RAID_BOSS_HP = 480;
 const RAID_HEARTBEAT = 25000;
-const RAID_RULES_REVISION = "2026-07-18.4";
+const RAID_RULES_REVISION = "2026-07-18.5";
 const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
 const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","english","policy","student","admin","quality","current"]);
@@ -26,6 +30,7 @@ const connectionId = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math
 const listeners = new Set();
 const zoneUnsubscribers = [];
 const remotePlayers = new Map();
+const zoneMessages = new Map();
 
 const AVATAR_OPTIONS = Object.freeze({
   skin:Object.freeze(["#f4c7a1","#e8b989","#c98f65","#8b5b3f"]),
@@ -51,6 +56,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const clamp = (value,min,max) => Math.max(min,Math.min(max,Number(value)||0));
 const validChoice = (group,value,fallback) => AVATAR_OPTIONS[group].includes(value) ? value : fallback;
 const cleanNickname = value => String(value || "").normalize("NFKC").replace(/[<>\u0000-\u001f\u007f]/g,"").replace(/\s+/g," ").trim().slice(0,20);
+const cleanChatText = value => String(value || "").normalize("NFKC").replace(/[<>\u0000-\u001f\u007f]/g,"").replace(/\s+/g," ").trim().slice(0,CHAT_MAX_LENGTH);
 const randomNickname = () => `นักผจญภัย ${String(Math.floor(1000+Math.random()*9000))}`;
 
 function normalizeAvatar(value={}){
@@ -222,8 +228,10 @@ const state = {
   totalPlayers:0,
   cloudSync:"idle",
   cloudUpdatedAt:0,
+  isAdmin:false,
   zone:null,
   zonePlayers:[],
+  zoneMessages:[],
   raid:null,
   error:""
 };
@@ -240,12 +248,14 @@ let totalUnsubscribe=null;
 let onlineConnectionRef=null;
 let onlineConnectionUid=null;
 let currentPresenceRef=null;
+let currentChatRef=null;
 let currentZone=null;
 let pendingWorldState=null;
 let lastPresenceAt=0;
 let lastPresenceFingerprint="";
 let presenceTimer=null;
 let cleanupTimer=null;
+let lastChatAt=0;
 let signingIn=false;
 let progressRef=null;
 let progressSaveTimer=null;
@@ -263,7 +273,7 @@ let raidMemberDisconnect=null;
 let raidHeartbeatTimer=null;
 
 function publicState(){
-  return clone({...state,zonePlayers:[...state.zonePlayers]});
+  return clone({...state,zonePlayers:[...state.zonePlayers],zoneMessages:[...state.zoneMessages]});
 }
 
 function emit(){
@@ -329,7 +339,25 @@ function refreshRemoteState(){
   state.zonePlayers=[...remotePlayers.values()]
     .filter(player=>now-(Number(player.lastSeen)||now)<PLAYER_STALE_AFTER)
     .sort((a,b)=>String(a.nickname).localeCompare(String(b.nickname),"th"));
+  state.zoneMessages=[...zoneMessages.values()]
+    .filter(message=>now-(Number(message.sentAt)||0)<CHAT_STALE_AFTER)
+    .sort((a,b)=>a.sentAt-b.sentAt);
   emit();
+}
+
+function messageFromSnapshot(snapshot){
+  const value=snapshot.val() || {};
+  const text=cleanChatText(value.text);
+  if(!text) return null;
+  return {
+    uid:String(snapshot.key||""),
+    nickname:cleanNickname(value.nickname)||"นักผจญภัย",
+    text,
+    x:clamp(value.x,0,2048),
+    y:clamp(value.y,0,1536),
+    sentAt:Number(value.sentAt)||Date.now(),
+    self:snapshot.key===state.user?.uid
+  };
 }
 
 function remoteFromSnapshot(snapshot){
@@ -354,7 +382,9 @@ function clearZoneSubscription(){
   clearInterval(cleanupTimer);
   cleanupTimer=null;
   remotePlayers.clear();
+  zoneMessages.clear();
   state.zonePlayers=[];
+  state.zoneMessages=[];
 }
 
 function subscribeZone(zone){
@@ -371,6 +401,18 @@ function subscribeZone(zone){
     databaseModule.onChildChanged(zoneQuery,apply),
     databaseModule.onChildRemoved(zoneQuery,snapshot=>{remotePlayers.delete(String(snapshot.key||""));refreshRemoteState();})
   );
+  const chatQuery=databaseModule.query(databaseModule.ref(database,`zoneChat/${zone}`),databaseModule.limitToLast(MAX_ZONE_MESSAGES));
+  const applyMessage=snapshot=>{
+    const message=messageFromSnapshot(snapshot);
+    if(message) zoneMessages.set(message.uid,message);
+    else zoneMessages.delete(String(snapshot.key||""));
+    refreshRemoteState();
+  };
+  zoneUnsubscribers.push(
+    databaseModule.onChildAdded(chatQuery,applyMessage),
+    databaseModule.onChildChanged(chatQuery,applyMessage),
+    databaseModule.onChildRemoved(chatQuery,snapshot=>{zoneMessages.delete(String(snapshot.key||""));refreshRemoteState();})
+  );
   cleanupTimer=setInterval(refreshRemoteState,15000);
 }
 
@@ -381,7 +423,12 @@ async function removePresence(){
     try{await databaseModule.onDisconnect(currentPresenceRef).cancel();}catch(error){/* Connection may already be closed. */}
     try{await databaseModule.remove(currentPresenceRef);}catch(error){console.warn("Could not remove world presence",error);}
   }
+  if(currentChatRef && databaseModule){
+    try{await databaseModule.onDisconnect(currentChatRef).cancel();}catch(error){/* Connection may already be closed. */}
+    try{await databaseModule.remove(currentChatRef);}catch(error){console.warn("Could not remove proximity message",error);}
+  }
   currentPresenceRef=null;
+  currentChatRef=null;
   currentZone=null;
   lastPresenceFingerprint="";
   clearZoneSubscription();
@@ -395,10 +442,16 @@ async function switchZone(zone){
     try{await databaseModule.onDisconnect(currentPresenceRef).cancel();}catch(error){/* Ignore stale connection. */}
     try{await databaseModule.remove(currentPresenceRef);}catch(error){console.warn(error);}
   }
+  if(currentChatRef){
+    try{await databaseModule.onDisconnect(currentChatRef).cancel();}catch(error){/* Ignore stale connection. */}
+    try{await databaseModule.remove(currentChatRef);}catch(error){console.warn(error);}
+  }
   currentZone=zone;
   state.zone=zone;
   currentPresenceRef=databaseModule.ref(database,`world/${zone}/${state.user.uid}`);
+  currentChatRef=databaseModule.ref(database,`zoneChat/${zone}/${state.user.uid}`);
   try{await databaseModule.onDisconnect(currentPresenceRef).remove();}catch(error){console.warn("Could not register world disconnect",error);}
+  try{await databaseModule.onDisconnect(currentChatRef).remove();}catch(error){console.warn("Could not register chat disconnect",error);}
   subscribeZone(zone);
   emit();
 }
@@ -434,6 +487,25 @@ async function flushPresence(force=false){
 function updatePresence(value){
   pendingWorldState=sanitizeWorldState(value);
   void flushPresence();
+}
+
+async function sendProximityMessage(value){
+  const text=cleanChatText(value);
+  if(!text) throw new Error("พิมพ์ข้อความก่อนส่ง");
+  if(!database || !databaseModule || !state.user || state.user.isAnonymous || state.phase!=="online") throw new Error("กรุณาเข้าสู่ระบบ Google และรอให้สถานะออนไลน์พร้อมก่อนแชต");
+  if(Date.now()-lastChatAt<CHAT_SEND_COOLDOWN) throw new Error("ส่งข้อความเร็วเกินไป กรุณารอสักครู่");
+  if(!pendingWorldState) throw new Error("กรุณาเข้าโลกผจญภัยก่อนส่งข้อความ");
+  const world=sanitizeWorldState(pendingWorldState);
+  await switchZone(world.zone);
+  lastChatAt=Date.now();
+  await databaseModule.set(currentChatRef,{
+    nickname:state.profile.nickname,
+    text,
+    x:world.x,
+    y:world.y,
+    sentAt:databaseModule.serverTimestamp()
+  });
+  return {ok:true,text};
 }
 
 async function registerOnlineConnection(){
@@ -603,6 +675,13 @@ async function attachUserOnce(user){
   },{applyLocally:false});
   state.profile=normalizeProfile(profileResult.snapshot.val());
   saveLocalProfile(state.profile);
+  try{
+    const adminSnapshot=await databaseModule.get(databaseModule.ref(database,`admins/${user.uid}`));
+    state.isAdmin=adminSnapshot.val()===true;
+  }catch(error){
+    state.isAdmin=false;
+    console.warn("Could not verify Test Admin role",error);
+  }
 
   let warning="";
   try{
@@ -675,6 +754,7 @@ async function init(){
       connectedUnsubscribe=null;
       clearProgressSync();
       state.user=user ? {uid:user.uid,isAnonymous:true,email:"",displayName:"",provider:"guest"} : null;
+      state.isAdmin=false;
       state.connected=false;
       setPhase("signin-required");
     });
@@ -760,6 +840,7 @@ async function signOut(){
   connectedUnsubscribe=null;
   clearProgressSync();
   attachedUid=null;
+  state.isAdmin=false;
   setPhase("connecting");
   await authModule.signOut(auth);
 }
@@ -805,6 +886,11 @@ async function diagnosePermissions(){
   steps.push(await diagnosticStep("presence-write","เขียนสถานะออนไลน์",async()=>{
     await databaseModule.set(connectionRef,{connectedAt:databaseModule.serverTimestamp()});
     await databaseModule.remove(connectionRef);
+  }));
+  const chatRef=databaseModule.ref(database,`zoneChat/plaza/${user.uid}`);
+  steps.push(await diagnosticStep("chat-write","ส่งและลบข้อความใกล้ตัวทดสอบ",async()=>{
+    await databaseModule.set(chatRef,{nickname:state.profile.nickname,text:"ทดสอบสิทธิ์แชต",x:1024,y:812,sentAt:databaseModule.serverTimestamp()});
+    await databaseModule.remove(chatRef);
   }));
   const code=randomRaidCode();
   const roomRef=databaseModule.ref(database,`raids/${code}`);
@@ -1062,19 +1148,26 @@ function simulateForTests(value={}){
       direction:direction(player.direction),moving:Boolean(player.moving),action:["wave","cheer","spin"].includes(player.action)?player.action:"",actionAt:Number(player.actionAt)||0,lastSeen:Date.now()
     }));
   }
+  if(value.zoneMessages){
+    state.zoneMessages=value.zoneMessages.map((message,index)=>({
+      uid:String(message.uid||`message-${index}`),nickname:cleanNickname(message.nickname)||`เพื่อน ${index+1}`,
+      text:cleanChatText(message.text),x:clamp(message.x,0,2048),y:clamp(message.y,0,1536),
+      sentAt:Number(message.sentAt)||Date.now(),self:Boolean(message.self)
+    })).filter(message=>message.text);
+  }
   emit();
 }
 
 window.TeacherQuestOnline={
   init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,reconnect,
-  updatePresence,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
+  updatePresence,sendProximityMessage,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
   createRaid,joinRaid,startRaid,attackRaid,sendRaidEmote,setRaidReady,leaveRaid,diagnosePermissions,
-  avatarOptions:AVATAR_OPTIONS,raidEmotes:RAID_EMOTES,normalizeProfile,normalizeRaidCode,
+  avatarOptions:AVATAR_OPTIONS,raidEmotes:RAID_EMOTES,normalizeProfile,normalizeRaidCode,cleanChatText,
   isConfigured:()=>configured
 };
 window.teacherQuestOnlineDebug={
   simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError,
-  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid,claimSummary,raidRoomPayload
+  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid,claimSummary,raidRoomPayload,cleanChatText
 };
 
 window.addEventListener("pagehide",()=>{void leaveWorld();});

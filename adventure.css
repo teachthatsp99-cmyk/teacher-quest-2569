@@ -1,4 +1,4 @@
-.adventure-page{display:grid;gap:14px}
+.adventure-page{display:grid;gap:14px}.adventure-page .btn[hidden]{display:none!important}
 .adventure-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:14px 18px;background:linear-gradient(135deg,#19264d,#112d3a);border:4px solid var(--line);box-shadow:5px 5px 0 var(--line)}
 .adventure-intro h1{font-size:clamp(23px,3vw,36px);line-height:1.1;margin:2px 0 5px;color:var(--gold);text-shadow:3px 3px 0 var(--line)}
 .adventure-intro p{margin:0;color:#d5dff5;font-size:13px}
@@ -21,6 +21,8 @@
 .adventure-prompt{position:absolute;z-index:6;left:50%;bottom:17px;display:flex;align-items:center;gap:9px;max-width:calc(100% - 32px);padding:8px 13px;background:rgba(7,11,24,.94);border:3px solid #03050d;box-shadow:4px 4px 0 rgba(2,4,13,.8);color:#fff6d6;font-weight:900;font-size:13px;transform:translate(-50%,25px);opacity:0;transition:transform .15s,opacity .15s;pointer-events:none}
 .adventure-prompt.visible{transform:translate(-50%,0);opacity:1}
 .adventure-prompt kbd{display:grid;place-items:center;min-width:30px;height:30px;padding:0 7px;background:var(--gold);color:#171127;border:3px solid #050713;box-shadow:2px 2px 0 #050713;font:1000 14px monospace}
+.adventure-chat{position:absolute;z-index:7;right:15px;top:178px;width:min(310px,calc(100% - 30px));background:rgba(7,12,28,.96);border:3px solid #03050d;box-shadow:4px 4px 0 rgba(2,4,13,.82);color:#eef4ff}.adventure-chat-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:38px;padding:6px 9px;background:#1a2851;border:0;color:#fff5cc;font:1000 11px "Noto Sans Thai",sans-serif;cursor:pointer}.adventure-chat-toggle b{padding:2px 5px;background:#58e7b2;color:#071a18;border:2px solid #03050d;font-size:9px}.adventure-chat.is-collapsed{width:auto}.adventure-chat.is-collapsed .adventure-chat-body{display:none}.adventure-chat-body{display:grid;gap:6px;padding:7px}.adventure-chat-feed{display:grid;gap:4px;max-height:126px;overflow:auto;scrollbar-width:thin}.adventure-chat-feed>p{margin:4px;color:#aebbd5;font-size:10px}.adventure-chat-line{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px;align-items:start;padding:4px 5px;background:#111c3b;border-left:3px solid var(--sky);font-size:10px}.adventure-chat-line.self{border-color:var(--gold)}.adventure-chat-line button,.adventure-chat-line b{padding:0;background:none;border:0;color:var(--sky);font:1000 10px "Noto Sans Thai",sans-serif;cursor:pointer}.adventure-chat-line.self b{color:var(--gold)}.adventure-chat-line span{overflow-wrap:anywhere;color:#f2f5ff}.adventure-chat-form{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:5px}.adventure-chat-form input{min-width:0;height:38px;padding:6px 8px;background:#f5f2dc;border:3px solid #03050d;color:#10152a;font:800 11px "Noto Sans Thai",sans-serif}.adventure-chat-form button,.adventure-chat-unmute{border:3px solid #03050d;background:var(--mint);color:#10231e;font:1000 10px "Noto Sans Thai",sans-serif;cursor:pointer}.adventure-chat-form :disabled{opacity:.55;cursor:not-allowed}.adventure-chat-body>small{color:#8f9fbd;font-size:8px}.adventure-chat-unmute{min-height:28px;background:#29385f;color:#dce7fb}
+.admin-test-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}.admin-test-grid .btn{min-height:48px}.admin-test-note{padding:9px;background:#111a38;border-left:4px solid var(--gold);color:#bec9df;font-size:10px}
 .adventure-dialogue{position:absolute;z-index:10;left:20px;right:20px;bottom:20px;padding:15px 17px;background:rgba(13,22,50,.97);border:4px solid #03050d;box-shadow:8px 8px 0 rgba(2,4,13,.9);max-height:70%;overflow:auto}
 .adventure-dialogue[hidden]{display:none}
 .adventure-dialogue-head{display:flex;align-items:start;justify-content:space-between;gap:12px}
@@ -75,6 +77,7 @@
   .adventure-prompt{bottom:89px}
   .adventure-mini-wrap{transform:scale(.78);transform-origin:top right}
   .adventure-dialogue{bottom:10px;left:10px;right:10px;max-height:82%}
+  .adventure-chat{top:auto;right:8px;bottom:168px}.adventure-chat.is-collapsed{bottom:82px}
 }
 @media(max-width:620px){
   .adventure-page{gap:9px}
@@ -86,6 +89,7 @@
   .adventure-mini-wrap{transform:scale(.58)}
   .adventure-mobile-controls{inset:auto 7px 7px}.pixel-dpad{width:110px;height:110px}.pixel-dpad button{width:38px;height:38px}.pixel-dpad [data-move=up]{left:36px}.pixel-dpad [data-move=left]{top:36px}.pixel-dpad [data-move=right]{top:36px}.pixel-dpad [data-move=down]{left:36px}.adventure-interact-button{width:54px;height:54px}.adventure-jump-button{width:48px;height:48px}.adventure-emote-button{width:44px;height:44px}.adventure-action-buttons{gap:4px}
   .adventure-prompt{bottom:67px;font-size:10px;padding:5px 8px}.adventure-prompt kbd{height:25px;min-width:25px}
+  .adventure-chat{left:7px;right:7px;bottom:145px;width:auto}.adventure-chat.is-collapsed{left:auto;right:7px;bottom:75px}.adventure-chat-feed{max-height:92px}.adventure-chat-toggle{min-height:44px}.adventure-chat-form input,.adventure-chat-form button{min-height:44px}.admin-test-grid{grid-template-columns:1fr}
   .adventure-dialogue{padding:10px}.adventure-dialogue h2{font-size:17px}.adventure-dialogue p{font-size:11px}.adventure-dialogue-stats{gap:5px}.adventure-dialogue-stats span{min-width:0;flex:1;padding:5px}.adventure-dialogue-stats b{font-size:15px}.adventure-dialogue-actions{gap:6px}.adventure-dialogue-actions .btn{font-size:9px;padding:5px 7px;border-width:3px}
   .adventure-map-grid{grid-template-columns:1fr}.map-world-summary{grid-template-columns:1fr}.map-zone{grid-template-columns:25px minmax(0,1fr) auto}
   .adventure-help{grid-template-columns:1fr 1fr}.adventure-help div{padding:6px;font-size:9px}

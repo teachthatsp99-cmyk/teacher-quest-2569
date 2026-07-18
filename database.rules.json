@@ -24,6 +24,13 @@
         "$other": { ".validate": false }
       }
     },
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null",
+        ".write": false,
+        ".validate": "newData.val() === true"
+      }
+    },
     "visitorClaims": {
       ".read": "auth != null && auth.token.firebase.identities['google.com'] != null",
       "$uid": {
@@ -81,6 +88,21 @@
             "accessory": { ".validate": "newData.val() === 'none' || newData.val() === 'cape' || newData.val() === 'book' || newData.val() === 'crown'" },
             "$other": { ".validate": false }
           },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "zoneChat": {
+      "$zone": {
+        ".read": "auth != null && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove' || $zone === 'law-archive' || $zone === 'future-campus') && query.limitToLast != null && query.limitToLast <= 40",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove' || $zone === 'law-archive' || $zone === 'future-campus')",
+          ".validate": "!newData.exists() || (newData.hasChildren(['nickname','text','x','y','sentAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 80 && newData.child('text').val().matches(/^[^<>]{1,80}$/) && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2048 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1536 && newData.child('sentAt').isNumber() && newData.child('sentAt').val() >= now - 120000 && newData.child('sentAt').val() <= now + 120000)",
+          "nickname": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 20" },
+          "text": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80 && newData.val().matches(/^[^<>]{1,80}$/)" },
+          "x": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2048" },
+          "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1536" },
+          "sentAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
           "$other": { ".validate": false }
         }
       }
