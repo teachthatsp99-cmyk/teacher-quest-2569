@@ -17,12 +17,17 @@ const MAX_ZONE_MESSAGES = 40;
 const CHAT_MAX_LENGTH = 80;
 const CHAT_STALE_AFTER = 15000;
 const CHAT_SEND_COOLDOWN = 1500;
+const VOICE_RADIUS = 360;
+const VOICE_MAX_PEERS = 4;
+const VOICE_SIGNAL_STALE_AFTER = 60000;
+const VOICE_SDP_MAX_LENGTH = 12000;
+const VOICE_MUTED_STORAGE = "teacherQuestMutedVoice_v1";
 const RAID_STORAGE = "teacherQuestRaidRoom_v1";
 const RAID_CODE_LENGTH = 6;
 const RAID_MAX_PLAYERS = 8;
 const RAID_BOSS_HP = 480;
 const RAID_HEARTBEAT = 25000;
-const RAID_RULES_REVISION = "2026-07-18.5";
+const RAID_RULES_REVISION = "2026-07-18.6";
 const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
 const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","english","policy","student","admin","quality","current"]);
@@ -31,6 +36,8 @@ const listeners = new Set();
 const zoneUnsubscribers = [];
 const remotePlayers = new Map();
 const zoneMessages = new Map();
+const voicePeers = new Map();
+const voiceSignalRefs = new Map();
 
 const AVATAR_OPTIONS = Object.freeze({
   skin:Object.freeze(["#f4c7a1","#e8b989","#c98f65","#8b5b3f"]),
@@ -232,6 +239,10 @@ const state = {
   zone:null,
   zonePlayers:[],
   zoneMessages:[],
+  voice:{
+    supported:Boolean(globalThis.RTCPeerConnection && navigator.mediaDevices?.getUserMedia),
+    enabled:false,permission:"idle",talking:false,nearby:0,peerCount:0,peers:[],error:""
+  },
   raid:null,
   error:""
 };
@@ -249,6 +260,11 @@ let onlineConnectionRef=null;
 let onlineConnectionUid=null;
 let currentPresenceRef=null;
 let currentChatRef=null;
+let voiceStream=null;
+let voiceInboxUnsubscribe=null;
+let voiceInboxZone=null;
+let voiceMutedUids=new Set();
+let voiceSignalFingerprints=new Map();
 let currentZone=null;
 let pendingWorldState=null;
 let lastPresenceAt=0;
@@ -271,6 +287,8 @@ let raidMemberRef=null;
 let raidRoomDisconnect=null;
 let raidMemberDisconnect=null;
 let raidHeartbeatTimer=null;
+
+try{voiceMutedUids=new Set(JSON.parse(localStorage.getItem(VOICE_MUTED_STORAGE)||"[]").map(String).slice(0,100));}catch(error){console.warn(error);}
 
 function publicState(){
   return clone({...state,zonePlayers:[...state.zonePlayers],zoneMessages:[...state.zoneMessages]});
@@ -334,6 +352,36 @@ function sanitizeWorldState(value={}){
   };
 }
 
+function voiceDistance(player={}){
+  if(!pendingWorldState) return Infinity;
+  const local=sanitizeWorldState(pendingWorldState);
+  return Math.hypot(local.x-clamp(player.x,0,2048),local.y-clamp(player.y,0,1536));
+}
+
+function saveVoiceMuted(){
+  try{localStorage.setItem(VOICE_MUTED_STORAGE,JSON.stringify([...voiceMutedUids].slice(0,100)));}catch(error){console.warn(error);}
+}
+
+function syncVoiceState({emitState=true}={}){
+  const candidates=state.zonePlayers.filter(player=>player.voice && voiceDistance(player)<=VOICE_RADIUS).slice(0,VOICE_MAX_PEERS);
+  state.voice.nearby=candidates.length;
+  state.voice.peers=candidates.map(player=>{
+    const peer=voicePeers.get(player.uid);
+    return {uid:player.uid,nickname:player.nickname,distance:Math.round(voiceDistance(player)),connected:Boolean(peer?.connected),muted:voiceMutedUids.has(player.uid)};
+  });
+  state.voice.peerCount=state.voice.peers.filter(peer=>peer.connected).length;
+  voicePeers.forEach((peer,uid)=>{
+    const player=state.zonePlayers.find(item=>item.uid===uid);
+    const distanceToPeer=player?voiceDistance(player):Infinity;
+    if(peer.audio){
+      peer.audio.muted=voiceMutedUids.has(uid);
+      const proximity=Math.max(0,1-distanceToPeer/VOICE_RADIUS);
+      peer.audio.volume=Math.min(1,Math.max(.04,proximity*proximity));
+    }
+  });
+  if(emitState) emit();
+}
+
 function refreshRemoteState(){
   const now=Date.now();
   state.zonePlayers=[...remotePlayers.values()]
@@ -342,6 +390,8 @@ function refreshRemoteState(){
   state.zoneMessages=[...zoneMessages.values()]
     .filter(message=>now-(Number(message.sentAt)||0)<CHAT_STALE_AFTER)
     .sort((a,b)=>a.sentAt-b.sentAt);
+  refreshVoicePeers();
+  syncVoiceState({emitState:false});
   emit();
 }
 
@@ -371,6 +421,7 @@ function remoteFromSnapshot(snapshot){
     y:clamp(value.y,0,1536),
     direction:direction(value.direction),
     moving:Boolean(value.moving),action:["wave","cheer","spin"].includes(value.action)?value.action:"",actionAt:Number(value.actionAt)||0,
+    voice:Boolean(value.voice),
     lastSeen:Number(value.lastSeen)||Date.now()
   };
 }
@@ -419,6 +470,7 @@ function subscribeZone(zone){
 async function removePresence(){
   clearTimeout(presenceTimer);
   presenceTimer=null;
+  await disableProximityVoice({skipPresence:true});
   if(currentPresenceRef && databaseModule){
     try{await databaseModule.onDisconnect(currentPresenceRef).cancel();}catch(error){/* Connection may already be closed. */}
     try{await databaseModule.remove(currentPresenceRef);}catch(error){console.warn("Could not remove world presence",error);}
@@ -438,6 +490,10 @@ async function removePresence(){
 
 async function switchZone(zone){
   if(zone===currentZone || !database || !databaseModule || !state.user) return;
+  if(state.voice.enabled){
+    await Promise.all([...voicePeers.keys()].map(uid=>sendVoiceSignal(uid,"bye").catch(()=>{})));
+    clearVoicePeers();stopVoiceInbox();await clearVoiceSignals();
+  }
   if(currentPresenceRef){
     try{await databaseModule.onDisconnect(currentPresenceRef).cancel();}catch(error){/* Ignore stale connection. */}
     try{await databaseModule.remove(currentPresenceRef);}catch(error){console.warn(error);}
@@ -461,7 +517,7 @@ async function flushPresence(force=false){
   if(!pendingWorldState || !database || !databaseModule || !state.user || state.phase!=="online") return;
   const world=sanitizeWorldState(pendingWorldState);
   await switchZone(world.zone);
-  const fingerprint=`${world.zone}|${world.x}|${world.y}|${world.direction}|${Number(world.moving)}|${world.action}|${world.actionAt}|${state.profile.nickname}|${JSON.stringify(state.profile.avatar)}`;
+  const fingerprint=`${world.zone}|${world.x}|${world.y}|${world.direction}|${Number(world.moving)}|${world.action}|${world.actionAt}|${Number(state.voice.enabled)}|${state.profile.nickname}|${JSON.stringify(state.profile.avatar)}`;
   const now=Date.now();
   if(!force && fingerprint===lastPresenceFingerprint && now-lastPresenceAt<PRESENCE_HEARTBEAT) return;
   const elapsed=now-lastPresenceAt;
@@ -476,8 +532,10 @@ async function flushPresence(force=false){
       nickname:state.profile.nickname,
       avatar:state.profile.avatar,
       x:world.x,y:world.y,direction:world.direction,moving:world.moving,action:world.action,actionAt:world.actionAt,
+      voice:Boolean(state.voice.enabled),
       lastSeen:databaseModule.serverTimestamp()
     });
+    if(state.voice.enabled) startVoiceInbox(world.zone);
   }catch(error){
     state.error=friendlyError(error);
     emit();
@@ -486,6 +544,8 @@ async function flushPresence(force=false){
 
 function updatePresence(value){
   pendingWorldState=sanitizeWorldState(value);
+  refreshVoicePeers();
+  syncVoiceState({emitState:false});
   void flushPresence();
 }
 
@@ -506,6 +566,205 @@ async function sendProximityMessage(value){
     sentAt:databaseModule.serverTimestamp()
   });
   return {ok:true,text};
+}
+
+function voiceErrorMessage(error){
+  if(error?.name==="NotAllowedError" || error?.name==="SecurityError") return "เบราว์เซอร์ยังไม่ได้รับอนุญาตใช้ไมโครโฟน";
+  if(error?.name==="NotFoundError") return "ไม่พบไมโครโฟนในอุปกรณ์นี้";
+  if(!globalThis.isSecureContext) return "Voice Chat ต้องเปิดผ่าน HTTPS";
+  return error?.message || "เปิด Voice Chat ไม่สำเร็จ";
+}
+
+function waitForIceGathering(peer,timeout=5000){
+  if(peer.iceGatheringState==="complete") return Promise.resolve();
+  return new Promise(resolve=>{
+    const timer=setTimeout(done,timeout);
+    function done(){clearTimeout(timer);peer.removeEventListener("icegatheringstatechange",onChange);resolve();}
+    function onChange(){if(peer.iceGatheringState==="complete")done();}
+    peer.addEventListener("icegatheringstatechange",onChange);
+  });
+}
+
+async function sendVoiceSignal(toUid,kind,sdp=""){
+  if(!database || !databaseModule || !state.user || !currentZone || !state.voice.enabled) return;
+  const target=String(toUid||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,128);
+  const payload=String(sdp||"").slice(0,VOICE_SDP_MAX_LENGTH);
+  if(!target || !["offer","answer","bye"].includes(kind)) return;
+  let signalRef=voiceSignalRefs.get(target);
+  if(!signalRef){
+    signalRef=databaseModule.ref(database,`voiceSignals/${currentZone}/${target}/${state.user.uid}`);
+    voiceSignalRefs.set(target,signalRef);
+    try{await databaseModule.onDisconnect(signalRef).remove();}catch(error){console.warn("Could not register voice signal disconnect",error);}
+  }
+  await databaseModule.set(signalRef,{kind,sdp:payload,sentAt:databaseModule.serverTimestamp()});
+}
+
+function closeVoicePeer(uid,{notify=false}={}){
+  const peer=voicePeers.get(uid);
+  if(!peer) return;
+  voicePeers.delete(uid);
+  try{peer.pc.ontrack=null;peer.pc.onconnectionstatechange=null;peer.pc.close();}catch(error){console.warn(error);}
+  try{peer.audio?.pause();peer.audio?.remove();}catch(error){console.warn(error);}
+  if(notify && state.voice.enabled) void sendVoiceSignal(uid,"bye");
+}
+
+function clearVoicePeers({notify=false}={}){
+  [...voicePeers.keys()].forEach(uid=>closeVoicePeer(uid,{notify}));
+  syncVoiceState({emitState:false});
+}
+
+function createVoicePeer(player){
+  if(!voiceStream || !state.voice.enabled || !player?.uid) return null;
+  const existing=voicePeers.get(player.uid);
+  if(existing) return existing;
+  const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}],iceCandidatePoolSize:4});
+  voiceStream.getTracks().forEach(track=>pc.addTrack(track,voiceStream));
+  const audio=document.createElement("audio");
+  audio.autoplay=true;audio.playsInline=true;audio.hidden=true;audio.dataset.voiceUid=player.uid;
+  document.body.append(audio);
+  const peer={uid:player.uid,nickname:player.nickname,pc,audio,connected:false,offering:false};
+  voicePeers.set(player.uid,peer);
+  pc.ontrack=event=>{
+    audio.srcObject=event.streams?.[0] || new MediaStream([event.track]);
+    audio.muted=voiceMutedUids.has(player.uid);
+    void audio.play().catch(()=>{state.voice.error="แตะหน้าจอหนึ่งครั้งเพื่อเริ่มรับเสียง";syncVoiceState();});
+  };
+  pc.onconnectionstatechange=()=>{
+    peer.connected=pc.connectionState==="connected";
+    if(["failed","closed"].includes(pc.connectionState)) closeVoicePeer(player.uid);
+    syncVoiceState();
+  };
+  syncVoiceState({emitState:false});
+  return peer;
+}
+
+async function offerVoicePeer(player){
+  const peer=createVoicePeer(player);
+  if(!peer || peer.offering || peer.pc.signalingState!=="stable") return;
+  peer.offering=true;
+  try{
+    await peer.pc.setLocalDescription(await peer.pc.createOffer({offerToReceiveAudio:true}));
+    await waitForIceGathering(peer.pc);
+    await sendVoiceSignal(player.uid,"offer",peer.pc.localDescription?.sdp||"");
+  }catch(error){
+    console.warn("Could not create proximity voice offer",error);
+    closeVoicePeer(player.uid);
+  }finally{peer.offering=false;}
+}
+
+async function handleVoiceSignal(snapshot){
+  if(!state.voice.enabled || !state.user || !voiceStream) return;
+  const fromUid=String(snapshot.key||"");
+  if(!fromUid || fromUid===state.user.uid) return;
+  const signal=snapshot.val()||{};
+  const fingerprint=`${signal.kind}|${Number(signal.sentAt)||0}|${String(signal.sdp||"").length}`;
+  if(voiceSignalFingerprints.get(fromUid)===fingerprint || Date.now()-(Number(signal.sentAt)||0)>VOICE_SIGNAL_STALE_AFTER) return;
+  voiceSignalFingerprints.set(fromUid,fingerprint);
+  const player=state.zonePlayers.find(item=>item.uid===fromUid && item.voice && voiceDistance(item)<=VOICE_RADIUS);
+  if(!player) return;
+  if(signal.kind==="bye"){closeVoicePeer(fromUid);syncVoiceState();return;}
+  if(!["offer","answer"].includes(signal.kind) || typeof signal.sdp!=="string" || signal.sdp.length>VOICE_SDP_MAX_LENGTH) return;
+  try{
+    if(signal.kind==="offer"){
+      closeVoicePeer(fromUid);
+      const peer=createVoicePeer(player);
+      await peer.pc.setRemoteDescription({type:"offer",sdp:signal.sdp});
+      await peer.pc.setLocalDescription(await peer.pc.createAnswer());
+      await waitForIceGathering(peer.pc);
+      await sendVoiceSignal(fromUid,"answer",peer.pc.localDescription?.sdp||"");
+    }else{
+      const peer=voicePeers.get(fromUid);
+      if(peer && peer.pc.signalingState==="have-local-offer") await peer.pc.setRemoteDescription({type:"answer",sdp:signal.sdp});
+    }
+  }catch(error){
+    console.warn("Could not apply proximity voice signal",error);
+    closeVoicePeer(fromUid);
+    state.voice.error="เชื่อมเสียงกับผู้เล่นบางคนไม่สำเร็จ";
+    syncVoiceState();
+  }
+}
+
+function stopVoiceInbox(){
+  try{voiceInboxUnsubscribe?.();}catch(error){console.warn(error);}
+  voiceInboxUnsubscribe=null;voiceInboxZone=null;voiceSignalFingerprints.clear();
+}
+
+function startVoiceInbox(zone=currentZone){
+  if(!state.voice.enabled || !database || !databaseModule || !state.user || !zone || voiceInboxZone===zone) return;
+  stopVoiceInbox();
+  voiceInboxZone=zone;
+  const inboxRef=databaseModule.ref(database,`voiceSignals/${zone}/${state.user.uid}`);
+  const apply=snapshot=>{void handleVoiceSignal(snapshot);};
+  const unsubAdded=databaseModule.onChildAdded(inboxRef,apply,error=>{state.voice.error=voiceErrorMessage(error);syncVoiceState();});
+  const unsubChanged=databaseModule.onChildChanged(inboxRef,apply,error=>{state.voice.error=voiceErrorMessage(error);syncVoiceState();});
+  voiceInboxUnsubscribe=()=>{unsubAdded();unsubChanged();};
+}
+
+function refreshVoicePeers(){
+  if(!state.voice.enabled || !voiceStream || !state.user) return;
+  const candidates=state.zonePlayers.filter(player=>player.voice && voiceDistance(player)<=VOICE_RADIUS).slice(0,VOICE_MAX_PEERS);
+  const allowed=new Set(candidates.map(player=>player.uid));
+  [...voicePeers.keys()].forEach(uid=>{if(!allowed.has(uid))closeVoicePeer(uid,{notify:true});});
+  candidates.forEach(player=>{
+    if(!voicePeers.has(player.uid) && String(state.user.uid).localeCompare(String(player.uid))<0) void offerVoicePeer(player);
+  });
+}
+
+async function clearVoiceSignals(){
+  const entries=[...voiceSignalRefs.values()];
+  voiceSignalRefs.clear();
+  await Promise.all(entries.map(async signalRef=>{
+    try{await databaseModule?.onDisconnect(signalRef).cancel();}catch(error){/* Connection may already be closed. */}
+    try{await databaseModule?.remove(signalRef);}catch(error){console.warn("Could not remove voice signal",error);}
+  }));
+}
+
+async function enableProximityVoice(){
+  if(!state.voice.supported) throw new Error("เบราว์เซอร์นี้ไม่รองรับ Voice Chat");
+  if(!globalThis.isSecureContext) throw new Error("Voice Chat ต้องเปิดผ่าน HTTPS");
+  if(!database || !databaseModule || !state.user || state.user.isAnonymous || state.phase!=="online") throw new Error("กรุณาเข้าสู่ระบบ Google และเข้าโลกผจญภัยก่อนเปิดไมค์");
+  if(!pendingWorldState) throw new Error("กรุณาเข้าโลกผจญภัยก่อนเปิดไมค์");
+  if(state.voice.enabled) return publicState();
+  state.voice.permission="requesting";state.voice.error="";emit();
+  try{
+    voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+    voiceStream.getAudioTracks().forEach(track=>{track.enabled=false;});
+    state.voice.enabled=true;state.voice.permission="granted";state.voice.talking=false;
+    await flushPresence(true);
+    startVoiceInbox(currentZone);
+    refreshVoicePeers();syncVoiceState();
+  }catch(error){
+    voiceStream?.getTracks().forEach(track=>track.stop());voiceStream=null;
+    state.voice.enabled=false;state.voice.permission=error?.name==="NotAllowedError"?"denied":"error";state.voice.error=voiceErrorMessage(error);emit();
+    throw new Error(state.voice.error);
+  }
+  return publicState();
+}
+
+function setVoiceTalking(value){
+  const talking=Boolean(value && state.voice.enabled && voiceStream);
+  voiceStream?.getAudioTracks().forEach(track=>{track.enabled=talking;});
+  state.voice.talking=talking;syncVoiceState();
+  return talking;
+}
+
+function setVoiceMuted(uid,value=true){
+  const key=String(uid||"");
+  if(value) voiceMutedUids.add(key);else voiceMutedUids.delete(key);
+  saveVoiceMuted();syncVoiceState();
+  return publicState();
+}
+
+async function disableProximityVoice({skipPresence=false}={}){
+  if(!state.voice.enabled && !voiceStream) return publicState();
+  setVoiceTalking(false);
+  await Promise.all([...voicePeers.keys()].map(uid=>sendVoiceSignal(uid,"bye").catch(()=>{})));
+  clearVoicePeers();stopVoiceInbox();await clearVoiceSignals();
+  voiceStream?.getTracks().forEach(track=>track.stop());voiceStream=null;
+  state.voice.enabled=false;state.voice.permission="idle";state.voice.talking=false;state.voice.nearby=0;state.voice.peerCount=0;state.voice.peers=[];state.voice.error="";
+  if(!skipPresence && pendingWorldState && state.phase==="online") await flushPresence(true);
+  emit();
+  return publicState();
 }
 
 async function registerOnlineConnection(){
@@ -1145,7 +1404,7 @@ function simulateForTests(value={}){
     state.zonePlayers=value.zonePlayers.map((player,index)=>({
       uid:String(player.uid||`test-${index}`),nickname:cleanNickname(player.nickname)||`เพื่อน ${index+1}`,
       avatar:normalizeAvatar(player.avatar),x:clamp(player.x,0,2048),y:clamp(player.y,0,1536),
-      direction:direction(player.direction),moving:Boolean(player.moving),action:["wave","cheer","spin"].includes(player.action)?player.action:"",actionAt:Number(player.actionAt)||0,lastSeen:Date.now()
+      direction:direction(player.direction),moving:Boolean(player.moving),action:["wave","cheer","spin"].includes(player.action)?player.action:"",actionAt:Number(player.actionAt)||0,voice:Boolean(player.voice),lastSeen:Date.now()
     }));
   }
   if(value.zoneMessages){
@@ -1160,17 +1419,17 @@ function simulateForTests(value={}){
 
 window.TeacherQuestOnline={
   init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,reconnect,
-  updatePresence,sendProximityMessage,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
+  updatePresence,sendProximityMessage,enableProximityVoice,disableProximityVoice,setVoiceTalking,setVoiceMuted,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
   createRaid,joinRaid,startRaid,attackRaid,sendRaidEmote,setRaidReady,leaveRaid,diagnosePermissions,
   avatarOptions:AVATAR_OPTIONS,raidEmotes:RAID_EMOTES,normalizeProfile,normalizeRaidCode,cleanChatText,
   isConfigured:()=>configured
 };
 window.teacherQuestOnlineDebug={
   simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError,
-  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid,claimSummary,raidRoomPayload,cleanChatText
+  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid,claimSummary,raidRoomPayload,cleanChatText,voiceDistance,syncVoiceState
 };
 
-window.addEventListener("pagehide",()=>{void leaveWorld();});
+window.addEventListener("pagehide",()=>{voiceStream?.getTracks().forEach(track=>track.stop());void leaveWorld();});
 emit();
 void init();
 })();

@@ -719,7 +719,7 @@ test('Firebase errors tell the owner exactly which console setting to fix',async
   expect(messages.domain).toContain('Authorized domains');
 });
 
-test('Firebase rules protect Raid, proximity chat and Test Admin roles',async({page})=>{
+test('Firebase rules protect Raid, proximity chat, voice signaling and Test Admin roles',async({page})=>{
   const [rulesResponse,onlineResponse]=await Promise.all([
     page.request.get(`${url}/database.rules.json`),
     page.request.get(`${url}/online.js`)
@@ -730,6 +730,7 @@ test('Firebase rules protect Raid, proximity chat and Test Admin roles',async({p
   const startedAt=rules.rules.raids['$room'].meta.startedAt['.validate'];
   const bossHp=rules.rules.raids['$room'].meta.bossHp['.validate'];
   const chat=rules.rules.zoneChat['$zone']['$uid'];
+  const voice=rules.rules.voiceSignals['$zone']['$toUid']['$fromUid'];
   const admin=rules.rules.admins['$uid'];
   const online=await onlineResponse.text();
   expect(startedAt).toContain("newData.parent().child('status').val() === 'active'");
@@ -737,6 +738,10 @@ test('Firebase rules protect Raid, proximity chat and Test Admin roles',async({p
   expect(bossHp).not.toContain("root.child('raids').child($room).child('meta').child('bossMax')");
   expect(chat['.write']).toContain('auth.uid === $uid');
   expect(chat.text['.validate']).toContain('length <= 80');
+  expect(rules.rules.voiceSignals['$zone']['$toUid']['.read']).toContain('auth.uid === $toUid');
+  expect(voice['.write']).toContain('auth.uid === $fromUid');
+  expect(voice['.write']).toContain("child('voice').val() === true");
+  expect(voice['.validate']).toContain('length <= 12000');
   expect(admin['.write']).toBe(false);
   expect(admin['.read']).toContain('auth.uid === $uid');
   expect(online).toContain('const createdAt=databaseModule.serverTimestamp()');
@@ -744,6 +749,9 @@ test('Firebase rules protect Raid, proximity chat and Test Admin roles',async({p
   expect(online).toContain('getIdTokenResult(true)');
   expect(online).toContain('await user.getIdToken(true)');
   expect(online).toContain('async function sendProximityMessage');
+  expect(online).toContain('async function enableProximityVoice');
+  expect(online).toContain('new RTCPeerConnection');
+  expect(online).toContain('getUserMedia');
   expect(online).toContain('admins/${user.uid}');
 });
 
@@ -812,6 +820,33 @@ test('proximity chat hides distant messages, supports mute and exposes safe Test
   await page.setViewportSize({width:390,height:844});
   const chatToggle=await page.locator('#adventureChatToggle').boundingBox();
   expect(chatToggle.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
+  expect(pageErrors).toEqual([]);
+});
+
+test('proximity voice is opt-in, shows nearby peers, mutes per player and stays usable on mobile',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const local=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  await page.evaluate(({x,y})=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,phase:'online',connected:true,user:{uid:'voice-local',isAnonymous:false,provider:'google'},
+    profile:{nickname:'ผู้ทดสอบเสียง',avatar:{}},
+    zonePlayers:[{uid:'voice-near',nickname:'เพื่อนเสียงใกล้',x:x+70,y:y+20,direction:'left',avatar:{},voice:true}],
+    voice:{supported:true,enabled:true,permission:'granted',talking:false,nearby:1,peerCount:1,peers:[{uid:'voice-near',nickname:'เพื่อนเสียงใกล้',distance:73,connected:true,muted:false}],error:''}
+  }),{x:local.x,y:local.y});
+  await page.locator('#adventureChatToggle').click();
+  await expect(page.locator('#adventureVoice')).toHaveClass(/is-enabled/);
+  await expect(page.locator('#adventureVoiceStatus')).toContainText('1/1');
+  await expect(page.locator('#adventureVoicePeers')).toContainText('เพื่อนเสียงใกล้');
+  await page.locator('[data-voice-mute="voice-near"]').click();
+  await expect(page.locator('[data-voice-mute="voice-near"]')).toHaveAttribute('aria-pressed','true');
+  await page.setViewportSize({width:390,height:844});
+  const [enableBox,talkBox]=await Promise.all([
+    page.locator('#adventureVoiceEnable').boundingBox(),page.locator('#adventureVoiceTalk').boundingBox()
+  ]);
+  expect(enableBox.height).toBeGreaterThanOrEqual(44);
+  expect(talkBox.height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
   expect(pageErrors).toEqual([]);
 });
