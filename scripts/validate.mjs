@@ -108,7 +108,7 @@ if(data?.questionBankAudit?.sourceInventory?.length !== 26) fail('source invento
 if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.referenceBackedCount || 0) !== questions.length) fail('verification counts do not cover the full bank');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','data.js','online-config.js','online.js','adventure.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','data.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
@@ -125,14 +125,26 @@ const v4 = fs.readFileSync('v4.js','utf8');
 for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','active-choice']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
 for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
-if(!(html.indexOf('data.js') < html.indexOf('online-config.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('online/adventure scripts are not loaded in dependency order');
+if(!(html.indexOf('data.js') < html.indexOf('online-config.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('online/world/adventure scripts are not loaded in dependency order');
+try{
+  const worldContext={window:{}};
+  vm.createContext(worldContext);
+  vm.runInContext(fs.readFileSync('world-core.js','utf8'),worldContext,{filename:'world-core.js'});
+  const worldCore=worldContext.window.TeacherQuestWorldCore;
+  const registry=worldCore?.createMapRegistry?.([{id:'academy-plaza',title:'โลกครูเควสต์',width:2048,height:1536,spawn:{x:1024,y:812}}]);
+  const migrated=registry?.normalizePosition?.({x:1200,y:900,direction:'left'});
+  if(worldCore?.version!==2 || registry?.defaultMapId!=='academy-plaza') fail('world core registry is not initialized at version 2');
+  if(migrated?.mapId!=='academy-plaza' || migrated?.version!==2 || migrated?.x!==1200 || migrated?.direction!=='left') fail('world core cannot migrate the legacy single-map position');
+  const bounded=registry?.normalizePosition?.({mapId:'missing-map',x:-50,y:99999,direction:'invalid'});
+  if(bounded?.mapId!=='academy-plaza' || bounded?.x!==40 || bounded?.y!==1504 || bounded?.direction!=='down') fail('world core does not clamp or recover invalid position data');
+}catch(error){ fail(`world-core.js is invalid: ${error.message}`); }
 try{
   const rules=JSON.parse(fs.readFileSync('database.rules.json','utf8'));
   const rulesText=JSON.stringify(rules);

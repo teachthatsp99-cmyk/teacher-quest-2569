@@ -563,7 +563,8 @@ function renderAdventure(){
             <div class="adventure-progress"><div class="meter"><i id="adventureProgressBar" style="width:${Math.round(stats.attempted / D.questions.length * 100)}%"></i></div><span id="adventureProgressText">สำรวจคลัง ${stats.attempted}/${D.questions.length} ข้อ</span></div>
           </div>
           <div class="adventure-mini-wrap">
-            <canvas id="adventureMiniMap" width="176" height="124"></canvas>
+            <canvas id="adventureMiniMap" width="176" height="124" role="img" aria-label="มินิแมป ผู้เล่นของคุณมีกรอบสีทอง เพื่อนมีสีตามตัวละคร"></canvas>
+            <span class="adventure-mini-legend"><b>◆ คุณ</b><i>■ เพื่อน</i></span>
             <span class="adventure-mini-label">MINI MAP</span>
           </div>
         </div>
