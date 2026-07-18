@@ -131,7 +131,7 @@ let currentView = "";
 let shopFilter = "helper";
 let onlineState = window.TeacherQuestOnline?.getState?.() || {
   configured:false,phase:"setup",connected:false,user:null,
-  profile:{nickname:"ครูนักผจญภัย",avatar:{}},onlineCount:0,totalPlayers:0,zonePlayers:[],error:""
+  profile:{nickname:"ครูนักผจญภัย",avatar:{}},onlineCount:0,totalPlayers:0,zonePlayers:[],zoneMessages:[],error:""
 };
 
 function mergeDeep(base, incoming){
@@ -324,6 +324,12 @@ function updateOnlineHud(){
       ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน`
       : phase==="setup" ? "โหมดออฟไลน์" : phase==="signin-required" ? "รอเข้าสู่ระบบ" : phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อม";
   }
+  const chatInput=$("#adventureChatInput");
+  const chatSubmit=$("#adventureChatForm button[type='submit']");
+  if(chatInput) chatInput.disabled=phase!=="online";
+  if(chatSubmit) chatSubmit.disabled=phase!=="online";
+  const adminButton=$("#adminTestBtn");
+  if(adminButton) adminButton.hidden=!onlineState.isAdmin;
   updateAuthGate();
 }
 
@@ -332,6 +338,30 @@ function showToast(message){
   toast.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove("show"),2200);
+}
+
+function openAdminTestPanel(){
+  onlineState=window.TeacherQuestOnline?.getState?.()||onlineState;
+  if(!onlineState.isAdmin){showToast("บัญชีนี้ไม่มีสิทธิ์ Test Admin");return;}
+  openModal(`<div class="eyebrow">TEST ADMIN • PRIVATE ROLE</div><h2 id="modalTitle">แผงทดสอบเกม</h2><p>เครื่องมือเหล่านี้เปลี่ยนเฉพาะความคืบหน้าและตัวละครของบัญชีคุณเอง ไม่สามารถอ่านหรือแก้ข้อมูลส่วนตัวของผู้เล่นอื่น</p><div class="admin-test-grid"><button class="btn mint" type="button" data-admin-action="resources">+5,000 Coin / +2,000 EXP</button><button class="btn sky" type="button" data-admin-action="unlock">ปลดล็อกไอเทมทั้งหมด</button><button class="btn" type="button" data-admin-action="reveal">เปิดแผนที่โลกปัจจุบัน</button><button class="btn dark" type="button" data-admin-map="academy-plaza">วาร์ปศูนย์กลาง</button><button class="btn dark" type="button" data-admin-map="training-grove">วาร์ปป่าฝึก</button><button class="btn dark" type="button" data-admin-map="law-archive">วาร์ปโลกกฎหมาย</button><button class="btn dark" type="button" data-admin-map="future-campus">วาร์ปโลกอนาคต</button></div><p class="admin-test-note">การเพิ่มทรัพยากรและปลดล็อกจะบันทึกขึ้น Cloud Save ของบัญชีนี้ ใช้สำหรับทดสอบก่อนเปิดจริงเท่านั้น</p>`);
+  $$('[data-admin-action]',modalBody).forEach(button=>button.onclick=()=>{
+    if(!window.TeacherQuestOnline?.getState?.().isAdmin){closeModal();showToast("สิทธิ์ Test Admin หมดอายุ กรุณาเข้าสู่ระบบใหม่");return;}
+    if(button.dataset.adminAction==="resources"){
+      state.coins+=5000;state.xp+=2000;saveState();showToast("เพิ่มทรัพยากรทดสอบแล้ว");
+    }else if(button.dataset.adminAction==="unlock"){
+      const owned=ECONOMY.catalog.filter(item=>item.type==="unlock").map(item=>item.id);
+      const inventory=Object.fromEntries(ECONOMY.catalog.filter(item=>item.type==="consumable").map(item=>[item.id,ECONOMY.maxConsumable]));
+      state.economy=ECONOMY.normalize({...state.economy,owned,inventory});saveState();showToast("ปลดล็อกไอเทมและผู้ช่วยทั้งหมดแล้ว");
+    }else if(button.dataset.adminAction==="reveal"){
+      const result=adventureInstance?.revealCurrentMap?.();showToast(result?`เปิดแผนที่ ${result.explored}/${result.total} ช่องแล้ว`:"เปิดโลกผจญภัยก่อนใช้คำสั่งนี้");
+    }
+  });
+  $$('[data-admin-map]',modalBody).forEach(button=>button.onclick=()=>{
+    if(!window.TeacherQuestOnline?.getState?.().isAdmin){closeModal();showToast("บัญชีนี้ไม่มีสิทธิ์ Test Admin");return;}
+    const ok=window.teacherQuestAdventureDebug?.switchMap?.(button.dataset.adminMap);
+    if(ok){closeModal();showToast("วาร์ปไปพื้นที่ทดสอบแล้ว");}
+    else showToast("เปิดโลกผจญภัยก่อนใช้คำสั่งนี้");
+  });
 }
 
 function gameProfile(value=onlineState.profile){
@@ -572,6 +602,7 @@ function renderAdventure(){
           <p id="adventureInstructions">มือถือแตะพื้นหรือใช้ D-pad • คีย์บอร์ดใช้ WASD/ลูกศร (ภาษาไทยใช้ ไฟหก) • E/ำ หรือ ENTER โต้ตอบ • SPACE หรือ J/่ กระโดด</p>
         </div>
         <div class="adventure-intro-actions">
+          <button class="btn small sky" type="button" id="adminTestBtn" ${onlineState.isAdmin?"":"hidden"}>★ Test Admin</button>
           <button class="btn small pink" data-go="raid">⚡ เรด Co-op</button>
           <button class="btn small mint" data-adventure-map>▤ แผนที่สำรวจ</button>
           <button class="btn small dark" data-adventure-reset>⌂ กลับจุดเริ่ม</button>
@@ -595,6 +626,18 @@ function renderAdventure(){
         </div>
         <div class="adventure-prompt" id="adventurePrompt" role="status" aria-live="polite"></div>
         <div class="adventure-online-badge ${onlineState.phase==="online" ? "online" : ""}" id="adventureOnlineStatus"><span class="online-dot" aria-hidden="true"></span><span>${onlineState.phase==="online" ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน` : "โหมดออฟไลน์"}</span></div>
+        <section class="adventure-chat is-collapsed" id="adventureChat" aria-label="แชตผู้เล่นที่อยู่ใกล้กัน">
+          <button class="adventure-chat-toggle" type="button" id="adventureChatToggle" aria-expanded="false"><span>▣ คุยใกล้ตัว</span><b id="adventureChatNearby">0 คน</b></button>
+          <div class="adventure-chat-body">
+            <div class="adventure-chat-feed" id="adventureChatFeed" role="log" aria-live="polite"><p>เดินเข้าใกล้เพื่อนเพื่อเริ่มคุยกัน</p></div>
+            <form class="adventure-chat-form" id="adventureChatForm">
+              <label class="sr-only" for="adventureChatInput">ข้อความถึงผู้เล่นใกล้ตัว</label>
+              <input id="adventureChatInput" maxlength="80" autocomplete="off" placeholder="พิมพ์ข้อความใกล้ตัว…" ${onlineState.phase==="online"?"":"disabled"}>
+              <button type="submit" ${onlineState.phase==="online"?"":"disabled"}>ส่ง</button>
+            </form>
+            <small>ได้ยินในระยะ 360 • ล่าสุดคนละ 1 ข้อความ • กดชื่อเพื่อปิดเสียง</small>
+          </div>
+        </section>
         <section class="adventure-dialogue" id="adventureDialogue" role="dialog" aria-modal="false" aria-labelledby="adventureDialogueTitle" aria-hidden="true" hidden>
           <div class="adventure-dialogue-head"><div><div class="eyebrow" id="adventureDialogueEyebrow"></div><h2 id="adventureDialogueTitle"></h2></div></div>
           <p id="adventureDialogueText"></p>
@@ -628,6 +671,7 @@ function renderAdventure(){
     return;
   }
   const root = $("#adventureRoot");
+  $("#adminTestBtn")?.addEventListener("click",openAdminTestPanel);
   adventureInstance = window.createTeacherQuestAdventure({
     root,
     canvas:$("#adventureCanvas"),
@@ -652,6 +696,27 @@ function renderAdventure(){
   });
   adventureInstance.setPlayerProfile?.(gameProfile());
   adventureInstance.setRemotePlayers?.(onlineState.zonePlayers || []);
+  adventureInstance.setZoneMessages?.(onlineState.zoneMessages || []);
+  const chatToggle=$("#adventureChatToggle");
+  chatToggle?.addEventListener("click",()=>{
+    const chat=$("#adventureChat");
+    const collapsed=chat?.classList.toggle("is-collapsed");
+    chatToggle.setAttribute("aria-expanded",String(!collapsed));
+    if(!collapsed) $("#adventureChatInput")?.focus();
+  });
+  $("#adventureChatForm")?.addEventListener("submit",async event=>{
+    event.preventDefault();
+    const input=$("#adventureChatInput");
+    const submit=event.currentTarget.querySelector('button[type="submit"]');
+    if(!input?.value.trim()) return;
+    input.disabled=true;if(submit)submit.disabled=true;
+    try{
+      await window.TeacherQuestOnline?.sendProximityMessage?.(input.value);
+      input.value="";
+      input.focus();
+    }catch(error){showToast(error?.message||"ส่งข้อความไม่สำเร็จ");}
+    finally{input.disabled=onlineState.phase!=="online";if(submit)submit.disabled=onlineState.phase!=="online";}
+  });
   updateOnlineHud();
   $("#adventureCanvas")?.focus({preventScroll:true});
 }
@@ -1416,7 +1481,7 @@ function renderProfile(){
   const onlineProfile=onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}};
   const cloudLabel=onlineState.cloudSync==="saving" ? "กำลังบันทึก Cloud" : onlineState.cloudSync==="error" ? "Cloud Save ขัดข้อง" : "Cloud Save พร้อม";
   const onlineStatus=onlineState.phase==="online" ? `เชื่อมต่อแล้ว • ${cloudLabel}` : onlineState.phase==="setup" ? "โหมดทดสอบในเครื่อง" : onlineState.phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อมต่อ";
-  const onlineCard=`<section class="online-profile-card pixel-box">${window.TeacherQuestOnline?.avatarMarkup?.(onlineProfile) || ""}<div><h3>${esc(onlineProfile.nickname)}</h3><p>${esc(onlineStatus)} • <b id="profileOnlineNow">${onlineState.onlineCount || 0}</b> ออนไลน์ • นักผจญภัยทั้งหมด <b id="profilePlayerTotal">${onlineState.totalPlayers || 0}</b> คน</p></div><button class="btn small mint" id="profileAvatarEdit">แต่งตัว / บัญชี</button></section>`;
+  const onlineCard=`<section class="online-profile-card pixel-box">${window.TeacherQuestOnline?.avatarMarkup?.(onlineProfile) || ""}<div><h3>${esc(onlineProfile.nickname)} ${onlineState.isAdmin?'<span class="chip gold">TEST ADMIN</span>':""}</h3><p>${esc(onlineStatus)} • <b id="profileOnlineNow">${onlineState.onlineCount || 0}</b> ออนไลน์ • นักผจญภัยทั้งหมด <b id="profilePlayerTotal">${onlineState.totalPlayers || 0}</b> คน</p></div><button class="btn small mint" id="profileAvatarEdit">แต่งตัว / บัญชี</button></section>`;
   const achievements = [
     {icon:"⚔",name:"ก้าวแรก",desc:"ตอบข้อสอบครั้งแรก",ok:stats.attempted >= 1},
     {icon:"✦",name:"คอมโบ 10",desc:"ตอบถูกต่อเนื่อง 10 ข้อ",ok:state.maxCombo >= 10},
@@ -1516,9 +1581,9 @@ function openOnlineDialog(){
     const button=event.currentTarget;
     const panel=$("#firebaseDiagnostic");
     button.disabled=true;
-    button.textContent="กำลังตรวจ 4 จุด…";
+    button.textContent="กำลังตรวจ 5 จุด…";
     panel.hidden=false;
-    panel.innerHTML='<div class="firebase-diagnostic-loading">กำลังทดสอบโปรไฟล์ Cloud สถานะออนไลน์ และการสร้าง Raid ชั่วคราว…</div>';
+    panel.innerHTML='<div class="firebase-diagnostic-loading">กำลังทดสอบโปรไฟล์ Cloud สถานะออนไลน์ แชตใกล้ตัว และการสร้าง Raid ชั่วคราว…</div>';
     try{
       const report=await api.diagnosePermissions();
       panel.innerHTML=firebaseDiagnosticMarkup(report);
@@ -1617,6 +1682,7 @@ function bindGlobal(){
     updateOnlineHud();
     adventureInstance?.setPlayerProfile?.(gameProfile());
     adventureInstance?.setRemotePlayers?.(onlineState.zonePlayers || []);
+    adventureInstance?.setZoneMessages?.(onlineState.zoneMessages || []);
     if($("#profileOnlineNow")) $("#profileOnlineNow").textContent=onlineState.onlineCount || 0;
     if($("#profilePlayerTotal")) $("#profilePlayerTotal").textContent=onlineState.totalPlayers || 0;
     updateAuthGate();

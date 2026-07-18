@@ -31,6 +31,9 @@ const INTERACT_DISTANCE = 76;
 const VISION_RADIUS = 190;
 const JUMP_DURATION = .54;
 const JUMP_COOLDOWN = .18;
+const CHAT_RADIUS = 360;
+const CHAT_STALE_AFTER = 15000;
+const MUTED_CHAT_STORAGE = "teacherQuestMutedChat_v1";
 const SPAWN = DEFAULT_MAP.spawn;
 const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
@@ -278,6 +281,9 @@ function createTeacherQuestAdventure(options={}){
   const miniCanvas = root.querySelector("#adventureMiniMap");
   const mini = miniCanvas?.getContext("2d");
   const prompt = root.querySelector("#adventurePrompt");
+  const chatRoot = root.querySelector("#adventureChat");
+  const chatFeed = root.querySelector("#adventureChatFeed");
+  const chatNearby = root.querySelector("#adventureChatNearby");
   const worldTitle = root.querySelector("#adventureWorldTitle");
   const districtLabel = root.querySelector("#adventureDistrict");
   const objective = root.querySelector("#adventureObjective");
@@ -343,6 +349,10 @@ function createTeacherQuestAdventure(options={}){
   let lastPresenceTime = -Infinity;
   let lastPresenceFingerprint = "";
   const remoteCharacters = new Map();
+  let chatMessages = [];
+  let lastChatRender = -Infinity;
+  let mutedChatUids = new Set();
+  try{mutedChatUids=new Set(JSON.parse(localStorage.getItem(MUTED_CHAT_STORAGE)||"[]").map(String).slice(0,100));}catch(error){console.warn(error);}
   let tapTarget = null;
   let tapBlockedFrames = 0;
   let dialogueChoiceIndex = -1;
@@ -399,7 +409,51 @@ function createTeacherQuestAdventure(options={}){
       }
     });
     [...remoteCharacters.keys()].forEach(uid=>{if(!seen.has(uid))remoteCharacters.delete(uid);});
+    renderProximityChat();
   }
+
+  function normalizeChatMessage(item={},index=0){
+    return {
+      uid:String(item.uid||`message-${index}`).replace(/[^a-zA-Z0-9_-]/g,"").slice(0,128),
+      nickname:String(item.nickname||"นักผจญภัย").replace(/[<>\u0000-\u001f\u007f]/g,"").slice(0,20),
+      text:String(item.text||"").replace(/[<>\u0000-\u001f\u007f]/g,"").replace(/\s+/g," ").trim().slice(0,80),
+      x:clamp(Number(item.x)||0,0,WORLD_WIDTH),y:clamp(Number(item.y)||0,0,WORLD_HEIGHT),
+      sentAt:Number(item.sentAt)||Date.now(),self:Boolean(item.self)
+    };
+  }
+
+  function setZoneMessages(messages=[]){
+    chatMessages=messages.slice(-40).map(normalizeChatMessage).filter(message=>message.text);
+    renderProximityChat();
+  }
+
+  function saveMutedChat(){
+    try{localStorage.setItem(MUTED_CHAT_STORAGE,JSON.stringify([...mutedChatUids].slice(0,100)));}catch(error){console.warn(error);}
+  }
+
+  function nearbyChatMessages(){
+    const now=Date.now();
+    return chatMessages.filter(message=>now-message.sentAt<CHAT_STALE_AFTER && !mutedChatUids.has(message.uid) && (message.self||distance(player,message)<=CHAT_RADIUS));
+  }
+
+  function renderProximityChat(){
+    if(!chatFeed) return;
+    const nearby=[...remoteCharacters.values()].filter(remote=>distance(player,remote)<=CHAT_RADIUS);
+    if(chatNearby) chatNearby.textContent=`${nearby.length} คน`;
+    const messages=nearbyChatMessages();
+    const rows=messages.map(message=>`<div class="adventure-chat-line ${message.self?"self":""}">${message.self?`<b>คุณ</b>`:`<button type="button" data-chat-mute="${escapeHtml(message.uid)}" title="ปิดเสียงผู้เล่นนี้">${escapeHtml(message.nickname)}</button>`}<span>${escapeHtml(message.text)}</span></div>`).join("");
+    const muted=mutedChatUids.size?`<button class="adventure-chat-unmute" type="button" data-chat-unmute-all>เลิกปิดเสียงทั้งหมด (${mutedChatUids.size})</button>`:"";
+    chatFeed.innerHTML=rows||`<p>${nearby.length?"อยู่ใกล้กันแล้ว ลองทักทายได้เลย":"เดินเข้าใกล้เพื่อนเพื่อเริ่มคุยกัน"}</p>`;
+    if(muted) chatFeed.insertAdjacentHTML("beforeend",muted);
+    chatFeed.scrollTop=chatFeed.scrollHeight;
+  }
+
+  const onChatFeedClick=event=>{
+    const muteButton=event.target.closest?.("[data-chat-mute]");
+    if(muteButton){mutedChatUids.add(String(muteButton.dataset.chatMute||""));saveMutedChat();renderProximityChat();return;}
+    if(event.target.closest?.("[data-chat-unmute-all]")){mutedChatUids.clear();saveMutedChat();renderProximityChat();}
+  };
+  chatFeed?.addEventListener("click",onChatFeedClick);
 
   function isRoad(x,y){ return currentScene().roads.some(road => rectContains(road,x,y)); }
   function isWater(x,y){ return currentScene().water.some(water => rectContains(water,x,y)) && !isRoad(x,y); }
@@ -693,6 +747,16 @@ function createTeacherQuestAdventure(options={}){
     savePosition(player,explorationSets);
     updateNearest();
     updateHud();
+  }
+
+  function revealCurrentMap(){
+    const codec=MAP_REGISTRY.exploration(activeMap.id);
+    const explored=currentExploration();
+    for(let index=0;index<codec.total;index++) explored.add(index);
+    explorationDirty=true;
+    updateHud();
+    savePosition(player,explorationSets,{immediate:true});
+    return {mapId:activeMap.id,explored:explored.size,total:codec.total};
   }
 
   function onKeyDown(event){
@@ -1030,6 +1094,26 @@ function createTeacherQuestAdventure(options={}){
     drawPixelText(ctx,text,x,rect.y+rect.h/2,{size,color:self?"#fff4b2":"#f8f5df",align:"center",stroke:self?"#07101f":"#07101f"});
   }
 
+  function drawChatBubble(message,character,{self=false}={}){
+    const text=message.text.length>28?`${message.text.slice(0,27)}…`:message.text;
+    const width=Math.min(220,labelWidth(text,10)+10);
+    const x=Math.round(character.x),y=Math.round(character.y-(self?(Number(character.jumpHeight)||0):0)-82);
+    ctx.fillStyle="#03050d";ctx.fillRect(x-width/2-3,y-3,width+6,25);
+    ctx.fillStyle=self?"#fff4b2":"#f8f5df";ctx.fillRect(x-width/2,y,width,19);
+    ctx.fillStyle=self?"#fff4b2":"#f8f5df";ctx.fillRect(x-4,y+18,8,7);
+    drawPixelText(ctx,text,x,y+10,{size:10,color:"#07101f",align:"center",stroke:null});
+  }
+
+  function drawChatBubbles(){
+    const messages=nearbyChatMessages();
+    remoteCharacters.forEach(remote=>{
+      const message=[...messages].reverse().find(item=>!item.self&&item.uid===remote.uid);
+      if(message) drawChatBubble(message,remote);
+    });
+    const selfMessage=[...messages].reverse().find(message=>message.self);
+    if(selfMessage) drawChatBubble(selfMessage,player,{self:true});
+  }
+
   function drawWorldLabels(){
     const scene=currentScene();
     scene.buildings.forEach(building=>{
@@ -1103,6 +1187,7 @@ function createTeacherQuestAdventure(options={}){
     sprites.forEach(sprite=>sprite.draw());
     drawWorldLabels();
     drawFog();
+    drawChatBubbles();
     ctx.restore();
   }
 
@@ -1251,6 +1336,7 @@ function createTeacherQuestAdventure(options={}){
     elapsed+=delta;
     update(delta);
     reportPlayerState(time);
+    if(time-lastChatRender>500){lastChatRender=time;renderProximityChat();}
     drawWorld();
     drawMiniMap();
     if(time-lastSave>2500){savePosition(player,explorationSets);explorationDirty=false;lastSave=time;}
@@ -1320,6 +1406,7 @@ function createTeacherQuestAdventure(options={}){
     window.removeEventListener("blur",onBlur);
     window.removeEventListener("teacherquest:cloud-progress",applyCloudPosition);
     canvas.removeEventListener("pointerdown",setTapTarget);
+    chatFeed?.removeEventListener("click",onChatFeedClick);
     mobileBindings.forEach(([element,event,handler])=>element.removeEventListener(event,handler));
     interactButton?.removeEventListener("click",interactClick);
     jumpButton?.removeEventListener("click",jumpClick);
@@ -1338,7 +1425,7 @@ function createTeacherQuestAdventure(options={}){
     getState:()=>{
       const scene=currentScene();
       const codec=MAP_REGISTRY.exploration(activeMap.id);
-      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,action:Date.now()-player.actionAt<1400?player.action:"",accessory:normalizedProfile(playerProfile).avatar.accessory,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length,portalCount:scene.portals.length,gateCount:scene.gates.length};
+      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,action:Date.now()-player.actionAt<1400?player.action:"",accessory:normalizedProfile(playerProfile).avatar.accessory,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,nearbyPlayers:[...remoteCharacters.values()].filter(remote=>distance(player,remote)<=CHAT_RADIUS).length,nearbyMessages:nearbyChatMessages().length,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,chatRadius:CHAT_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length,portalCount:scene.portals.length,gateCount:scene.gates.length};
     },
     teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;if(activeMap.id!==portal.mapId)switchMap(portal.mapId);player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
     teleportToNpc:id=>{const npc=currentScene().npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
@@ -1351,12 +1438,14 @@ function createTeacherQuestAdventure(options={}){
     startAction,
     interact,
     setRemotePlayers,
+    setZoneMessages,
     setPlayerProfile,
     resetPosition,
+    revealCurrentMap,
     destroy
   };
 
-  return {destroy,getState:window.teacherQuestAdventureDebug.getState,resetPosition,setRemotePlayers,setPlayerProfile};
+  return {destroy,getState:window.teacherQuestAdventureDebug.getState,resetPosition,revealCurrentMap,setRemotePlayers,setZoneMessages,setPlayerProfile};
 }
 
 window.createTeacherQuestAdventure=createTeacherQuestAdventure;

@@ -719,7 +719,7 @@ test('Firebase errors tell the owner exactly which console setting to fix',async
   expect(messages.domain).toContain('Authorized domains');
 });
 
-test('Raid rules validate new sibling values during room creation and atomic start',async({page})=>{
+test('Firebase rules protect Raid, proximity chat and Test Admin roles',async({page})=>{
   const [rulesResponse,onlineResponse]=await Promise.all([
     page.request.get(`${url}/database.rules.json`),
     page.request.get(`${url}/online.js`)
@@ -729,14 +729,22 @@ test('Raid rules validate new sibling values during room creation and atomic sta
   const rules=await rulesResponse.json();
   const startedAt=rules.rules.raids['$room'].meta.startedAt['.validate'];
   const bossHp=rules.rules.raids['$room'].meta.bossHp['.validate'];
+  const chat=rules.rules.zoneChat['$zone']['$uid'];
+  const admin=rules.rules.admins['$uid'];
   const online=await onlineResponse.text();
   expect(startedAt).toContain("newData.parent().child('status').val() === 'active'");
   expect(bossHp).toContain("newData.parent().child('bossMax')");
   expect(bossHp).not.toContain("root.child('raids').child($room).child('meta').child('bossMax')");
+  expect(chat['.write']).toContain('auth.uid === $uid');
+  expect(chat.text['.validate']).toContain('length <= 80');
+  expect(admin['.write']).toBe(false);
+  expect(admin['.read']).toContain('auth.uid === $uid');
   expect(online).toContain('const createdAt=databaseModule.serverTimestamp()');
   expect(online).toContain('function raidRoomPayload(moduleId="all")');
   expect(online).toContain('getIdTokenResult(true)');
   expect(online).toContain('await user.getIdToken(true)');
+  expect(online).toContain('async function sendProximityMessage');
+  expect(online).toContain('admins/${user.uid}');
 });
 
 test('online presence renders simulated friends only in the active pixel world',async({page})=>{
@@ -759,6 +767,52 @@ test('online presence renders simulated friends only in the active pixel world',
   await expect.poll(()=>page.evaluate(()=>window.teacherQuestAdventureDebug.getState().remotePlayers)).toBe(2);
   await page.locator('[data-view="home"]').first().click();
   await expect.poll(()=>page.evaluate(()=>window.teacherQuestOnlineDebug.getState().zone)).toBe(null);
+  expect(pageErrors).toEqual([]);
+});
+
+test('proximity chat hides distant messages, supports mute and exposes safe Test Admin tools',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const local=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  await page.evaluate(({x,y,now})=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,phase:'online',connected:true,isAdmin:true,onlineCount:3,totalPlayers:42,
+    user:{uid:'admin-local',isAnonymous:false,provider:'google'},profile:{nickname:'ผู้ดูแลทดสอบ',avatar:{}},
+    zonePlayers:[
+      {uid:'friend-near',nickname:'เพื่อนใกล้',x:x+60,y:y+20,direction:'left',avatar:{}},
+      {uid:'friend-far',nickname:'เพื่อนไกล',x:x+900,y:y+500,direction:'right',avatar:{}}
+    ],
+    zoneMessages:[
+      {uid:'admin-local',nickname:'ผู้ดูแลทดสอบ',text:'พร้อมทดสอบ',x,y,sentAt:now,self:true},
+      {uid:'friend-near',nickname:'เพื่อนใกล้',text:'ได้ยินไหม',x:x+60,y:y+20,sentAt:now},
+      {uid:'friend-far',nickname:'เพื่อนไกล',text:'ข้อความนี้ต้องซ่อน',x:x+900,y:y+500,sentAt:now}
+    ]
+  }),{x:local.x,y:local.y,now:Date.now()});
+
+  await expect(page.locator('#adminTestBtn')).toBeVisible();
+  await expect(page.locator('#adventureChatNearby')).toHaveText('1 คน');
+  await page.locator('#adventureChatToggle').click();
+  await expect(page.locator('#adventureChatFeed')).toContainText('พร้อมทดสอบ');
+  await expect(page.locator('#adventureChatFeed')).toContainText('ได้ยินไหม');
+  await expect(page.locator('#adventureChatFeed')).not.toContainText('ข้อความนี้ต้องซ่อน');
+  await page.locator('[data-chat-mute="friend-near"]').click();
+  await expect(page.locator('#adventureChatFeed')).not.toContainText('ได้ยินไหม');
+  await page.locator('[data-chat-unmute-all]').click();
+  await expect(page.locator('#adventureChatFeed')).toContainText('ได้ยินไหม');
+
+  const before=await page.evaluate(()=>window.teacherQuestEconomyDebug.getState());
+  await page.locator('#adminTestBtn').click();
+  await expect(page.getByRole('heading',{name:'แผงทดสอบเกม'})).toBeVisible();
+  await page.locator('[data-admin-action="resources"]').click();
+  await page.locator('[data-admin-action="unlock"]').click();
+  const after=await page.evaluate(()=>window.teacherQuestEconomyDebug.getState());
+  expect(after.coins).toBe(before.coins+5000);
+  expect(after.economy.owned).toEqual(expect.arrayContaining(['emote-spin','cosmetic-crown']));
+  await page.locator('#modalClose').click();
+  await page.setViewportSize({width:390,height:844});
+  const chatToggle=await page.locator('#adventureChatToggle').boundingBox();
+  expect(chatToggle.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
   expect(pageErrors).toEqual([]);
 });
 
