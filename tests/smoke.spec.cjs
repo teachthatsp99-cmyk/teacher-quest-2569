@@ -39,7 +39,9 @@ test('core battle flow renders graphics, feedback and a source link',async({page
   await page.locator('#attackBtn').click();
   await expect(page.locator('.feedback')).toBeVisible();
   await expect(page.locator('.feedback .source a')).toHaveAttribute('href',/^https:\/\//);
-  await expect(page.locator('.feedback .source')).toContainText('เอกสารชุดอ้างอิง:');
+  await expect(page.locator('.feedback .source')).toContainText('เอกสาร:');
+  await expect(page.locator('.feedback .source')).toContainText('ตำแหน่ง:');
+  await expect(page.locator('.feedback .citation-head strong')).toBeVisible();
   await expect(page.locator('#nextBattle')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
@@ -107,6 +109,30 @@ test('exam count follows the selected module availability',async({page})=>{
   await expect(page.locator('.question-grid button.answered')).toHaveCount(1);
 });
 
+test('English and Thai culture are separate modules with truthful counts and documents',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  const split=await page.evaluate(()=>Object.fromEntries(['culture','english'].map(id=>{
+    const module=window.GAME_DATA.modules.find(item=>item.id===id);
+    const questions=window.GAME_DATA.questions.filter(question=>question.module===id);
+    return [id,{title:module?.title,count:questions.length,documents:[...new Set(questions.map(question=>question.sourceDocument))],ids:questions.map(question=>question.id)}];
+  })));
+  expect(split.culture.title).toBe('วัฒนธรรมไทย');
+  expect(split.culture.count).toBe(12);
+  expect(split.culture.documents).toEqual(['แนวข้อสอบวัฒนธรรมไทย และขนบธรรมเนียมประเพณีไทย.(2).pdf']);
+  expect(split.english.title).toBe('ภาษาอังกฤษเพื่อการสอบ');
+  expect(split.english.count).toBe(8);
+  expect(split.english.documents).toEqual(['แนวข้อสอบ ความสามารถทางด้านภาษาอังกฤษ.(2).pdf']);
+  expect(split.english.ids).toEqual([146,147,148,149,150,380,381,382]);
+
+  await page.locator('[data-view="exam"]').click();
+  await page.locator('#examModule').selectOption('english');
+  await expect(page.locator('#examAvailability')).toContainText('มี 8 ข้อ');
+  await expect(page.locator('#examCount')).toHaveValue('8');
+  await page.locator('#examModule').selectOption('culture');
+  await expect(page.locator('#examAvailability')).toContainText('มี 12 ข้อ');
+  await expect(page.locator('#examCount')).toHaveValue('12');
+});
+
 test('soundtrack raises the tempo for a boss encounter and exposes the current theme',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   await page.locator('[data-view="exam"]').click();
@@ -119,18 +145,18 @@ test('soundtrack raises the tempo for a boss encounter and exposes the current t
   expect(music.bpm).toBeGreaterThan(150);
 });
 
-test('all 20 zones show complete-bank and optional short modes with unique pixel icons',async({page})=>{
+test('all 21 zones show complete-bank and optional short modes with unique pixel icons',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   const modules = await page.evaluate(()=>window.GAME_DATA.modules.map(module=>{
     const questions=window.GAME_DATA.questions.filter(question=>question.module===module.id);
     return {id:module.id,total:questions.length,boss:questions.filter(question=>question.difficulty!=="ง่าย").length};
   }));
   await openWorld(page);
-  await expect(page.locator('.zone')).toHaveCount(20);
+  await expect(page.locator('.zone')).toHaveCount(21);
   const iconIds = await page.locator('.zone [data-module-icon]').evaluateAll(icons=>icons.map(icon=>icon.dataset.moduleIcon));
   const iconPatterns = await page.locator('.zone [data-module-icon]').evaluateAll(icons=>icons.map(icon=>icon.innerHTML));
-  expect(new Set(iconIds).size).toBe(20);
-  expect(new Set(iconPatterns).size).toBe(20);
+  expect(new Set(iconIds).size).toBe(21);
+  expect(new Set(iconPatterns).size).toBe(21);
   expect(iconIds).toContain('disability');
   await expect(page.locator('body')).not.toContainText('♿');
 
@@ -324,7 +350,7 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ท',code:'KeyM',bubbles:true})));
   await expect(page.locator('#adventureMapPanel')).toBeVisible();
   await expect(page.locator('.map-district')).toHaveCount(4);
-  await expect(page.locator('.map-zone')).toHaveCount(20);
+  await expect(page.locator('.map-zone')).toHaveCount(21);
   await page.locator('[data-map-close]').click();
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('research'))).toBe(true);

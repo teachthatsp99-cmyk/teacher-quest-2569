@@ -44,7 +44,8 @@ const PORTAL_POSITIONS = Object.freeze([
   {x:224,y:208},{x:480,y:192},{x:752,y:272},{x:304,y:512},{x:688,y:528},
   {x:1280,y:208},{x:1536,y:192},{x:1816,y:288},{x:1304,y:520},{x:1696,y:520},
   {x:224,y:1000},{x:496,y:976},{x:760,y:1096},{x:304,y:1320},{x:704,y:1328},
-  {x:1280,y:992},{x:1552,y:976},{x:1816,y:1096},{x:1312,y:1320},{x:1712,y:1328}
+  {x:1280,y:992},{x:1552,y:976},{x:1816,y:1096},{x:1312,y:1320},{x:1712,y:1328},
+  {x:1930,y:1328}
 ]);
 
 const BUILDINGS = Object.freeze([
@@ -110,7 +111,7 @@ const NPC_DEFINITIONS = Object.freeze([
   {id:"scholar",x:512,y:498,name:"นักปราชญ์แห่งการสอน",role:"ผู้ดูแลเขตศาสตร์ครู",color:"#ffd45c",dialogue:"เขตนี้รวมศาสตร์การสอน หลักสูตร การวัดผล วิจัย และจิตวิทยา เริ่มจากด่านที่ยังไม่เคยทำก่อน แล้วค่อยกลับมาเก็บความแม่นให้เกิน 80%",action:"district"},
   {id:"inventor",x:1536,y:498,name:"ช่างกลนวัตกรรม",role:"ผู้ดูแลเขตนวัตกรรม",color:"#58e7b2",dialogue:"เขตนี้ฝึกสื่อ AI การจัดชั้นเรียน และมาตรฐานวิชาชีพ ประตูจะสว่างขึ้นตามความคืบหน้าของคุณ",action:"district"},
   {id:"judge",x:512,y:1268,name:"ผู้เฝ้าคัมภีร์",role:"ผู้ดูแลเขตกฎหมาย",color:"#ff9b6a",dialogue:"ข้อกฎหมายต้องอ่านคำถามและเงื่อนไขให้ครบ อย่าใช้ความยาวของตัวเลือกเป็นตัวเดา เพราะคลังนี้ปรับสมดุลตัวเลือกแล้ว",action:"district"},
-  {id:"ranger",x:1536,y:1268,name:"ผู้สังเกตการณ์ 2569",role:"ผู้ดูแลเขตอนาคต",color:"#a88cff",dialogue:"เขตนี้รวมภาษา วัฒนธรรม นโยบาย คุณภาพ และสถานการณ์ปัจจุบัน เนื้อหาที่ผันแปรมีวันที่ตรวจสอบและลิงก์ต้นทางกำกับ",action:"district"}
+  {id:"ranger",x:1536,y:1268,name:"ผู้สังเกตการณ์ 2569",role:"ผู้ดูแลเขตอนาคต",color:"#a88cff",dialogue:"เขตนี้รวมภาษา วัฒนธรรม นโยบาย คุณภาพ และสถานการณ์ปัจจุบัน เนื้อหาที่ผันแปรมีวันที่ตรวจสอบและลิงก์แหล่งทางการสำหรับตรวจเทียบ",action:"district"}
 ]);
 
 const TRAINING_NPCS = Object.freeze([
@@ -162,7 +163,7 @@ function makeRoads(portals){
     {x:996,y:0,w:56,h:WORLD_HEIGHT,main:true}
   ];
   DISTRICTS.forEach((district,index) => {
-    const districtPortals = portals.slice(index*5,index*5+5);
+    const districtPortals = portals.filter(portal=>portal.district===index);
     roads.push({x:Math.min(district.hub.x,1024)-24,y:district.hub.y-24,w:Math.abs(1024-district.hub.x)+48,h:48});
     roads.push({x:district.hub.x-24,y:Math.min(district.hub.y,772)-24,w:48,h:Math.abs(772-district.hub.y)+48});
     districtPortals.forEach(portal => {
@@ -248,7 +249,7 @@ function createTeacherQuestAdventure(options={}){
   let activeMap=MAP_REGISTRY.get(player.mapId);
   const camera = {x:clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH),y:clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT)};
   const modules = options.modules || [];
-  const portals = modules.map((module,index) => ({...PORTAL_POSITIONS[index],module,index,district:Math.floor(index/5)}));
+  const portals = modules.map((module,index) => ({...PORTAL_POSITIONS[index],module,index,district:Math.min(DISTRICTS.length-1,Math.floor(index/5))}));
   const statsCache = new Map();
   const academyRoads = makeRoads(portals);
   const academyNpcs = NPC_DEFINITIONS.map(npc => ({...npc,type:"npc"}));
@@ -293,8 +294,8 @@ function createTeacherQuestAdventure(options={}){
 
   function statsFor(portal){
     if(statsCache.has(portal.module.id)) return statsCache.get(portal.module.id);
-    const stats = options.getStats?.(portal.module.id) || {total:20,done:0,accuracy:0};
-    const normalized = {total:Number(stats.total)||20,done:Number(stats.done)||0,accuracy:Number(stats.accuracy)||0};
+    const stats = options.getStats?.(portal.module.id) || {total:0,done:0,accuracy:0};
+    const normalized = {total:Number(stats.total)||0,done:Number(stats.done)||0,accuracy:Number(stats.accuracy)||0};
     statsCache.set(portal.module.id,normalized);
     return normalized;
   }
@@ -522,7 +523,7 @@ function createTeacherQuestAdventure(options={}){
     dialogueTitle.textContent=gate.name;
     dialogueText.textContent=gate.targetMap===TRAINING_MAP_ID
       ? "เข้าสู่สนามฝึกที่มีหมอกบดบัง ทางลัด และรั้วเตี้ยสำหรับฝึกกระโดด ความคืบหน้าการสำรวจจะถูกบันทึกไว้"
-      : "กลับสู่ศูนย์กลางและประตูข้อสอบ 20 ด่าน โดยตำแหน่งและพื้นที่ที่เคยสำรวจยังคงอยู่";
+      : `กลับสู่ศูนย์กลางและประตูข้อสอบ ${modules.length} ด่าน โดยตำแหน่งและพื้นที่ที่เคยสำรวจยังคงอยู่`;
     dialogueStats.innerHTML=`<span><b>${explorationPercent(destination.id)}%</b> สำรวจแล้ว</span><span><b>${destination.short}</b> จุดหมาย</span>`;
     dialogueActions.innerHTML=`<button class="btn mint" data-gate-travel>เดินทางไป ${escapeHtml(destination.title)}</button><button class="btn dark" data-dialogue-close>อยู่ที่นี่ต่อ</button>`;
     dialogueActions.querySelector("[data-gate-travel]")?.addEventListener("click",()=>{
@@ -596,7 +597,7 @@ function createTeacherQuestAdventure(options={}){
     }).join("")}</section>`;
     const content=activeMap.id===ACADEMY_MAP_ID
       ? DISTRICTS.map((district,districtIndex) => {
-          const districtPortals = portals.slice(districtIndex*5,districtIndex*5+5);
+          const districtPortals = portals.filter(portal=>portal.district===districtIndex);
           return `<section class="map-district" style="--district:${district.color}"><h4>${escapeHtml(district.name)}</h4>${districtPortals.map(portal => {
             const stats = statsFor(portal);
             const discovered=isExploredAt(portal.x,portal.y,ACADEMY_MAP_ID);

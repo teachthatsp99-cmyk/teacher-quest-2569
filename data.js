@@ -15,7 +15,8 @@ const modules=[
 {id:"civil",title:"ข้าราชการครูและ ก.ค.ศ.",icon:"¶",boss:"มหาเสนาบดีระเบียบ",summary:"สถานะ หน้าที่ วินัย การบริหารงานบุคคล และระบบดิจิทัลของ ก.ค.ศ.",source:"พ.ร.บ.ระเบียบข้าราชการครูและบุคลากรทางการศึกษา และข้อมูล ก.ค.ศ.",official:"https://www.otepc.go.th/th/"},
 {id:"ksp",title:"คุรุสภาและใบอนุญาต",icon:"★",boss:"ผู้รักษาตราวิชาชีพ",summary:"อำนาจหน้าที่ มาตรฐานวิชาชีพ ใบอนุญาต การทดสอบสมรรถนะ และจรรยาบรรณฉบับปัจจุบัน",source:"กฎหมายและข้อบังคับคุรุสภา",official:"https://www.ksp.or.th/laws/"},
 {id:"voclaw",title:"กฎหมายและการบริหารอาชีวศึกษา",icon:"⚒",boss:"จักรพรรดิสายอาชีพ",summary:"พ.ร.บ.อาชีวศึกษา รูปแบบการจัดการศึกษา สถาบัน ความร่วมมือ และธรรมาภิบาล",source:"พ.ร.บ.การอาชีวศึกษา พ.ศ. 2551 และแนวข้อสอบการบริหารอาชีวศึกษา",official:"https://www.vec.go.th/"},
-{id:"culture",title:"ภาษาอังกฤษและวัฒนธรรมไทย",icon:"◇",boss:"นักเดินทางพันภาษา",summary:"บทสนทนาภาษาอังกฤษ การใช้ภาษาในสถานการณ์ และวัฒนธรรมประเพณีไทย",source:"แนวข้อสอบภาษาอังกฤษ และวัฒนธรรมไทย",official:"https://www.m-culture.go.th/"},
+{id:"culture",title:"วัฒนธรรมไทย",icon:"◇",boss:"ผู้พิทักษ์ภูมิปัญญา",summary:"ความหมายของวัฒนธรรม ประเพณีแต่ละภูมิภาค ความหลากหลาย และการใช้ภูมิปัญญาอย่างเคารพ",source:"แนวข้อสอบวัฒนธรรมไทย และขนบธรรมเนียมประเพณีไทย",official:"https://www.m-culture.go.th/"},
+{id:"english",title:"ภาษาอังกฤษเพื่อการสอบ",icon:"▧",boss:"จอมเวทภาษา",summary:"บทสนทนา การขอความช่วยเหลือ ไวยากรณ์พื้นฐาน และภาษาอังกฤษในบริบทการเรียนกับการทำงาน",source:"แนวข้อสอบ ความสามารถทางด้านภาษาอังกฤษ",official:"https://learnenglish.britishcouncil.org/free-resources/grammar"},
 {id:"policy",title:"นโยบายการศึกษา 2569–2570",icon:"◈",boss:"บอสแห่งการเปลี่ยนแปลง",summary:"5 ภารกิจ ศธ. ความเสมอภาค สมรรถนะ AI อย่างมีวิจารณญาณ และโรงเรียนปลอดภัย",source:"ประกาศนโยบายการศึกษาของกระทรวงศึกษาธิการ พ.ศ. 2569–2570",official:"https://www.moe.go.th/นโยบายการศึกษาของกระทรวง/"},
 {id:"student",title:"การพัฒนาผู้เรียน",icon:"✦",boss:"เงาแห่งการหลุดระบบ",summary:"ระบบดูแลช่วยเหลือ แนะแนว ทักษะชีวิต คุณลักษณะ การส่งต่อ และเสียงของผู้เรียน",source:"เนื้อหาและแนวข้อสอบการพัฒนาผู้เรียน ตรวจเทียบแนวทาง สพฐ.",official:"https://www.obec.go.th/"},
 {id:"admin",title:"บริหารราชการกระทรวงศึกษา",icon:"▥",boss:"เขาวงกตส่วนราชการ",summary:"โครงสร้าง ศธ. องค์กรหลัก เขตพื้นที่ สถานศึกษานิติบุคคล การมอบอำนาจ และธรรมาภิบาล",source:"พ.ร.บ.ระเบียบบริหารราชการกระทรวงศึกษาธิการและที่แก้ไขเพิ่มเติม",official:"https://www.moe.go.th/พรบ-ระเบียบบริหารราชการ/"},
@@ -40,7 +41,7 @@ const sourceInventory=[
   {module:"student",file:"เนื้อหา+แนวข้อสอบการพัฒนาผู้เรียน.(1).pdf",status:"reference-reverified"},
   {module:"voclaw",file:"แนวข้อสอบ กฎหมายและการบริหารการจัดการศึกษาอาชีวศึกษา(2).pdf",status:"reference-reverified"},
   {module:"measure",file:"แนวข้อสอบ การวัดและประเมินผลการศึกษา.(2).pdf",status:"reference"},
-  {module:"culture",file:"แนวข้อสอบ ความสามารถทางด้านภาษาอังกฤษ.(2).pdf",status:"reference"},
+  {module:"english",file:"แนวข้อสอบ ความสามารถทางด้านภาษาอังกฤษ.(2).pdf",status:"reference"},
   {module:"civil",file:"แนวข้อสอบ พ.ร.บ. ระเบียบข้าราชการครูและบุคลากรทางการศึกษา พ.ศ. 2547 และแก้ไขเพิ่มเติมถึง ฉบับ(3).pdf",status:"duplicate"},
   {module:"disability",file:"แนวข้อสอบ พ.ร.บ.การจัดการศึกษาสำหรับคนพิการ พ.ศ. 2551 แก้ไขถึง(ฉบับที่ 2) 2556.(3).pdf",status:"duplicate"},
   {module:"ksp",file:"แนวข้อสอบ พ.ร.บ.สภาครูและบุคลากรทางการศึกษา พ.ศ. 2546(2).pdf",status:"reference-reverified"},
@@ -461,7 +462,7 @@ const questions=[
 const R=(id,module,type,question,options,answer,explanation,sourceDocument,sourceUrl,verified=true)=>({
   id,module,type,question,options,answer,explanation,sourceDocument,sourceUrl,
   source:modules.find(item=>item.id===module)?.source || sourceDocument,
-  verified,verifiedAt:verified?VERIFIED_AT:"",verificationStatus:verified?"official-current":"reference-backed"
+  verified,verifiedAt:verified?VERIFIED_AT:"",verificationStatus:verified?"official-current":"topic-reference"
 });
 const replacements=[
   R(171,"student","ระบบดูแลช่วยเหลือ","ขั้นตอนแรกของระบบดูแลช่วยเหลือนักเรียนควรทำสิ่งใด",[
@@ -953,6 +954,15 @@ questions.forEach((question,index)=>{
   const replacement=replacementById.get(question.id);
   if(replacement) questions[index]={...question,...replacement,difficulty:question.difficulty};
 });
+// แยกภาษาอังกฤษออกจากวัฒนธรรมโดยคง id เดิมทุกข้อ เพื่อรักษาประวัติการทำข้อสอบ
+// บุ๊กมาร์ก และความคืบหน้าที่ผู้เล่นบันทึกไว้ก่อนปรับโครงสร้างหมวด
+const ENGLISH_QUESTION_IDS=new Set([146,147,148,149,150,380,381,382]);
+questions.forEach(question=>{
+  if(ENGLISH_QUESTION_IDS.has(question.id)) question.module="english";
+  if(question.module==="english" || question.module==="culture"){
+    question.source=modules.find(module=>module.id===question.module)?.source || question.source;
+  }
+});
 questions.forEach(question=>{
   question.options=question.options.map(option=>option
     .replaceAll("ความสม่ำโดยทั่วไป","ความสม่ำเสมอ")
@@ -981,6 +991,7 @@ const balanceContexts={
   ksp:["เมื่อตรวจสถานะจากระบบของคุรุสภา","สำหรับการกำกับมาตรฐานวิชาชีพ","ภายใต้ข้อบังคับที่มีผลใช้ในปัจจุบัน","เมื่อพิจารณาคุณสมบัติและหลักฐานประกอบ"],
   voclaw:["เมื่อเชื่อมการเรียนกับงานอาชีพจริง","สำหรับการบริหารความร่วมมือกับสถานประกอบการ","ภายใต้มาตรฐานสมรรถนะและความปลอดภัย","เมื่อติดตามผลลัพธ์ของผู้สำเร็จการศึกษา"],
   culture:["เมื่อสื่อสารในสถานการณ์ดังกล่าว","สำหรับการเรียนรู้ในห้องที่มีความหลากหลาย","ภายใต้บริบททางสังคมและวัฒนธรรม","เมื่อพิจารณาความหมายต่อชุมชน"],
+  english:["when communicating in this situation","for a polite classroom interaction","in a professional workplace context","when checking meaning and grammar"],
   policy:["เมื่อขับเคลื่อนเป็นแผนปฏิบัติการ","สำหรับนโยบายการศึกษา พ.ศ. 2569–2570","ภายใต้เป้าหมายลดความเหลื่อมล้ำ","เมื่อติดตามผลด้วยข้อมูลรายบุคคล"],
   student:["เมื่อวางแผนช่วยเหลือผู้เรียนรายบุคคล","สำหรับระบบดูแลช่วยเหลือของสถานศึกษา","ภายใต้หลักความลับและความปลอดภัย","เมื่อติดตามผลร่วมกับผู้เรียนและครอบครัว"],
   admin:["เมื่อประสานงานตามอำนาจหน้าที่","สำหรับโครงสร้างบริหารราชการกระทรวง","ภายใต้หลักกระจายอำนาจและรับผิดชอบ","เมื่อตรวจสอบผลการดำเนินงานของหน่วยงาน"],
@@ -1063,14 +1074,42 @@ const categoryOf=question=>{
   if(/ประเมิน|วิจัย|หลักฐาน|ข้อมูล|เครื่องมือ|เกณฑ์|ตัวแปร/.test(text)) return "วิเคราะห์และประเมิน";
   return "ความรู้และหลักการ";
 };
+const citationOverrides=new Map([
+  [141,{sourceLocator:"หน้า 1 • ข้อ 1: ประเพณีสารทเดือนสิบ",verificationStatus:"exact-reference"}],
+  [142,{sourceLocator:"หน้า 1 • ข้อ 3: ประเพณีแห่ผ้าขึ้นธาตุ",verificationStatus:"exact-reference"}],
+  [143,{sourceLocator:"หน้า 2 • ข้อ 12: ความหมายและลักษณะของวัฒนธรรม",verificationStatus:"topic-reference"}],
+  [144,{sourceLocator:"คำถามประยุกต์ • ภาษา อัตลักษณ์ และความหลากหลายในชั้นเรียน",verificationStatus:"applied-reference"}],
+  [145,{sourceLocator:"คำถามประยุกต์ • การใช้วัฒนธรรมชุมชนอย่างเคารพ",verificationStatus:"applied-reference"}],
+  [146,{sourceLocator:"หน้า 1–4 • Part I: Expression — responding to thanks",verificationStatus:"topic-reference"}],
+  [147,{sourceLocator:"หน้า 1–4 • Part I: Expression — asking for clarification",verificationStatus:"topic-reference"}],
+  [148,{sourceLocator:"หน้า 4–6 • Part II: Structure — do/does + base verb",verificationStatus:"topic-reference"}],
+  [149,{sourceLocator:"หน้า 1–4 • Part I: Expression — accepting an offer",verificationStatus:"topic-reference"}],
+  [150,{sourceLocator:"คำถามประยุกต์ • constructive feedback in education",verificationStatus:"applied-reference"}],
+  [373,{sourceLocator:"หน้า 6 • ข้อ 48: ประเพณียี่เป็ง",verificationStatus:"exact-reference"}],
+  [374,{sourceLocator:"หน้า 5 • ข้อ 45: ประเพณีบุญบั้งไฟ",verificationStatus:"exact-reference"}],
+  [375,{sourceLocator:"คำถามประยุกต์ • ภูมิศาสตร์วัฒนธรรมของประเพณีผีตาโขน",verificationStatus:"applied-reference"}],
+  [376,{sourceLocator:"คำถามประยุกต์ • ความหมายและความหลากหลายของประเพณีสงกรานต์",verificationStatus:"applied-reference"}],
+  [377,{sourceLocator:"คำถามประยุกต์ • ภูมิปัญญาชุมชน การให้เครดิต และการแบ่งปันประโยชน์",verificationStatus:"applied-reference"}],
+  [378,{sourceLocator:"คำถามประยุกต์ • คุณค่าของพิธีไหว้ครูในบริบทการศึกษา",verificationStatus:"applied-reference"}],
+  [379,{sourceLocator:"คำถามประยุกต์ • การจัดกิจกรรมในห้องเรียนพหุวัฒนธรรม",verificationStatus:"applied-reference"}],
+  [380,{sourceLocator:"หน้า 1–4 • Part I: Expression — polite requests",verificationStatus:"topic-reference"}],
+  [381,{sourceLocator:"หน้า 4–6 • Part II: Structure — present perfect",verificationStatus:"topic-reference"}],
+  [382,{sourceLocator:"หน้า 4–6 • Part II: Structure — first conditional",verificationStatus:"topic-reference"}]
+]);
 questions.forEach(question=>{
   const module=modules.find(item=>item.id===question.module);
+  const explicitSourceUrl=Boolean(question.sourceUrl);
   question.category=categoryOf(question);
   question.sourceUrl=question.sourceUrl || module?.official || "";
   question.sourceDocument=question.sourceDocument || moduleDocuments[question.module]?.[0] || "ตรวจจากแหล่งทางการของหมวด (ไม่มีไฟล์ PDF ตรงหมวดในชุดที่ส่ง)";
-  question.verificationStatus=question.verified ? "official-current" : "reference-backed";
+  question.sourceDirect=Boolean(question.verified && explicitSourceUrl);
+  question.sourceLocator=question.sourceDirect
+    ? `แหล่งทางการของประเด็น • ตรวจ ${question.verifiedAt || VERIFIED_AT}`
+    : `หัวข้อในเอกสาร • ${question.type}`;
+  question.verificationStatus=question.sourceDirect ? "official-current" : "topic-reference";
+  Object.assign(question,citationOverrides.get(question.id) || {});
 });
-const questionBankAudit={version:"4.2.0",questionCount:questions.length,moduleCount:modules.length,uploadedDocumentCount:sourceInventory.length,uniqueDocumentCount:sourceInventory.filter(item=>item.status!=="duplicate").length,answerDistribution:{ก:questions.filter(q=>q.answer===0).length,ข:questions.filter(q=>q.answer===1).length,ค:questions.filter(q=>q.answer===2).length,ง:questions.filter(q=>q.answer===3).length},categoryDistribution:Object.fromEntries([...new Set(questions.map(q=>q.category))].map(category=>[category,questions.filter(q=>q.category===category).length])),verifiedCount:questions.filter(q=>q.verified).length,referenceBackedCount:questions.filter(q=>!q.verified && q.sourceUrl).length,sourceCoverage:modules.map(module=>({module:module.id,source:module.source,sourceUrl:module.official,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(q=>q.module===module.id).length})),sourceInventory,standards:["ปรับตัวเลือกเพื่อลดเบาะแสจากความยาวและคำสุดโต่ง","ตำแหน่งเฉลยสมดุลทั้งสี่ตัวเลือก","ทุกข้อระบุเอกสารชุดอ้างอิงและแหล่งทางการที่ตรวจเทียบ","คลัง 400 ข้อตามพิมพ์เขียว 20 หมวด หมวดละ 20 ข้อและครบ 3 ระดับความยาก","ภารกิจหลักของแต่ละด่านทำครบทั้งคลังโดยไม่ซ้ำในภารกิจเดียว"]};
+const questionBankAudit={version:"4.3.0",questionCount:questions.length,moduleCount:modules.length,uploadedDocumentCount:sourceInventory.length,uniqueDocumentCount:sourceInventory.filter(item=>item.status!=="duplicate").length,answerDistribution:{ก:questions.filter(q=>q.answer===0).length,ข:questions.filter(q=>q.answer===1).length,ค:questions.filter(q=>q.answer===2).length,ง:questions.filter(q=>q.answer===3).length},categoryDistribution:Object.fromEntries([...new Set(questions.map(q=>q.category))].map(category=>[category,questions.filter(q=>q.category===category).length])),verifiedCount:questions.filter(q=>q.verificationStatus==="official-current").length,referenceBackedCount:questions.filter(q=>q.verificationStatus!=="official-current").length,sourceCoverage:modules.map(module=>({module:module.id,source:module.source,sourceUrl:module.official,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(q=>q.module===module.id).length})),sourceInventory,standards:["ปรับตัวเลือกเพื่อลดเบาะแสจากความยาวและคำสุดโต่ง","ตำแหน่งเฉลยสมดุลทั้งสี่ตัวเลือก","ทุกข้อระบุเอกสารชุดอ้างอิงพร้อมตำแหน่งหัวข้อ และแยกลิงก์ตรงออกจากลิงก์ตรวจเทียบ","คลัง 400 ข้อใน 21 หมวด โดยจำนวนต่อหมวดอ่านจากคลังจริงและครบ 3 ระดับความยาก","ภารกิจหลักของแต่ละด่านทำครบทั้งคลังโดยไม่ซ้ำในภารกิจเดียว"]};
 const codex=[
 {title:"สูตร 9–12–15",icon:"#",items:["ภาคบังคับ 9 ปี","สิทธิขั้นพื้นฐานตาม พ.ร.บ. ไม่น้อยกว่า 12 ปี","นโยบาย/คำสั่งการศึกษาฟรี 15 ปี ต้องแยกจากตัวบท"]},
 {title:"สามรูปแบบการศึกษา",icon:"△",items:["ในระบบ","นอกระบบ","ตามอัธยาศัย","ผลการเรียนและประสบการณ์สามารถเทียบโอนได้ตามหลักเกณฑ์"]},
@@ -1079,6 +1118,6 @@ const codex=[
 {title:"AI อย่างรับผิดชอบ",icon:"⚙",items:["ไม่ใส่ข้อมูลส่วนบุคคลโดยไม่จำเป็น","ตรวจข้อเท็จจริงและอคติ","เปิดเผยการใช้เมื่อเกี่ยวกับงานประเมิน","มนุษย์รับผิดชอบการตัดสินใจสุดท้าย"]},
 {title:"วงจรวิจัยในชั้นเรียน",icon:"◉",items:["ระบุปัญหาจากหลักฐาน","วางแผน","ปฏิบัติและเก็บข้อมูล","สะท้อนผลและปรับรอบต่อไป"]}
 ];
-const sources=modules.map(module=>({title:module.title,url:module.official,note:module.source}));
-window.GAME_DATA={version:"4.2.0",verifiedAt:VERIFIED_AT,modules,questions,questionBankAudit,codex,sources};
+const sources=modules.map(module=>({title:module.title,url:module.official,note:module.source,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(question=>question.module===module.id).length}));
+window.GAME_DATA={version:"4.3.0",verifiedAt:VERIFIED_AT,modules,questions,questionBankAudit,codex,sources};
 })();
