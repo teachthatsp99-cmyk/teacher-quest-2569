@@ -240,8 +240,8 @@ function itemButton(item,icon,label,count,on=false){
 
 function feedbackHtml(question){
   const correct = drill.selected === question.answer;
-  const link = question.sourceUrl ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="เปิดแหล่งอ้างอิงของข้อ ${question.id}">เปิดต้นทาง ↗</a>` : "";
-  return `<div class="v4-feedback ${correct?"good":"bad"}"><h3>${correct?"✓ ตอบถูก":"× ยังไม่ถูก"}</h3><p>${esc(question.explanation)}</p><small>แหล่งเนื้อหา: ${esc(question.source || "คลังความรู้ครูเควสต์")}${question.verified ? ` • ตรวจ ${esc(question.verifiedAt)}` : " • อ้างอิงต้นทาง"}${link}</small></div>`;
+  const citation=window.teacherQuestSourceMarkup?.(question) || `<small>เอกสาร: ${esc(question.sourceDocument || question.source || "คลังความรู้ครูเควสต์")}</small>`;
+  return `<div class="v4-feedback ${correct?"good":"bad"}"><h3>${correct?"✓ ตอบถูก":"× ยังไม่ถูก"}</h3><p>${esc(question.explanation)}</p><div class="v4-source">${citation}</div></div>`;
 }
 
 function answerQuestion(index){
@@ -323,8 +323,8 @@ function startFlashcards(){
 function renderFlashcard(){
   const question = cards.questions[cards.index];
   const answer = question.options[question.answer];
-  const sourceLink = question.sourceUrl ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener">เปิดต้นทาง ↗</a>` : "";
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แฟลชการ์ดแก้จุดอ่อน</h2><small>ใบที่ ${cards.index+1} / ${cards.questions.length}</small></div><span class="v4-chip gold">${esc(question.difficulty)}</span></div><button class="v4-card-face" id="v4CardFace">${cards.revealed?`<div class="back"><strong>${letters[question.answer]}. ${esc(answer)}</strong><p>${esc(question.explanation)}</p><small>${esc(question.source || "คลังความรู้ครูเควสต์")}${sourceLink}</small></div>`:`<div class="front">${esc(question.question)}<div style="font-size:12px;color:var(--gold);margin-top:20px">แตะเพื่อเปิดคำตอบ</div></div>`}</button><div class="v4-actions"><button class="v4-btn dark" data-card="prev">ก่อนหน้า</button><button class="v4-btn sky" data-card="shuffle">สุ่มใหม่</button><button class="v4-btn mint" data-card="next">ถัดไป</button><button class="v4-btn dark" data-card="close">กลับศูนย์ฝึก</button></div></section>`;
+  const citation=window.teacherQuestSourceMarkup?.(question) || `<small>เอกสาร: ${esc(question.sourceDocument || question.source || "คลังความรู้ครูเควสต์")}</small>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แฟลชการ์ดแก้จุดอ่อน</h2><small>ใบที่ ${cards.index+1} / ${cards.questions.length}</small></div><span class="v4-chip gold">${esc(question.difficulty)}</span></div><button class="v4-card-face" id="v4CardFace">${cards.revealed?`<div class="back"><strong>${letters[question.answer]}. ${esc(answer)}</strong><p>${esc(question.explanation)}</p><div class="v4-source">${citation}</div></div>`:`<div class="front">${esc(question.question)}<div style="font-size:12px;color:var(--gold);margin-top:20px">แตะเพื่อเปิดคำตอบ</div></div>`}</button><div class="v4-actions"><button class="v4-btn dark" data-card="prev">ก่อนหน้า</button><button class="v4-btn sky" data-card="shuffle">สุ่มใหม่</button><button class="v4-btn mint" data-card="next">ถัดไป</button><button class="v4-btn dark" data-card="close">กลับศูนย์ฝึก</button></div></section>`;
   document.querySelector("#v4CardFace").onclick=()=>{cards.revealed=!cards.revealed;renderFlashcard();};
   document.querySelector('[data-card="prev"]').onclick=()=>{cards.index=(cards.index-1+cards.questions.length)%cards.questions.length;cards.revealed=false;renderFlashcard();};
   document.querySelector('[data-card="next"]').onclick=()=>{cards.index=(cards.index+1)%cards.questions.length;cards.revealed=false;renderFlashcard();};

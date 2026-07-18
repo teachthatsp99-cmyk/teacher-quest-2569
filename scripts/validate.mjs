@@ -7,14 +7,17 @@ const normalize = value => String(value || '').normalize('NFKC').replace(/\s+/g,
 const length = value => [...String(value || '')].length;
 
 const dataSource = fs.readFileSync('data.js','utf8');
+const citationSource = fs.readFileSync('citation-index.js','utf8');
 const context = {window:{}};
 vm.createContext(context);
+vm.runInContext(citationSource,context,{filename:'citation-index.js'});
 vm.runInContext(dataSource,context,{filename:'data.js'});
 const data = context.window.GAME_DATA;
+const citationIndex = context.window.TEACHER_QUEST_CITATION_INDEX || {};
 
 if(!data) fail('GAME_DATA was not created');
-if(data?.version !== '4.2.0') fail(`expected data version 4.2.0, got ${data?.version}`);
-if(!Array.isArray(data?.modules) || data.modules.length !== 20) fail(`expected 20 modules, got ${data?.modules?.length}`);
+if(data?.version !== '4.3.1') fail(`expected data version 4.3.1, got ${data?.version}`);
+if(!Array.isArray(data?.modules) || data.modules.length !== 21) fail(`expected 21 modules, got ${data?.modules?.length}`);
 if(!Array.isArray(data?.questions) || data.questions.length !== 400) fail(`expected exactly 400 questions, got ${data?.questions?.length}`);
 
 const modules = data?.modules || [];
@@ -57,8 +60,12 @@ for(const question of questions){
   if(!normalize(question.explanation)) fail(`question ${question.id} has empty explanation`);
   if(!normalize(question.source)) fail(`question ${question.id} has no source label`);
   if(!normalize(question.sourceDocument)) fail(`question ${question.id} has no source document label`);
+  if(!normalize(question.sourceLocator)) fail(`question ${question.id} has no source locator`);
   if(!/^https:\/\//.test(question.sourceUrl || '')) fail(`question ${question.id} has no HTTPS source URL`);
-  if(!['official-current','reference-backed'].includes(question.verificationStatus)) fail(`question ${question.id} has invalid verification status`);
+  if(typeof question.sourceDirect !== 'boolean') fail(`question ${question.id} has no sourceDirect flag`);
+  if(!['official-current','exact-reference','page-reference','topic-reference','applied-reference'].includes(question.verificationStatus)) fail(`question ${question.id} has invalid verification status`);
+  if(question.verificationStatus === 'official-current' && !question.sourceDirect) fail(`question ${question.id} claims an official direct source without a direct link`);
+  if(question.verificationStatus === 'page-reference' && (!Number.isInteger(question.sourcePage) || question.sourcePage < 1 || !/^หน้า \d+ •/.test(question.sourceLocator))) fail(`question ${question.id} has an invalid page-level citation`);
 
   const stem = normalize(question.question);
   if(stems.has(stem)) fail(`duplicate question stem at id ${question.id}`);
@@ -87,7 +94,8 @@ if(JSON.stringify(difficultyDistribution) !== JSON.stringify({ง่าย:80,�
 for(const [moduleId,values] of moduleDifficulty){
   if(values.size !== 3) fail(`module ${moduleId} does not cover all difficulty levels`);
   const moduleQuestionCount = questions.filter(question => question.module === moduleId).length;
-  if(moduleQuestionCount !== 20) fail(`module ${moduleId} has ${moduleQuestionCount} questions instead of 20`);
+  const expectedCount = moduleId === 'culture' ? 12 : moduleId === 'english' ? 8 : 20;
+  if(moduleQuestionCount !== expectedCount) fail(`module ${moduleId} has ${moduleQuestionCount} questions instead of ${expectedCount}`);
 }
 if(longestAnswerRun > 2) fail(`answer position repeats ${longestAnswerRun} times in a row`);
 if(uniqueCorrectLongest / Math.max(questions.length,1) > .25) fail(`correct answer is uniquely longest too often: ${uniqueCorrectLongest}/${questions.length}`);
@@ -102,13 +110,16 @@ for(const filler of ['เพื่อจำกัดความเสี่ย�
 
 if(data?.sources?.length !== modules.length) fail(`expected one source card per module, got ${data?.sources?.length}`);
 if(data?.questionBankAudit?.sourceCoverage?.length !== modules.length) fail('question bank audit does not cover all modules');
-if(data?.questionBankAudit?.uploadedDocumentCount !== 26) fail(`expected 26 uploaded documents, got ${data?.questionBankAudit?.uploadedDocumentCount}`);
-if(data?.questionBankAudit?.uniqueDocumentCount !== 24) fail(`expected 24 unique uploaded documents, got ${data?.questionBankAudit?.uniqueDocumentCount}`);
-if(data?.questionBankAudit?.sourceInventory?.length !== 26) fail('source inventory does not list all 26 uploaded documents');
+if(data?.questionBankAudit?.uploadedDocumentCount !== 27) fail(`expected 27 uploaded documents, got ${data?.questionBankAudit?.uploadedDocumentCount}`);
+if(data?.questionBankAudit?.uniqueDocumentCount !== 25) fail(`expected 25 unique uploaded documents, got ${data?.questionBankAudit?.uniqueDocumentCount}`);
+if(data?.questionBankAudit?.sourceInventory?.length !== 27) fail('source inventory does not list all 27 uploaded documents');
 if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.referenceBackedCount || 0) !== questions.length) fail('verification counts do not cover the full bank');
+if(Object.keys(citationIndex).length !== 207) fail(`expected 207 page-level citation index entries, got ${Object.keys(citationIndex).length}`);
+if(data?.questionBankAudit?.pageReferenceCount !== 207) fail(`expected 207 page references, got ${data?.questionBankAudit?.pageReferenceCount}`);
+if(data?.questionBankAudit?.exactReferenceCount !== 4 || data?.questionBankAudit?.appliedReferenceCount !== 8 || data?.questionBankAudit?.topicReferenceCount !== 101) fail('citation status totals changed unexpectedly');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','economy.css','data.js','economy-core.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','economy.css','citations.css','citation-index.js','data.js','economy-core.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
@@ -133,7 +144,7 @@ for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','on
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
-if(!(html.indexOf('data.js') < html.indexOf('economy-core.js') && html.indexOf('economy-core.js') < html.indexOf('online.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('economy/online/world/adventure scripts are not loaded in dependency order');
+if(!(html.indexOf('citation-index.js') < html.indexOf('data.js') && html.indexOf('data.js') < html.indexOf('economy-core.js') && html.indexOf('economy-core.js') < html.indexOf('online.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('citation/economy/online/world/adventure scripts are not loaded in dependency order');
 try{
   const economyContext={window:{}};
   vm.createContext(economyContext);
@@ -177,6 +188,7 @@ try{
   if(!rulesText.includes("$zone === 'training-grove'")) fail('database rules do not allow the Phase 2 training map presence zone');
   if(!rulesText.includes("newData.val() === 'crown'")) fail('database rules do not allow the Phase 3 accessory allowlist');
   if(!rulesText.includes("newData.val() === 'spin'")) fail('database rules do not allow the Phase 3 action allowlist');
+  if(!rulesText.includes("newData.val() === 'english'")) fail('database rules do not allow the split English raid module');
   const raidMeta=rules.rules?.raids?.['$room']?.meta || {};
   const raidStartedAtRule=raidMeta.startedAt?.['.validate'] || '';
   const raidBossHpRule=raidMeta.bossHp?.['.validate'] || '';

@@ -1,0 +1,74 @@
+.citation-card{
+  margin-top:10px;
+  padding:11px 12px;
+  border:3px solid #080b1b;
+  border-left:7px solid var(--sky);
+  background:#091229;
+  box-shadow:3px 3px 0 #080b1b;
+  color:#dce6fb;
+  font-size:12px;
+}
+.citation-card.official{border-left-color:var(--mint)}
+.citation-card.exact{border-left-color:var(--gold)}
+.citation-card.page{border-left-color:var(--sky)}
+.citation-card.applied{border-left-color:var(--purple)}
+.citation-head,.citation-foot,.exam-review-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.citation-head span{
+  color:var(--gold);
+  font-family:"Noto Sans Thai",Tahoma,system-ui,sans-serif;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.5px;
+}
+.citation-head strong{
+  padding:3px 7px;
+  border:2px solid #080b1b;
+  background:#1e3164;
+  color:#fff;
+}
+.citation-card.official .citation-head strong{background:var(--mint);color:#10231e}
+.citation-card.exact .citation-head strong{background:var(--gold);color:#171127}
+.citation-card.page .citation-head strong{background:var(--sky);color:#08152a}
+.citation-card.applied .citation-head strong{background:#6f55a9;color:#fff}
+.citation-card p{margin:6px 0!important;color:#dce6fb!important;overflow-wrap:anywhere}
+.citation-foot{margin-top:8px;padding-top:8px;border-top:2px dashed #34436d;color:#aebbd8}
+.citation-foot a,.source-links a{color:var(--sky);font-weight:900}
+.review-citation,.exam-answer-review{
+  margin-top:10px;
+  border-top:2px dashed #3b4770;
+  padding-top:8px;
+}
+.review-citation summary,.exam-answer-review>summary{
+  cursor:pointer;
+  color:var(--sky);
+  font-weight:900;
+}
+.exam-answer-review{margin-top:22px}
+.exam-answer-review>summary{
+  padding:13px;
+  border:3px solid #080b1b;
+  background:#172653;
+  box-shadow:4px 4px 0 #080b1b;
+}
+.exam-review-list{display:grid;gap:12px;margin-top:14px}
+.exam-review-card{padding:14px;background:#101938}
+.exam-review-card.correct{border-left-color:var(--mint)}
+.exam-review-card.wrong{border-left-color:var(--red)}
+.exam-review-card h3{font-size:15px;margin:10px 0}
+.exam-review-card>p{margin:6px 0;color:#dce2f4;font-size:13px}
+.exam-review-head span{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
+.exam-review-card.correct .exam-review-head strong{color:var(--mint)}
+.exam-review-card.wrong .exam-review-head strong{color:var(--red)}
+.source-document-list{max-height:130px;overflow:auto;padding-left:18px!important}
+.source-document-list li{overflow-wrap:anywhere}
+@media(max-width:620px){
+  .citation-card{padding:10px 9px}
+  .citation-head,.citation-foot,.exam-review-head{align-items:flex-start;flex-direction:column}
+  .citation-foot a{display:inline-block;padding:7px 0}
+}

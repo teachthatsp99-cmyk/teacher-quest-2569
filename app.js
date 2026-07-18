@@ -43,6 +43,7 @@ const MODULE_PIXEL_ART = Object.freeze({
   ksp:["00011000","10011001","01122110","00122100","11222211","00122100","01000010","00000000"],
   voclaw:["01000010","00100100","00011000","01111110","01222210","00111100","00100100","01000010"],
   culture:["00011000","00122100","01222210","12211221","01222210","00122100","00011000","00100100"],
+  english:["01111110","01000010","01222110","01000010","01222110","01000010","01111110","00011000"],
   policy:["01100000","01210000","01221000","01222100","01221000","01210000","01100000","01000000"],
   student:["00011000","00122100","01222210","12211221","01222210","00122100","01111110","01000010"],
   admin:["01111110","01022010","01022010","01111110","01211210","01211210","01111110","11000011"],
@@ -75,15 +76,24 @@ function moduleIconMarkup(item,className=""){
 window.teacherQuestModuleIcon = moduleIconMarkup;
 const questionType = question => question.category || question.type;
 const sourceMarkup = question => {
-  const verification = question.verified
-    ? ` • ตรวจข้อมูลปัจจุบัน ${esc(question.verifiedAt)}`
-    : " • มีแหล่งอ้างอิงหลักสำหรับทบทวน";
+  const status={
+    "official-current":["ตรงจากแหล่งทางการ","official"],
+    "exact-reference":["ตรงกับข้อในเอกสาร","exact"],
+    "page-reference":["พบหัวข้อในหน้าเอกสาร","page"],
+    "topic-reference":["อ้างอิงหัวข้อในเอกสาร","topic"],
+    "applied-reference":["คำถามประยุกต์จากหัวข้อ","applied"]
+  }[question.verificationStatus] || ["มีแหล่งสำหรับตรวจเทียบ","topic"];
   const link = question.sourceUrl
-    ? ` <a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="เปิดแหล่งอ้างอิงของข้อ ${question.id}">เปิดต้นทาง ↗</a>`
+    ? `<a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="${question.sourceDirect ? "เปิดหน้าต้นทางตรง" : "เปิดแหล่งตรวจเทียบ"}ของข้อ ${question.id}">${question.sourceDirect ? "เปิดหน้าต้นทางตรง" : "เปิดแหล่งตรวจเทียบ"} ↗</a>`
     : "";
-  const document = question.sourceDocument ? `<br>เอกสารชุดอ้างอิง: ${esc(question.sourceDocument)}` : "";
-  return `แหล่งทบทวน: ${esc(question.source)}${verification}${document}${link}`;
+  const evidenceNote=question.sourceDirect
+    ? `ตรวจข้อมูล ${esc(question.verifiedAt || D.verifiedAt)}`
+    : question.verificationStatus === "page-reference" || question.verificationStatus === "exact-reference"
+      ? "ระบุตำแหน่งจาก PDF ที่ส่ง • ลิงก์ภายนอกใช้ตรวจเทียบ"
+      : "ลิงก์ภายนอกใช้สำหรับตรวจเทียบ ไม่ใช่หน้าของไฟล์ PDF";
+  return `<div class="citation-card ${status[1]}"><div class="citation-head"><span>หลักฐานข้อ ${question.id}</span><strong>${status[0]}</strong></div><p><b>เอกสาร:</b> ${esc(question.sourceDocument || question.source)}</p><p><b>ตำแหน่ง:</b> ${esc(question.sourceLocator || question.type)}</p><div class="citation-foot"><span>${evidenceNote}</span>${link}</div></div>`;
 };
+window.teacherQuestSourceMarkup=sourceMarkup;
 
 const defaults = {
   xp:0,
@@ -607,7 +617,7 @@ function renderAdventure(){
         <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ ENTER ได้โดยไม่ต้องสลับภาษา</span></div>
         <div><kbd>SPACE / J</kbd><span><strong>กระโดด</strong>ข้ามรั้วเตี้ยและเปิดทางลัด</span></div>
         <div><kbd>Q / C</kbd><span><strong>ท่าทาง</strong>ใช้ Emote ที่เลือกจากร้านค้า</span></div>
-        <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
+        <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า ${D.modules.length} ด่าน</span></div>
         <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
       </div>
     </section>`;
@@ -969,7 +979,7 @@ function raidModule(raid){
   return raid?.meta?.moduleId==="all" ? null : moduleById(raid?.meta?.moduleId);
 }
 
-function raidModuleLabel(raid){ return raidModule(raid)?.title || "ทุกดินแดนทั้ง 400 ข้อ"; }
+function raidModuleLabel(raid){ return raidModule(raid)?.title || `ทุกดินแดนทั้ง ${D.questions.length} ข้อ`; }
 
 function raidBossName(raid){ return raidModule(raid)?.boss || "จอมมารแห่งสนามสอบ"; }
 
@@ -1019,7 +1029,7 @@ function renderRaid(){
 }
 
 function renderRaidEntry(){
-  view.innerHTML=`<section class="raid-entry pixel-box"><div class="raid-entry-hero"><div><div class="eyebrow">CLASSROOM RAID • REALTIME CO-OP</div><h1>รวมปาร์ตี้<br><span>ปราบบอสความรู้</span></h1><p>สร้างห้องหรือใส่รหัส 6 ตัว เพื่อนแต่ละคนตอบข้อสอบบนหน้าจอของตนเอง ทุกคำตอบที่ถูกจะกลายเป็นพลังโจมตีบอสตัวเดียวกันแบบสด</p></div><div class="raid-entry-boss">${raidBossArt()}<span>8 PLAYERS MAX</span></div></div><div class="raid-entry-grid"><form class="raid-entry-card pixel-box" id="createRaidForm"><h2>◆ สร้างห้องใหม่</h2><label for="raidModule">ขอบเขตข้อสอบ<select id="raidModule"><option value="all">ทุกดินแดน • 400 ข้อ</option>${D.modules.map(item=>`<option value="${item.id}">${esc(item.title)} • 20 ข้อ</option>`).join("")}</select></label><p>หัวหน้าห้องเลือกเนื้อหาแล้วส่งรหัสให้เพื่อน จากนั้นกดเริ่มเมื่อทีมพร้อม</p><button class="btn pink" type="submit" id="createRaidBtn">⚡ สร้างห้อง Raid</button></form><form class="raid-entry-card pixel-box" id="joinRaidForm"><h2>◈ เข้าห้องเพื่อน</h2><label for="raidCodeInput">รหัสห้อง 6 ตัว<input id="raidCodeInput" class="raid-code-input" maxlength="6" inputmode="text" autocomplete="off" placeholder="ABC234" required></label><p>ใช้รหัสจากหัวหน้าห้อง ตัวอักษรพิมพ์เล็กหรือใหญ่ก็ได้</p><button class="btn mint" type="submit" id="joinRaidBtn">เข้าร่วมปาร์ตี้</button></form></div><div class="raid-entry-error" id="raidEntryError" role="alert" hidden><div><strong>สร้างห้องไม่สำเร็จ</strong><span id="raidEntryErrorText"></span></div><button class="btn small sky" type="button" id="raidEntryDiagnostic">ตรวจสิทธิ์ Firebase</button></div><div class="raid-safety"><strong>ปลอดภัยสำหรับห้องเรียน</strong><span>ไม่มีแชตอิสระ • แสดงเฉพาะชื่อในเกม ตัวละคร คะแนน และอีโมตที่กำหนดไว้</span></div><div class="hero-actions"><button class="btn dark" data-go="adventure">กลับโลกผจญภัย</button></div></section>`;
+  view.innerHTML=`<section class="raid-entry pixel-box"><div class="raid-entry-hero"><div><div class="eyebrow">CLASSROOM RAID • REALTIME CO-OP</div><h1>รวมปาร์ตี้<br><span>ปราบบอสความรู้</span></h1><p>สร้างห้องหรือใส่รหัส 6 ตัว เพื่อนแต่ละคนตอบข้อสอบบนหน้าจอของตนเอง ทุกคำตอบที่ถูกจะกลายเป็นพลังโจมตีบอสตัวเดียวกันแบบสด</p></div><div class="raid-entry-boss">${raidBossArt()}<span>8 PLAYERS MAX</span></div></div><div class="raid-entry-grid"><form class="raid-entry-card pixel-box" id="createRaidForm"><h2>◆ สร้างห้องใหม่</h2><label for="raidModule">ขอบเขตข้อสอบ<select id="raidModule"><option value="all">ทุกดินแดน • ${D.questions.length} ข้อ</option>${D.modules.map(item=>`<option value="${item.id}">${esc(item.title)} • ${D.questions.filter(question=>question.module===item.id).length} ข้อ</option>`).join("")}</select></label><p>หัวหน้าห้องเลือกเนื้อหาแล้วส่งรหัสให้เพื่อน จากนั้นกดเริ่มเมื่อทีมพร้อม</p><button class="btn pink" type="submit" id="createRaidBtn">⚡ สร้างห้อง Raid</button></form><form class="raid-entry-card pixel-box" id="joinRaidForm"><h2>◈ เข้าห้องเพื่อน</h2><label for="raidCodeInput">รหัสห้อง 6 ตัว<input id="raidCodeInput" class="raid-code-input" maxlength="6" inputmode="text" autocomplete="off" placeholder="ABC234" required></label><p>ใช้รหัสจากหัวหน้าห้อง ตัวอักษรพิมพ์เล็กหรือใหญ่ก็ได้</p><button class="btn mint" type="submit" id="joinRaidBtn">เข้าร่วมปาร์ตี้</button></form></div><div class="raid-entry-error" id="raidEntryError" role="alert" hidden><div><strong>สร้างห้องไม่สำเร็จ</strong><span id="raidEntryErrorText"></span></div><button class="btn small sky" type="button" id="raidEntryDiagnostic">ตรวจสิทธิ์ Firebase</button></div><div class="raid-safety"><strong>ปลอดภัยสำหรับห้องเรียน</strong><span>ไม่มีแชตอิสระ • แสดงเฉพาะชื่อในเกม ตัวละคร คะแนน และอีโมตที่กำหนดไว้</span></div><div class="hero-actions"><button class="btn dark" data-go="adventure">กลับโลกผจญภัย</button></div></section>`;
   bindCommon();
   const api=window.TeacherQuestOnline;
   $("#raidCodeInput").oninput=event=>{event.target.value=api?.normalizeRaidCode?.(event.target.value) || event.target.value.toUpperCase();};
@@ -1204,7 +1214,9 @@ function renderExamLobby(){
     if(!preferred.includes(available) && moduleId !== "all") preferred.push(available);
     const previous = Number($("#examCount").value) || 60;
     $("#examCount").innerHTML = preferred.map(count => `<option value="${count}">${count}</option>`).join("");
-    const selected = preferred.filter(count => count <= Math.min(previous,available)).pop() || preferred[0];
+    const selected = moduleId === "all"
+      ? preferred.filter(count => count <= Math.min(previous,available)).pop() || preferred[0]
+      : available;
     $("#examCount").value = String(selected);
     const item = moduleId === "all" ? null : moduleById(moduleId);
     $("#examAvailability").innerHTML = item
@@ -1299,10 +1311,17 @@ function finishExam(){
   saveState();
   const result = exam;
   exam = null;
+  const answerReview=result.pool.map((question,index)=>{
+    const selected=result.answers[index];
+    const correct=selected===question.answer;
+    const module=moduleById(question.module);
+    const selectedText=selected===null ? "ไม่ได้ตอบ" : `${letters[selected]}. ${esc(question.options[selected])}`;
+    return `<article class="exam-review-card pixel-box ${correct ? "correct" : "wrong"}"><div class="exam-review-head"><span>ข้อ ${index+1} • ${moduleIconMarkup(module,"tiny")} ${esc(module.title)}</span><strong>${correct ? "✓ ถูก" : "✕ ควรทบทวน"}</strong></div><h3>${esc(question.question)}</h3><p><b>คำตอบของคุณ:</b> ${selectedText}</p><p><b>เฉลย:</b> ${letters[question.answer]}. ${esc(question.options[question.answer])}</p><p>${esc(question.explanation)}</p>${sourceMarkup(question)}</article>`;
+  }).join("");
   setMusicScene(percent >= 60 ? "victory" : "retreat",percent >= 60 ? "ผลสอบแห่งชัยชนะ" : "ผลสอบ: กลับไปฝึกใหม่");
   if(percent >= 60) sfx.win();
   else sfx.wrong();
-  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box"><div class="eyebrow">EXAM RESULT</div><b>${percent}%</b><h2>${percent >= 80 ? "ผ่านด่านอย่างสง่างาม" : percent >= 60 ? "ใกล้ถึงเป้าหมาย" : "กลับไปเก็บเลเวลอีกนิด"}</h2><p>${score} คะแนน จาก ${result.pool.length} ข้อ</p></div><div class="section-head"><div><h2>ผลรายดินแดน</h2><p>ใช้เลือกด่านที่จะฝึกต่อ</p></div></div><div class="breakdown">${Object.entries(breakdown).map(([id,item]) => { const module=moduleById(id); return `<div class="break-card pixel-box"><strong class="inline-module-label">${moduleIconMarkup(module,"tiny")} ${esc(module.title)}</strong><b>${item.correct}/${item.total}</b><small>${Math.round(item.correct/item.total*100)}%</small></div>`; }).join("")}</div><div class="hero-actions"><button class="btn" data-go="exam">สอบใหม่</button><button class="btn mint" data-go="review">ทบทวนข้อผิด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box"><div class="eyebrow">EXAM RESULT</div><b>${percent}%</b><h2>${percent >= 80 ? "ผ่านด่านอย่างสง่างาม" : percent >= 60 ? "ใกล้ถึงเป้าหมาย" : "กลับไปเก็บเลเวลอีกนิด"}</h2><p>${score} คะแนน จาก ${result.pool.length} ข้อ</p></div><div class="section-head"><div><h2>ผลรายดินแดน</h2><p>ใช้เลือกด่านที่จะฝึกต่อ</p></div></div><div class="breakdown">${Object.entries(breakdown).map(([id,item]) => { const module=moduleById(id); return `<div class="break-card pixel-box"><strong class="inline-module-label">${moduleIconMarkup(module,"tiny")} ${esc(module.title)}</strong><b>${item.correct}/${item.total}</b><small>${Math.round(item.correct/item.total*100)}%</small></div>`; }).join("")}</div><details class="exam-answer-review"><summary>ดูเฉลย คำอธิบาย และหลักฐานรายข้อ (${result.pool.length} ข้อ)</summary><div class="exam-review-list">${answerReview}</div></details><div class="hero-actions"><button class="btn" data-go="exam">สอบใหม่</button><button class="btn mint" data-go="review">ทบทวนข้อผิด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   bindCommon();
 }
 
@@ -1321,7 +1340,7 @@ function renderReview(limit=60){
         const record = state.records[question.id];
         const accuracy = record ? Math.round(record.correct / record.attempts * 100) : 0;
         const module = moduleById(question.module);
-        return `<article class="review-card pixel-box"><div><h3 class="inline-module-label">${moduleIconMarkup(module,"tiny")}<span>${esc(question.question)}</span></h3><p>${esc(module.title)} • ความแม่น ${accuracy}% ${state.bookmarks.includes(question.id) ? "• ★ เก็บไว้" : ""}</p></div><button class="btn small dark" data-one="${question.id}">ฝึกข้อนี้</button></article>`;
+        return `<article class="review-card pixel-box"><div><h3 class="inline-module-label">${moduleIconMarkup(module,"tiny")}<span>${esc(question.question)}</span></h3><p>${esc(module.title)} • ความแม่น ${accuracy}% ${state.bookmarks.includes(question.id) ? "• ★ เก็บไว้" : ""}</p><details class="review-citation"><summary>ดูหลักฐานรายข้อ</summary>${sourceMarkup(question)}</details></div><button class="btn small dark" data-one="${question.id}">ฝึกข้อนี้</button></article>`;
       }).join("")}</div>${visible.length < questions.length ? `<p><button class="btn small dark" id="moreReview">ดูเพิ่มอีก ${Math.min(60,questions.length-visible.length)} ข้อ</button></p>` : ""}`
     : '<div class="empty">✦ ไม่มีข้อค้างทบทวนในตอนนี้</div>';
   view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>ห้องทบทวน</h2><small>รวมข้อที่เก็บไว้ เคยตอบผิด หรือยังไม่แม่น</small></div><button class="btn small" id="reviewBattle" ${questions.length ? "" : "disabled"}>ฝึกชุดนี้</button></div>${list}</section>`;
@@ -1340,7 +1359,7 @@ function startCustomBattle(pool,hp){
 }
 
 function renderCodex(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>เปิดต้นทางเมื่อต้องตรวจข้อมูลกฎหมาย นโยบาย หรือบุคคลปัจจุบัน</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><div class="source-links"><a href="${source.url}" target="_blank" rel="noopener" aria-label="เปิดแหล่งทางการ: ${esc(source.title)}">เปิด ${esc(source.title)} ↗</a></div></article>`).join("")}</div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>ภาพรวมเอกสารของแต่ละหมวด ส่วนตำแหน่งหน้าและหัวข้อที่ใช้จริงจะแสดงหลังตอบทุกข้อ</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><p><b>${source.questionCount} ข้อ</b> • ${source.documents.length ? `${source.documents.length} เอกสารในชุดอ้างอิง` : "ตรวจจากหน่วยงานทางการ"}</p>${source.documents.length ? `<ul class="source-document-list">${source.documents.map(document=>`<li>${esc(document)}</li>`).join("")}</ul>` : ""}<div class="source-links"><a href="${source.url}" target="_blank" rel="noopener" aria-label="เปิดแหล่งตรวจเทียบ: ${esc(source.title)}">เปิดแหล่งตรวจเทียบ ↗</a></div></article>`).join("")}</div></section>`;
 }
 
 function renderShop(){
