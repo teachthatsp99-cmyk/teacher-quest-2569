@@ -330,7 +330,43 @@ function updateOnlineHud(){
   if(chatSubmit) chatSubmit.disabled=phase!=="online";
   const adminButton=$("#adminTestBtn");
   if(adminButton) adminButton.hidden=!onlineState.isAdmin;
+  updateVoiceHud();
   updateAuthGate();
+}
+
+function updateVoiceHud(){
+  const voice=onlineState.voice || {supported:false,enabled:false,permission:"idle",talking:false,nearby:0,peerCount:0,peers:[],error:""};
+  const panel=$("#adventureVoice");
+  if(!panel) return;
+  panel.classList.toggle("is-enabled",Boolean(voice.enabled));
+  panel.classList.toggle("is-talking",Boolean(voice.talking));
+  const toggle=$("#adventureVoiceEnable");
+  const talk=$("#adventureVoiceTalk");
+  const status=$("#adventureVoiceStatus");
+  if(toggle){
+    toggle.disabled=onlineState.phase!=="online" || !voice.supported || voice.permission==="requesting";
+    toggle.textContent=voice.permission==="requesting"?"กำลังขอสิทธิ์…":voice.enabled?"ปิด Voice":"เปิด Voice";
+  }
+  if(talk){
+    talk.disabled=!voice.enabled;
+    talk.setAttribute("aria-pressed",String(Boolean(voice.talking)));
+    talk.textContent=voice.talking?"กำลังพูด… ปล่อยเพื่อหยุด":"กดค้างเพื่อพูด • V";
+  }
+  if(status) status.textContent=voice.error || (!voice.supported?"อุปกรณ์นี้ไม่รองรับ":voice.enabled?`${voice.peerCount||0}/${voice.nearby||0} คนเชื่อมเสียง`:"ไมค์ปิด");
+  const peers=$("#adventureVoicePeers");
+  if(peers){
+    peers.innerHTML=(voice.peers||[]).map(peer=>`<button type="button" data-voice-mute="${esc(peer.uid)}" aria-pressed="${String(Boolean(peer.muted))}" title="${peer.muted?"เปิด":"ปิด"}เสียง ${esc(peer.nickname)}"><span>${peer.connected?"●":"○"} ${esc(peer.nickname)}</span><small>${peer.distance} ระยะ • ${peer.muted?"ปิดเสียง":"ได้ยิน"}</small></button>`).join("") || `<p>${voice.enabled?"เดินเข้าใกล้ผู้เล่นที่เปิด Voice เพื่อเชื่อมเสียง":"เปิด Voice เมื่อต้องการคุยกับผู้เล่นใกล้ตัว"}</p>`;
+  }
+}
+
+function openVoiceConsent(){
+  openModal(`<div class="eyebrow">OPT-IN PROXIMITY VOICE • WEBRTC</div><h2 id="modalTitle">เปิดเสียงใกล้ตัวหรือไม่?</h2><p>ระบบจะขอใช้ไมโครโฟนหลังคุณกดยืนยัน และส่งเสียงตรงระหว่างผู้เล่นด้วย WebRTC เฉพาะผู้เล่นที่เปิด Voice และอยู่ในระยะ 360 เท่านั้น</p><ul class="voice-consent-list"><li>ไมค์เริ่มต้นเป็นปิด ต้องกดค้างปุ่มพูดหรือปุ่ม V จึงส่งเสียง</li><li>Firebase เก็บเฉพาะข้อมูลจับคู่ชั่วคราว ไม่บันทึกไฟล์เสียง</li><li>ปิด Voice หรือปิดเสียงผู้เล่นแต่ละคนได้ทุกเวลา</li><li>แนะนำให้ใช้หูฟัง และอย่าเปิดเผยข้อมูลส่วนตัว</li></ul><div class="modal-actions"><button class="btn mint" type="button" id="voiceConsentAllow">อนุญาตและเปิด Voice</button><button class="btn dark" type="button" id="voiceConsentCancel">ยังไม่เปิด</button></div>`);
+  $("#voiceConsentCancel").onclick=closeModal;
+  $("#voiceConsentAllow").onclick=async()=>{
+    const button=$("#voiceConsentAllow");button.disabled=true;button.textContent="กำลังขอสิทธิ์ไมค์…";
+    try{onlineState=await window.TeacherQuestOnline.enableProximityVoice();closeModal();showToast("เปิด Voice แล้ว • กดค้าง V เพื่อพูด");}
+    catch(error){button.disabled=false;button.textContent="ลองอนุญาตอีกครั้ง";showToast(error?.message||"เปิด Voice ไม่สำเร็จ");}
+  };
 }
 
 function showToast(message){
@@ -636,6 +672,12 @@ function renderAdventure(){
               <button type="submit" ${onlineState.phase==="online"?"":"disabled"}>ส่ง</button>
             </form>
             <small>ได้ยินในระยะ 360 • ล่าสุดคนละ 1 ข้อความ • กดชื่อเพื่อปิดเสียง</small>
+            <section class="adventure-voice" id="adventureVoice" aria-label="เสียงพูดคุยกับผู้เล่นใกล้ตัว">
+              <header><strong>◉ VOICE ใกล้ตัว</strong><span id="adventureVoiceStatus" role="status">ไมค์ปิด</span></header>
+              <div class="adventure-voice-controls"><button type="button" id="adventureVoiceEnable">เปิด Voice</button><button type="button" id="adventureVoiceTalk" aria-pressed="false" disabled>กดค้างเพื่อพูด • V</button></div>
+              <div class="adventure-voice-peers" id="adventureVoicePeers"><p>เปิด Voice เมื่อต้องการคุยกับผู้เล่นใกล้ตัว</p></div>
+              <small>เสียง P2P ไม่ถูกบันทึก • สูงสุด 4 คนใกล้ตัว • ปล่อยปุ่มเพื่อปิดไมค์</small>
+            </section>
           </div>
         </section>
         <section class="adventure-dialogue" id="adventureDialogue" role="dialog" aria-modal="false" aria-labelledby="adventureDialogueTitle" aria-hidden="true" hidden>
@@ -660,6 +702,7 @@ function renderAdventure(){
         <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ ENTER ได้โดยไม่ต้องสลับภาษา</span></div>
         <div><kbd>SPACE / J</kbd><span><strong>กระโดด</strong>ข้ามรั้วเตี้ยและเปิดทางลัด</span></div>
         <div><kbd>Q / C</kbd><span><strong>ท่าทาง</strong>ใช้ Emote ที่เลือกจากร้านค้า</span></div>
+        <div><kbd>V / ฟ</kbd><span><strong>Push-to-talk</strong>เปิด Voice ก่อน แล้วกดค้างเพื่อพูด</span></div>
         <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า ${D.modules.length} ด่าน</span></div>
         <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
       </div>
@@ -716,6 +759,27 @@ function renderAdventure(){
       input.focus();
     }catch(error){showToast(error?.message||"ส่งข้อความไม่สำเร็จ");}
     finally{input.disabled=onlineState.phase!=="online";if(submit)submit.disabled=onlineState.phase!=="online";}
+  });
+  $("#adventureVoiceEnable")?.addEventListener("click",async()=>{
+    const voice=window.TeacherQuestOnline?.getState?.().voice;
+    if(!voice?.enabled){openVoiceConsent();return;}
+    try{onlineState=await window.TeacherQuestOnline.disableProximityVoice();showToast("ปิด Voice และไมโครโฟนแล้ว");}
+    catch(error){showToast(error?.message||"ปิด Voice ไม่สำเร็จ");}
+  });
+  const talkButton=$("#adventureVoiceTalk");
+  const stopTalking=()=>window.TeacherQuestOnline?.setVoiceTalking?.(false);
+  talkButton?.addEventListener("pointerdown",event=>{
+    if(talkButton.disabled) return;
+    event.preventDefault();talkButton.setPointerCapture?.(event.pointerId);window.TeacherQuestOnline?.setVoiceTalking?.(true);
+  });
+  talkButton?.addEventListener("pointerup",stopTalking);
+  talkButton?.addEventListener("pointercancel",stopTalking);
+  talkButton?.addEventListener("lostpointercapture",stopTalking);
+  $("#adventureVoicePeers")?.addEventListener("click",event=>{
+    const button=event.target.closest?.("[data-voice-mute]");
+    if(!button) return;
+    const muted=button.getAttribute("aria-pressed")!=="true";
+    window.TeacherQuestOnline?.setVoiceMuted?.(button.dataset.voiceMute,muted);
   });
   updateOnlineHud();
   $("#adventureCanvas")?.focus({preventScroll:true});
@@ -1663,6 +1727,12 @@ function bindGlobal(){
       }
       return;
     }
+    const typingTarget=event.target?.matches?.("input,textarea,select,[contenteditable=true]");
+    if(currentView==="adventure" && onlineState.voice?.enabled && event.code==="KeyV" && !typingTarget){
+      event.preventDefault();
+      if(!event.repeat) window.TeacherQuestOnline?.setVoiceTalking?.(true);
+      return;
+    }
     if(battle && !battle.locked && ["1","2","3","4"].includes(event.key)){
       battle.selected = Number(event.key) - 1;
       renderBattle();
@@ -1673,6 +1743,9 @@ function bindGlobal(){
       renderRaidBattle(onlineState.raid);
     }
     if(currentView==="raid" && raidGame && event.key==="Enter" && raidGame.selected!==null && !raidGame.locked) void submitRaidAnswer();
+  });
+  document.addEventListener("keyup",event=>{
+    if(event.code==="KeyV") window.TeacherQuestOnline?.setVoiceTalking?.(false);
   });
   window.addEventListener("storage",event => { if(event.key === STORAGE) refreshState(); });
   window.addEventListener("teacherquest:local-state",refreshState);

@@ -69,7 +69,7 @@
         ".read": "auth != null && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove' || $zone === 'law-archive' || $zone === 'future-campus') && query.limitToLast != null && query.limitToLast <= 40",
         "$uid": {
           ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove' || $zone === 'law-archive' || $zone === 'future-campus')",
-          ".validate": "!newData.exists() || (newData.hasChildren(['nickname','avatar','x','y','direction','moving','action','actionAt','lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2048 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1536 && (newData.child('direction').val() === 'up' || newData.child('direction').val() === 'down' || newData.child('direction').val() === 'left' || newData.child('direction').val() === 'right') && newData.child('moving').isBoolean() && newData.child('action').isString() && newData.child('actionAt').isNumber() && newData.child('lastSeen').isNumber() && newData.child('lastSeen').val() >= now - 120000 && newData.child('lastSeen').val() <= now + 120000)",
+          ".validate": "!newData.exists() || (newData.hasChildren(['nickname','avatar','x','y','direction','moving','action','actionAt','lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2048 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1536 && (newData.child('direction').val() === 'up' || newData.child('direction').val() === 'down' || newData.child('direction').val() === 'left' || newData.child('direction').val() === 'right') && newData.child('moving').isBoolean() && newData.child('action').isString() && newData.child('actionAt').isNumber() && (!newData.child('voice').exists() || newData.child('voice').isBoolean()) && newData.child('lastSeen').isNumber() && newData.child('lastSeen').val() >= now - 120000 && newData.child('lastSeen').val() <= now + 120000)",
           "nickname": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 20" },
           "x": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2048" },
           "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1536" },
@@ -77,6 +77,7 @@
           "moving": { ".validate": "newData.isBoolean()" },
           "action": { ".validate": "newData.val() === '' || newData.val() === 'wave' || newData.val() === 'cheer' || newData.val() === 'spin'" },
           "actionAt": { ".validate": "newData.val() === 0 || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+          "voice": { ".validate": "newData.isBoolean()" },
           "lastSeen": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
           "avatar": {
             ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style','accessory']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString() && newData.child('accessory').isString()",
@@ -104,6 +105,21 @@
           "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1536" },
           "sentAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
           "$other": { ".validate": false }
+        }
+      }
+    },
+    "voiceSignals": {
+      "$zone": {
+        "$toUid": {
+          ".read": "auth != null && auth.uid === $toUid && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove' || $zone === 'law-archive' || $zone === 'future-campus')",
+          "$fromUid": {
+            ".write": "auth != null && auth.uid === $fromUid && auth.token.firebase.identities['google.com'] != null && $fromUid !== $toUid && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove' || $zone === 'law-archive' || $zone === 'future-campus') && (!newData.exists() || (root.child('world').child($zone).child($fromUid).child('voice').val() === true && root.child('world').child($zone).child($toUid).child('voice').val() === true))",
+            ".validate": "!newData.exists() || (newData.hasChildren(['kind','sdp','sentAt']) && (newData.child('kind').val() === 'offer' || newData.child('kind').val() === 'answer' || newData.child('kind').val() === 'bye') && newData.child('sdp').isString() && newData.child('sdp').val().length <= 12000 && ((newData.child('kind').val() === 'bye' && newData.child('sdp').val().length === 0) || ((newData.child('kind').val() === 'offer' || newData.child('kind').val() === 'answer') && newData.child('sdp').val().length >= 10)) && newData.child('sentAt').isNumber() && newData.child('sentAt').val() >= now - 120000 && newData.child('sentAt').val() <= now + 120000)",
+            "kind": { ".validate": "newData.val() === 'offer' || newData.val() === 'answer' || newData.val() === 'bye'" },
+            "sdp": { ".validate": "newData.isString() && newData.val().length <= 12000" },
+            "sentAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
+            "$other": { ".validate": false }
+          }
         }
       }
     },
