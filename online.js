@@ -18,7 +18,7 @@ const RAID_CODE_LENGTH = 6;
 const RAID_MAX_PLAYERS = 8;
 const RAID_BOSS_HP = 480;
 const RAID_HEARTBEAT = 25000;
-const RAID_RULES_REVISION = "2026-07-18.2";
+const RAID_RULES_REVISION = "2026-07-18.3";
 const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
 const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","policy","student","admin","quality","current"]);
@@ -32,9 +32,10 @@ const AVATAR_OPTIONS = Object.freeze({
   hair:Object.freeze(["#24182f","#4a2d28","#815226","#d9b65a","#5b4b85"]),
   shirt:Object.freeze(["#3d68af","#1e8a72","#9b4e86","#b86535","#5c55a7"]),
   accent:Object.freeze(["#ffd45c","#58e7b2","#5dcbff","#ff72b4","#a88cff"]),
-  style:Object.freeze(["short","spike","long","cap"])
+  style:Object.freeze(["short","spike","long","cap"]),
+  accessory:Object.freeze(["none","cape","book","crown"])
 });
-const DEFAULT_AVATAR = Object.freeze({skin:AVATAR_OPTIONS.skin[1],hair:AVATAR_OPTIONS.hair[0],shirt:AVATAR_OPTIONS.shirt[0],accent:AVATAR_OPTIONS.accent[0],style:"short"});
+const DEFAULT_AVATAR = Object.freeze({skin:AVATAR_OPTIONS.skin[1],hair:AVATAR_OPTIONS.hair[0],shirt:AVATAR_OPTIONS.shirt[0],accent:AVATAR_OPTIONS.accent[0],style:"short",accessory:"none"});
 const ZONE_KEYS = Object.freeze({
   "ลานสถาบันครูเควสต์":"plaza",
   "หมู่บ้านครูนักคิด":"district-0",
@@ -56,7 +57,8 @@ function normalizeAvatar(value={}){
     hair:validChoice("hair",value.hair,DEFAULT_AVATAR.hair),
     shirt:validChoice("shirt",value.shirt,DEFAULT_AVATAR.shirt),
     accent:validChoice("accent",value.accent,DEFAULT_AVATAR.accent),
-    style:validChoice("style",value.style,DEFAULT_AVATAR.style)
+    style:validChoice("style",value.style,DEFAULT_AVATAR.style),
+    accessory:validChoice("accessory",value.accessory,DEFAULT_AVATAR.accessory)
   };
 }
 
@@ -277,7 +279,7 @@ function setPhase(phase,error=""){
 
 function avatarMarkup(profile=state.profile,className=""){
   const avatar=normalizeAvatar(profile?.avatar || profile);
-  return `<span class="pixel-avatar ${String(className).replace(/[^a-zA-Z0-9 _-]/g,"")}" data-hair-style="${avatar.style}" style="--avatar-skin:${avatar.skin};--avatar-hair:${avatar.hair};--avatar-shirt:${avatar.shirt};--avatar-accent:${avatar.accent}" aria-hidden="true"><i class="pixel-avatar-hair"></i><i class="pixel-avatar-face"></i><i class="pixel-avatar-body"></i><i class="pixel-avatar-accent"></i><i class="pixel-avatar-feet"></i></span>`;
+  return `<span class="pixel-avatar ${String(className).replace(/[^a-zA-Z0-9 _-]/g,"")}" data-hair-style="${avatar.style}" data-accessory="${avatar.accessory}" style="--avatar-skin:${avatar.skin};--avatar-hair:${avatar.hair};--avatar-shirt:${avatar.shirt};--avatar-accent:${avatar.accent}" aria-hidden="true"><i class="pixel-avatar-hair"></i><i class="pixel-avatar-face"></i><i class="pixel-avatar-body"></i><i class="pixel-avatar-accent"></i><i class="pixel-avatar-feet"></i></span>`;
 }
 
 function friendlyError(error,context=""){
@@ -307,13 +309,16 @@ function zoneKeyFor(value){
 function direction(value){ return ["up","down","left","right"].includes(value) ? value : "down"; }
 
 function sanitizeWorldState(value={}){
+  const action=["wave","cheer","spin"].includes(value.action)?value.action:"";
   return {
     zone:zoneKeyFor(value.zone || value.district),
     zoneLabel:String(value.district || value.zone || "โลกครูเควสต์").slice(0,40),
     x:Math.round(clamp(value.x,0,2048)),
     y:Math.round(clamp(value.y,0,1536)),
     direction:direction(value.direction),
-    moving:Boolean(value.moving)
+    moving:Boolean(value.moving),
+    action,
+    actionAt:action?Math.round(clamp(value.actionAt,Date.now()-120000,Date.now()+120000)):0
   };
 }
 
@@ -335,7 +340,7 @@ function remoteFromSnapshot(snapshot){
     x:clamp(value.x,0,2048),
     y:clamp(value.y,0,1536),
     direction:direction(value.direction),
-    moving:Boolean(value.moving),
+    moving:Boolean(value.moving),action:["wave","cheer","spin"].includes(value.action)?value.action:"",actionAt:Number(value.actionAt)||0,
     lastSeen:Number(value.lastSeen)||Date.now()
   };
 }
@@ -401,7 +406,7 @@ async function flushPresence(force=false){
   if(!pendingWorldState || !database || !databaseModule || !state.user || state.phase!=="online") return;
   const world=sanitizeWorldState(pendingWorldState);
   await switchZone(world.zone);
-  const fingerprint=`${world.zone}|${world.x}|${world.y}|${world.direction}|${Number(world.moving)}|${state.profile.nickname}|${JSON.stringify(state.profile.avatar)}`;
+  const fingerprint=`${world.zone}|${world.x}|${world.y}|${world.direction}|${Number(world.moving)}|${world.action}|${world.actionAt}|${state.profile.nickname}|${JSON.stringify(state.profile.avatar)}`;
   const now=Date.now();
   if(!force && fingerprint===lastPresenceFingerprint && now-lastPresenceAt<PRESENCE_HEARTBEAT) return;
   const elapsed=now-lastPresenceAt;
@@ -415,7 +420,7 @@ async function flushPresence(force=false){
     await databaseModule.set(currentPresenceRef,{
       nickname:state.profile.nickname,
       avatar:state.profile.avatar,
-      x:world.x,y:world.y,direction:world.direction,moving:world.moving,
+      x:world.x,y:world.y,direction:world.direction,moving:world.moving,action:world.action,actionAt:world.actionAt,
       lastSeen:databaseModule.serverTimestamp()
     });
   }catch(error){
@@ -1052,7 +1057,7 @@ function simulateForTests(value={}){
     state.zonePlayers=value.zonePlayers.map((player,index)=>({
       uid:String(player.uid||`test-${index}`),nickname:cleanNickname(player.nickname)||`เพื่อน ${index+1}`,
       avatar:normalizeAvatar(player.avatar),x:clamp(player.x,0,2048),y:clamp(player.y,0,1536),
-      direction:direction(player.direction),moving:Boolean(player.moving),lastSeen:Date.now()
+      direction:direction(player.direction),moving:Boolean(player.moving),action:["wave","cheer","spin"].includes(player.action)?player.action:"",actionAt:Number(player.actionAt)||0,lastSeen:Date.now()
     }));
   }
   emit();

@@ -244,7 +244,7 @@ function createTeacherQuestAdventure(options={}){
   const mapPanel = root.querySelector("#adventureMapPanel");
   const keys = new Set();
   const storedState=loadAdventureState();
-  const player = {...storedState.position,moving:false,step:0,jumping:false,jumpElapsed:0,jumpHeight:0,jumpCooldown:0};
+  const player = {...storedState.position,moving:false,step:0,jumping:false,jumpElapsed:0,jumpHeight:0,jumpCooldown:0,action:"",actionAt:0};
   let activeMap=MAP_REGISTRY.get(player.mapId);
   const camera = {x:clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH),y:clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT)};
   const modules = options.modules || [];
@@ -310,7 +310,8 @@ function createTeacherQuestAdventure(options={}){
       avatar:{
         skin:safeColor(avatar.skin,"#e8b989"),hair:safeColor(avatar.hair,"#24182f"),
         shirt:safeColor(avatar.shirt,"#3d68af"),accent:safeColor(avatar.accent,"#ffd45c"),
-        style:["short","spike","long","cap"].includes(avatar.style)?avatar.style:"short"
+        style:["short","spike","long","cap"].includes(avatar.style)?avatar.style:"short",
+        accessory:["none","cape","book","crown"].includes(avatar.accessory)?avatar.accessory:"none"
       }
     };
   }
@@ -328,9 +329,9 @@ function createTeacherQuestAdventure(options={}){
       const existing=remoteCharacters.get(uid);
       const profile=normalizedProfile(item);
       if(existing){
-        Object.assign(existing,{targetX:clamp(item.x,0,WORLD_WIDTH),targetY:clamp(item.y,0,WORLD_HEIGHT),direction:item.direction||"down",moving:Boolean(item.moving),profile});
+        Object.assign(existing,{targetX:clamp(item.x,0,WORLD_WIDTH),targetY:clamp(item.y,0,WORLD_HEIGHT),direction:item.direction||"down",moving:Boolean(item.moving),action:["wave","cheer","spin"].includes(item.action)?item.action:"",actionAt:Number(item.actionAt)||0,profile});
       }else{
-        remoteCharacters.set(uid,{uid,x:clamp(item.x,0,WORLD_WIDTH),y:clamp(item.y,0,WORLD_HEIGHT),targetX:clamp(item.x,0,WORLD_WIDTH),targetY:clamp(item.y,0,WORLD_HEIGHT),direction:item.direction||"down",moving:Boolean(item.moving),step:0,profile});
+        remoteCharacters.set(uid,{uid,x:clamp(item.x,0,WORLD_WIDTH),y:clamp(item.y,0,WORLD_HEIGHT),targetX:clamp(item.x,0,WORLD_WIDTH),targetY:clamp(item.y,0,WORLD_HEIGHT),direction:item.direction||"down",moving:Boolean(item.moving),step:0,action:["wave","cheer","spin"].includes(item.action)?item.action:"",actionAt:Number(item.actionAt)||0,profile});
       }
     });
     [...remoteCharacters.keys()].forEach(uid=>{if(!seen.has(uid))remoteCharacters.delete(uid);});
@@ -380,6 +381,16 @@ function createTeacherQuestAdventure(options={}){
     player.jumpHeight=1;
     player.jumpCooldown=JUMP_COOLDOWN;
     tapTarget=null;
+    return true;
+  }
+
+  function startAction(action=options.getEquippedEmote?.()||"wave"){
+    const next=["wave","cheer","spin"].includes(action)?action:"wave";
+    if(dialogueOpen||mapOpen) return false;
+    player.action=next;
+    player.actionAt=Date.now();
+    tapTarget=null;
+    reportPlayerState(performance.now(),true);
     return true;
   }
 
@@ -670,6 +681,11 @@ function createTeacherQuestAdventure(options={}){
       event.preventDefault();
       toggleMap();
     }
+    const actionKey=["KeyQ","KeyC"].includes(event.code)||["q","c","ๆ","แ"].includes(key);
+    if(!inControl&&!event.repeat&&actionKey){
+      event.preventDefault();
+      startAction();
+    }
   }
 
   function onKeyUp(event){
@@ -851,10 +867,18 @@ function createTeacherQuestAdventure(options={}){
     const normalized=normalizedProfile(profile);
     const avatar=normalized.avatar;
     const x=Math.round(character.x),groundY=Math.round(character.y);
-    const y=groundY-Math.round(remote?0:Number(character.jumpHeight)||0);
+    const actionAge=Date.now()-(Number(character.actionAt)||0);
+    const action=actionAge>=0&&actionAge<1400&&["wave","cheer","spin"].includes(character.action)?character.action:"";
+    const actionPhase=action?actionAge/1400:0;
+    const cheerLift=action==="cheer"?Math.abs(Math.sin(actionPhase*Math.PI*4))*9:0;
+    const y=groundY-Math.round((remote?0:Number(character.jumpHeight)||0)+cheerLift);
     const step=character.moving&&Math.floor(character.step)%2?3:0;
     ctx.fillStyle=`rgba(4,8,18,${character.jumping && !remote ? .22 : .38})`;ctx.fillRect(x-16,groundY+11,32,9);
 
+    if(avatar.accessory==="cape"){
+      ctx.fillStyle="#171127";ctx.fillRect(x-16,y-10,32,31);
+      ctx.fillStyle=avatar.accent;ctx.fillRect(x-12,y-6,24,25);
+    }
     ctx.fillStyle="#171127";
     if(avatar.style==="long") ctx.fillRect(x-15,y-35,30,30);
     else if(avatar.style==="cap"){ctx.fillRect(x-15,y-40,30,12);ctx.fillRect(x+10,y-33,11,6);}
@@ -882,6 +906,24 @@ function createTeacherQuestAdventure(options={}){
     ctx.fillStyle=avatar.accent;ctx.fillRect(x-2,y-6,5,20);
     ctx.fillStyle="#171127";ctx.fillRect(x-10,y+14+step,8,8);ctx.fillRect(x+2,y+14-step,8,8);
     if(!remote){ctx.fillStyle=avatar.accent;ctx.fillRect(character.direction==="left"?x-16:x+10,y-2,8,14);}
+    if(avatar.accessory==="book"){
+      const bookY=y-4+Math.round(Math.sin(elapsed*5)*3);
+      ctx.fillStyle="#171127";ctx.fillRect(x+15,bookY,17,21);ctx.fillStyle="#ffd45c";ctx.fillRect(x+18,bookY+3,11,15);ctx.fillStyle="#5dcbff";ctx.fillRect(x+22,bookY+4,2,13);
+    }else if(avatar.accessory==="crown"){
+      ctx.fillStyle="#171127";ctx.fillRect(x-12,y-48,24,13);ctx.fillStyle="#ffd45c";ctx.fillRect(x-9,y-45,18,8);ctx.fillRect(x-9,y-50,5,7);ctx.fillRect(x-2,y-53,5,10);ctx.fillRect(x+5,y-50,4,7);
+    }
+    if(action==="wave"){
+      const handX=character.direction==="left"?x-19:x+13;
+      ctx.fillStyle="#171127";ctx.fillRect(handX,y-24,8,24);ctx.fillStyle=avatar.skin;ctx.fillRect(handX+2,y-22,4,18);
+    }else if(action==="spin"){
+      const angle=actionPhase*Math.PI*4;
+      for(let i=0;i<4;i++){
+        const px=x+Math.cos(angle+i*Math.PI/2)*25,py=y-12+Math.sin(angle+i*Math.PI/2)*16;
+        ctx.fillStyle=i%2?"#5dcbff":"#ffd45c";ctx.fillRect(Math.round(px)-3,Math.round(py)-3,6,6);
+      }
+    }else if(action==="cheer"){
+      ctx.fillStyle="#fff4b2";ctx.fillRect(x-20,y-17,7,7);ctx.fillRect(x+13,y-17,7,7);
+    }
   }
 
   function drawSign(x,y,text,color="#ffd45c"){
@@ -1126,8 +1168,9 @@ function createTeacherQuestAdventure(options={}){
   function reportPlayerState(time,force=false){
     if(typeof options.onPlayerState!=="function") return;
     const district=locationNameAt(activeMap.id,player.x,player.y);
-    const snapshot={mapId:activeMap.id,zone:activeMap.id===TRAINING_MAP_ID?TRAINING_MAP_ID:district,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district};
-    const fingerprint=`${snapshot.mapId}|${snapshot.zone}|${snapshot.x}|${snapshot.y}|${snapshot.direction}|${Number(snapshot.moving)}|${snapshot.district}`;
+    const action=Date.now()-player.actionAt<1400?player.action:"";
+    const snapshot={mapId:activeMap.id,zone:activeMap.id===TRAINING_MAP_ID?TRAINING_MAP_ID:district,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district,action,actionAt:action?player.actionAt:0};
+    const fingerprint=`${snapshot.mapId}|${snapshot.zone}|${snapshot.x}|${snapshot.y}|${snapshot.direction}|${Number(snapshot.moving)}|${snapshot.district}|${snapshot.action}|${snapshot.actionAt}`;
     if(force || (fingerprint!==lastPresenceFingerprint && time-lastPresenceTime>=250) || time-lastPresenceTime>=20000){
       lastPresenceTime=time;
       lastPresenceFingerprint=fingerprint;
@@ -1161,6 +1204,8 @@ function createTeacherQuestAdventure(options={}){
   const interactClick=event=>{event.preventDefault();canvas.focus({preventScroll:true});interact();};
   const jumpButton=root.querySelector("[data-jump]");
   const jumpClick=event=>{event.preventDefault();canvas.focus({preventScroll:true});startJump();};
+  const emoteButton=root.querySelector("[data-emote]");
+  const emoteClick=event=>{event.preventDefault();canvas.focus({preventScroll:true});startAction();};
   const onBlur=()=>keys.clear();
   const applyCloudPosition=event=>{
     const saved=event.detail?.adventure;
@@ -1187,6 +1232,7 @@ function createTeacherQuestAdventure(options={}){
   };
   interactButton?.addEventListener("click",interactClick);
   jumpButton?.addEventListener("click",jumpClick);
+  emoteButton?.addEventListener("click",emoteClick);
   const mapButtons=[...root.querySelectorAll("[data-adventure-map]")];
   mapButtons.forEach(button=>button.addEventListener("click",()=>toggleMap()));
   mapPanel?.querySelector("[data-map-close]")?.addEventListener("click",()=>toggleMap(false));
@@ -1212,6 +1258,7 @@ function createTeacherQuestAdventure(options={}){
     mobileBindings.forEach(([element,event,handler])=>element.removeEventListener(event,handler));
     interactButton?.removeEventListener("click",interactClick);
     jumpButton?.removeEventListener("click",jumpClick);
+    emoteButton?.removeEventListener("click",emoteClick);
     if(window.teacherQuestAdventureDebug?.destroy===destroy) delete window.teacherQuestAdventureDebug;
   }
 
@@ -1226,7 +1273,7 @@ function createTeacherQuestAdventure(options={}){
     getState:()=>{
       const scene=currentScene();
       const codec=MAP_REGISTRY.exploration(activeMap.id);
-      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length};
+      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,action:Date.now()-player.actionAt<1400?player.action:"",accessory:normalizedProfile(playerProfile).avatar.accessory,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length};
     },
     teleportToModule:id=>{if(activeMap.id!==ACADEMY_MAP_ID)switchMap(ACADEMY_MAP_ID);const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
     teleportToNpc:id=>{const npc=currentScene().npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
@@ -1236,6 +1283,7 @@ function createTeacherQuestAdventure(options={}){
     moveBy:(dx,dy)=>{const before={x:player.x,y:player.y};tryMove(Number(dx)||0,Number(dy)||0);revealAroundPlayer();return {x:player.x-before.x,y:player.y-before.y};},
     switchMap,
     startJump,
+    startAction,
     interact,
     setRemotePlayers,
     setPlayerProfile,

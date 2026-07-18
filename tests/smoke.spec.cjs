@@ -242,13 +242,13 @@ test('all main views render without browser errors',async({page})=>{
   expect(pageErrors).toEqual([]);
 });
 
-test('mobile navigation is a usable 3 by 3 grid with no horizontal overflow',async({page})=>{
+test('mobile navigation keeps all ten destinations usable without horizontal overflow',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto(url,{waitUntil:'networkidle'});
   const overflow = await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth);
   expect(overflow).toBe(false);
   await expect(page.locator('.nav-list')).toBeVisible();
-  await expect(page.locator('.nav-list .nav-btn')).toHaveCount(9);
+  await expect(page.locator('.nav-list .nav-btn')).toHaveCount(10);
   await expect(page.locator('.nav-btn[data-view="adventure"]')).toContainText('เล่นเนื้อเรื่อง');
   await expect(page.locator('.nav-btn[data-view="raid"]')).toContainText('Raid ทีม');
   await expect(page.locator('#v4CoachBtn')).toContainText('ศูนย์ฝึกอัจฉริยะ');
@@ -257,8 +257,8 @@ test('mobile navigation is a usable 3 by 3 grid with no horizontal overflow',asy
     const rows=[...new Set(boxes.map(box=>Math.round(box.top)))];
     return {rows:rows.length,perRow:rows.map(top=>boxes.filter(box=>Math.round(box.top)===top).length),minHeight:Math.min(...boxes.map(box=>box.height))};
   });
-  expect(metrics.rows).toBe(3);
-  expect(metrics.perRow).toEqual([3,3,3]);
+  expect(metrics.rows).toBe(4);
+  expect(metrics.perRow).toEqual([3,3,3,1]);
   expect(metrics.minHeight).toBeGreaterThanOrEqual(56);
   const topButtonHeights = await page.locator('.top-btn').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().height));
   expect(Math.min(...topButtonHeights)).toBeGreaterThanOrEqual(44);
@@ -420,6 +420,62 @@ test('survival exploration reveals fog, discovers POIs, changes maps and uses ju
   expect(stored.exploration['training-grove']).toHaveLength(192);
   expect(JSON.stringify(stored).length).toBeLessThan(1000);
   expect(pageErrors).toEqual([]);
+});
+
+test('coin shop purchases helpers, unlocks cosmetics and consumes inventory in battle',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const starter=await page.evaluate(()=>window.teacherQuestEconomyDebug.getState());
+  expect(starter.catalog).toHaveLength(10);
+  expect(starter.economy.inventory.fifty).toBe(2);
+  expect(await page.evaluate(()=>window.teacherQuestEconomyDebug.grantCoins(500))).toBe(500);
+  await page.locator('#shopShortcut').click();
+  await expect(page.getByRole('heading',{name:'ร้านค้านักผจญภัย'})).toBeVisible();
+  await expect(page.locator('[data-shop-item]')).toHaveCount(4);
+  await page.locator('[data-shop-buy="fifty"]').click();
+  expect((await page.evaluate(()=>window.teacherQuestEconomyDebug.getState())).economy.inventory.fifty).toBe(3);
+
+  await page.locator('[data-shop-filter="emote"]').click();
+  await page.locator('[data-shop-buy="emote-cheer"]').click();
+  await page.locator('[data-shop-equip="emote-cheer"]').click();
+  await page.locator('[data-shop-filter="cosmetic"]').click();
+  await page.locator('[data-shop-buy="cosmetic-cape"]').click();
+  await page.locator('[data-shop-equip="cosmetic-cape"]').click();
+  await expect(page.locator('#avatarArt .pixel-avatar')).toHaveAttribute('data-accessory','cape');
+  const equipped=await page.evaluate(()=>window.teacherQuestEconomyDebug.getState());
+  expect(equipped.economy.equipped.emote).toBe('cheer');
+  expect(equipped.economy.equipped.accessory).toBe('cape');
+  expect(equipped.coins).toBe(287);
+
+  await page.locator('[data-view="practice"]').first().click();
+  await page.locator('#practiceModule').selectOption('learn');
+  await page.locator('[data-mode="normal"]').click();
+  await page.locator('[data-skill="fifty"]').click();
+  const used=await page.evaluate(()=>window.teacherQuestEconomyDebug.getState());
+  expect(used.economy.inventory.fifty).toBe(2);
+  await expect(page.locator('[data-skill="fifty"]')).toBeDisabled();
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuest2569_v3')));
+  expect(stored.economy.version).toBe(1);
+  expect(stored.economy.owned).toEqual(expect.arrayContaining(['emote-cheer','cosmetic-cape']));
+  expect(pageErrors).toEqual([]);
+});
+
+test('equipped emote triggers a visible world action with keyboard and touch controls',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(url,{waitUntil:'networkidle'});
+  const emoteButton=page.locator('[data-emote]');
+  await expect(emoteButton).toBeVisible();
+  const box=await emoteButton.boundingBox();
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await emoteButton.click();
+  expect((await page.evaluate(()=>window.teacherQuestAdventureDebug.getState())).action).toBe('wave');
+  await page.evaluate(()=>window.teacherQuestAdventureDebug.startAction('spin'));
+  expect((await page.evaluate(()=>window.teacherQuestAdventureDebug.getState())).action).toBe('spin');
+  await page.keyboard.press('KeyQ');
+  expect((await page.evaluate(()=>window.teacherQuestAdventureDebug.getState())).action).toBe('wave');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });
 
 test('touch d-pad holds movement and adventure position survives navigation',async({page})=>{
