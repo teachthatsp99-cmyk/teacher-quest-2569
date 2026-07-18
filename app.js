@@ -79,13 +79,19 @@ const sourceMarkup = question => {
   const status={
     "official-current":["ตรงจากแหล่งทางการ","official"],
     "exact-reference":["ตรงกับข้อในเอกสาร","exact"],
+    "page-reference":["พบหัวข้อในหน้าเอกสาร","page"],
     "topic-reference":["อ้างอิงหัวข้อในเอกสาร","topic"],
     "applied-reference":["คำถามประยุกต์จากหัวข้อ","applied"]
   }[question.verificationStatus] || ["มีแหล่งสำหรับตรวจเทียบ","topic"];
   const link = question.sourceUrl
     ? `<a href="${esc(question.sourceUrl)}" target="_blank" rel="noopener" aria-label="${question.sourceDirect ? "เปิดหน้าต้นทางตรง" : "เปิดแหล่งตรวจเทียบ"}ของข้อ ${question.id}">${question.sourceDirect ? "เปิดหน้าต้นทางตรง" : "เปิดแหล่งตรวจเทียบ"} ↗</a>`
     : "";
-  return `<div class="citation-card ${status[1]}"><div class="citation-head"><span>หลักฐานข้อ ${question.id}</span><strong>${status[0]}</strong></div><p><b>เอกสาร:</b> ${esc(question.sourceDocument || question.source)}</p><p><b>ตำแหน่ง:</b> ${esc(question.sourceLocator || question.type)}</p><div class="citation-foot"><span>${question.sourceDirect ? `ตรวจข้อมูล ${esc(question.verifiedAt || D.verifiedAt)}` : "ลิงก์ภายนอกใช้สำหรับตรวจเทียบ ไม่ใช่หน้าของไฟล์ PDF"}</span>${link}</div></div>`;
+  const evidenceNote=question.sourceDirect
+    ? `ตรวจข้อมูล ${esc(question.verifiedAt || D.verifiedAt)}`
+    : question.verificationStatus === "page-reference" || question.verificationStatus === "exact-reference"
+      ? "ระบุตำแหน่งจาก PDF ที่ส่ง • ลิงก์ภายนอกใช้ตรวจเทียบ"
+      : "ลิงก์ภายนอกใช้สำหรับตรวจเทียบ ไม่ใช่หน้าของไฟล์ PDF";
+  return `<div class="citation-card ${status[1]}"><div class="citation-head"><span>หลักฐานข้อ ${question.id}</span><strong>${status[0]}</strong></div><p><b>เอกสาร:</b> ${esc(question.sourceDocument || question.source)}</p><p><b>ตำแหน่ง:</b> ${esc(question.sourceLocator || question.type)}</p><div class="citation-foot"><span>${evidenceNote}</span>${link}</div></div>`;
 };
 window.teacherQuestSourceMarkup=sourceMarkup;
 

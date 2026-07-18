@@ -122,6 +122,28 @@ test('English and Thai culture are separate modules with truthful counts and doc
   expect(split.english.title).toBe('ภาษาอังกฤษเพื่อการสอบ');
   expect(split.english.count).toBe(8);
   expect(split.english.documents).toEqual(['แนวข้อสอบ ความสามารถทางด้านภาษาอังกฤษ.(2).pdf']);
+  const citations=await page.evaluate(()=>({
+    page:window.GAME_DATA.questionBankAudit.pageReferenceCount,
+    exact:window.GAME_DATA.questionBankAudit.exactReferenceCount,
+    topic:window.GAME_DATA.questionBankAudit.topicReferenceCount,
+    applied:window.GAME_DATA.questionBankAudit.appliedReferenceCount,
+    indexed:Object.keys(window.TEACHER_QUEST_CITATION_INDEX || {}).length
+  }));
+  expect(citations).toEqual({page:207,exact:4,topic:101,applied:8,indexed:207});
+  const pageCitation=await page.evaluate(()=>{
+    const question=window.GAME_DATA.questions.find(item=>item.id===1);
+    return {
+      page:question.sourcePage,
+      locator:question.sourceLocator,
+      status:question.verificationStatus,
+      markup:window.teacherQuestSourceMarkup(question)
+    };
+  });
+  expect(pageCitation.page).toBe(6);
+  expect(pageCitation.locator).toMatch(/^หน้า 6 •/);
+  expect(pageCitation.status).toBe('page-reference');
+  expect(pageCitation.markup).toContain('พบหัวข้อในหน้าเอกสาร');
+  expect(pageCitation.markup).toContain('หน้า 6');
   expect(split.english.ids).toEqual([146,147,148,149,150,380,381,382]);
 
   await page.locator('[data-view="exam"]').click();

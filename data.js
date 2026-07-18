@@ -28,6 +28,7 @@ const sourceInventory=[
   {module:"eduact",file:"3.-พระราชบัญญัติการศึกษาแห่งชาติพ.ศ.2542-ฉ.2(2).pdf",status:"amendment"},
   {module:"eduact",file:"4.-พระราชบัญญัติการศึกษาแห่งชาติ-พ.ศ.2542ฉ.3(2).pdf",status:"amendment"},
   {module:"eduact",file:"5.-พระราชบัญญัติการศึกษาแห่งชาติ-พ.ศ.2542-ฉ.4(2).pdf",status:"amendment"},
+  {module:"child",file:"สรุป+แนวข้อสอบ) พ.ร.บ.คุ้มครองเด็ก พ.ศ. 2546.pdf",status:"reference-reverified"},
   {module:"admin",file:"แนวข้อสอบบ พรบ ระเบียบบริหารราชการกระทรวงศึกษาธิการ.(2).pdf",status:"reference-reverified"},
   {module:"disability",file:"แนวข้อสอบ พ.ร.บ.การจัดการศึกษาสำหรับคนพิการ พ.ศ. 2551 แก้ไขถึง(ฉบับที่ 2) 2556.(2).pdf",status:"reference-reverified"},
   {module:"civil",file:"แนวข้อสอบ พ.ร.บ. ระเบียบข้าราชการครูและบุคลากรทางการศึกษา พ.ศ. 2547 และแก้ไขเพิ่มเติมถึง ฉบับ(2).pdf",status:"reference-reverified"},
@@ -1096,6 +1097,7 @@ const citationOverrides=new Map([
   [381,{sourceLocator:"หน้า 4–6 • Part II: Structure — present perfect",verificationStatus:"topic-reference"}],
   [382,{sourceLocator:"หน้า 4–6 • Part II: Structure — first conditional",verificationStatus:"topic-reference"}]
 ]);
+const citationIndex=window.TEACHER_QUEST_CITATION_INDEX || {};
 questions.forEach(question=>{
   const module=modules.find(item=>item.id===question.module);
   const explicitSourceUrl=Boolean(question.sourceUrl);
@@ -1107,9 +1109,9 @@ questions.forEach(question=>{
     ? `แหล่งทางการของประเด็น • ตรวจ ${question.verifiedAt || VERIFIED_AT}`
     : `หัวข้อในเอกสาร • ${question.type}`;
   question.verificationStatus=question.sourceDirect ? "official-current" : "topic-reference";
-  Object.assign(question,citationOverrides.get(question.id) || {});
+  Object.assign(question,citationIndex[question.id] || {},citationOverrides.get(question.id) || {});
 });
-const questionBankAudit={version:"4.3.0",questionCount:questions.length,moduleCount:modules.length,uploadedDocumentCount:sourceInventory.length,uniqueDocumentCount:sourceInventory.filter(item=>item.status!=="duplicate").length,answerDistribution:{ก:questions.filter(q=>q.answer===0).length,ข:questions.filter(q=>q.answer===1).length,ค:questions.filter(q=>q.answer===2).length,ง:questions.filter(q=>q.answer===3).length},categoryDistribution:Object.fromEntries([...new Set(questions.map(q=>q.category))].map(category=>[category,questions.filter(q=>q.category===category).length])),verifiedCount:questions.filter(q=>q.verificationStatus==="official-current").length,referenceBackedCount:questions.filter(q=>q.verificationStatus!=="official-current").length,sourceCoverage:modules.map(module=>({module:module.id,source:module.source,sourceUrl:module.official,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(q=>q.module===module.id).length})),sourceInventory,standards:["ปรับตัวเลือกเพื่อลดเบาะแสจากความยาวและคำสุดโต่ง","ตำแหน่งเฉลยสมดุลทั้งสี่ตัวเลือก","ทุกข้อระบุเอกสารชุดอ้างอิงพร้อมตำแหน่งหัวข้อ และแยกลิงก์ตรงออกจากลิงก์ตรวจเทียบ","คลัง 400 ข้อใน 21 หมวด โดยจำนวนต่อหมวดอ่านจากคลังจริงและครบ 3 ระดับความยาก","ภารกิจหลักของแต่ละด่านทำครบทั้งคลังโดยไม่ซ้ำในภารกิจเดียว"]};
+const questionBankAudit={version:"4.3.1",questionCount:questions.length,moduleCount:modules.length,uploadedDocumentCount:sourceInventory.length,uniqueDocumentCount:sourceInventory.filter(item=>item.status!=="duplicate").length,answerDistribution:{ก:questions.filter(q=>q.answer===0).length,ข:questions.filter(q=>q.answer===1).length,ค:questions.filter(q=>q.answer===2).length,ง:questions.filter(q=>q.answer===3).length},categoryDistribution:Object.fromEntries([...new Set(questions.map(q=>q.category))].map(category=>[category,questions.filter(q=>q.category===category).length])),verifiedCount:questions.filter(q=>q.verificationStatus==="official-current").length,referenceBackedCount:questions.filter(q=>q.verificationStatus!=="official-current").length,pageReferenceCount:questions.filter(q=>q.verificationStatus==="page-reference").length,exactReferenceCount:questions.filter(q=>q.verificationStatus==="exact-reference").length,topicReferenceCount:questions.filter(q=>q.verificationStatus==="topic-reference").length,appliedReferenceCount:questions.filter(q=>q.verificationStatus==="applied-reference").length,sourceCoverage:modules.map(module=>({module:module.id,source:module.source,sourceUrl:module.official,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(q=>q.module===module.id).length})),sourceInventory,standards:["ปรับตัวเลือกเพื่อลดเบาะแสจากความยาวและคำสุดโต่ง","ตำแหน่งเฉลยสมดุลทั้งสี่ตัวเลือก","ทุกข้อระบุเอกสารชุดอ้างอิงพร้อมตำแหน่งหัวข้อ และแยกลิงก์ตรงออกจากลิงก์ตรวจเทียบ","ผูกหน้าเอกสารเฉพาะคู่ที่ผ่านเกณฑ์ข้อความรายหน้า และคงป้ายหัวข้อเมื่อหลักฐานยังคลุมเครือ","คลัง 400 ข้อใน 21 หมวด โดยจำนวนต่อหมวดอ่านจากคลังจริงและครบ 3 ระดับความยาก","ภารกิจหลักของแต่ละด่านทำครบทั้งคลังโดยไม่ซ้ำในภารกิจเดียว"]};
 const codex=[
 {title:"สูตร 9–12–15",icon:"#",items:["ภาคบังคับ 9 ปี","สิทธิขั้นพื้นฐานตาม พ.ร.บ. ไม่น้อยกว่า 12 ปี","นโยบาย/คำสั่งการศึกษาฟรี 15 ปี ต้องแยกจากตัวบท"]},
 {title:"สามรูปแบบการศึกษา",icon:"△",items:["ในระบบ","นอกระบบ","ตามอัธยาศัย","ผลการเรียนและประสบการณ์สามารถเทียบโอนได้ตามหลักเกณฑ์"]},
@@ -1119,5 +1121,5 @@ const codex=[
 {title:"วงจรวิจัยในชั้นเรียน",icon:"◉",items:["ระบุปัญหาจากหลักฐาน","วางแผน","ปฏิบัติและเก็บข้อมูล","สะท้อนผลและปรับรอบต่อไป"]}
 ];
 const sources=modules.map(module=>({title:module.title,url:module.official,note:module.source,documents:moduleDocuments[module.id] || [],questionCount:questions.filter(question=>question.module===module.id).length}));
-window.GAME_DATA={version:"4.3.0",verifiedAt:VERIFIED_AT,modules,questions,questionBankAudit,codex,sources};
+window.GAME_DATA={version:"4.3.1",verifiedAt:VERIFIED_AT,modules,questions,questionBankAudit,codex,sources};
 })();
