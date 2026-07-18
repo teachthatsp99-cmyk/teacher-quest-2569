@@ -2,6 +2,11 @@ const {test,expect} = require('@playwright/test');
 
 const url = 'http://127.0.0.1:4173';
 
+async function openWorld(page){
+  await page.locator('[data-view="home"]').first().click();
+  await page.locator('[data-go="world"]').first().click();
+}
+
 async function submitCurrentBattleAnswer(page,{correct=true}={}){
   const answer = await page.evaluate(()=>{
     const stem=document.querySelector('.question-text')?.textContent?.trim();
@@ -120,7 +125,7 @@ test('all 20 zones show complete-bank and optional short modes with unique pixel
     const questions=window.GAME_DATA.questions.filter(question=>question.module===module.id);
     return {id:module.id,total:questions.length,boss:questions.filter(question=>question.difficulty!=="ง่าย").length};
   }));
-  await page.locator('[data-view="world"]').click();
+  await openWorld(page);
   await expect(page.locator('.zone')).toHaveCount(20);
   const iconIds = await page.locator('.zone [data-module-icon]').evaluateAll(icons=>icons.map(icon=>icon.dataset.moduleIcon));
   const iconPatterns = await page.locator('.zone [data-module-icon]').evaluateAll(icons=>icons.map(icon=>icon.innerHTML));
@@ -148,7 +153,7 @@ test('all 20 zones show complete-bank and optional short modes with unique pixel
 test('complete quest serves every question in a zone exactly once',async({page})=>{
   test.setTimeout(60000);
   await page.goto(url,{waitUntil:'networkidle'});
-  await page.locator('[data-view="world"]').click();
+  await openWorld(page);
   await page.locator('.zone[data-module="research"]').click();
   await page.locator('#zoneComplete').click();
   await expect(page.locator('.battle-center strong')).toHaveText('1 / 20');
@@ -220,16 +225,18 @@ test('all main views render without browser errors',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   const expected = {
     adventure:'โลกครูเควสต์',
-    world:'แผนที่ภารกิจ',
-    practice:'สนามฝึก',
+    world:'สารบัญด่าน',
+    practice:'ฝึกด่วน',
     exam:'สนามสอบใหญ่',
+    raid:'เชื่อมออนไลน์ก่อนรวมทีม',
     review:'ห้องทบทวน',
     codex:'คัมภีร์ความรู้',
     profile:'สมุดนักผจญภัย',
     home:'ฝึกให้แม่น'
   };
   for(const [view,text] of Object.entries(expected)){
-    await page.locator(`[data-view="${view}"]`).first().click();
+    if(view==='world') await openWorld(page);
+    else await page.locator(`[data-view="${view}"]`).first().click();
     await expect(page.locator('#view')).toContainText(text);
   }
   expect(pageErrors).toEqual([]);
@@ -242,6 +249,9 @@ test('mobile navigation is a usable 3 by 3 grid with no horizontal overflow',asy
   expect(overflow).toBe(false);
   await expect(page.locator('.nav-list')).toBeVisible();
   await expect(page.locator('.nav-list .nav-btn')).toHaveCount(9);
+  await expect(page.locator('.nav-btn[data-view="adventure"]')).toContainText('เล่นเนื้อเรื่อง');
+  await expect(page.locator('.nav-btn[data-view="raid"]')).toContainText('Raid ทีม');
+  await expect(page.locator('#v4CoachBtn')).toContainText('ศูนย์ฝึกอัจฉริยะ');
   const metrics = await page.locator('.nav-list .nav-btn').evaluateAll(buttons=>{
     const boxes=buttons.map(button=>button.getBoundingClientRect());
     const rows=[...new Set(boxes.map(box=>Math.round(box.top)))];
@@ -249,15 +259,16 @@ test('mobile navigation is a usable 3 by 3 grid with no horizontal overflow',asy
   });
   expect(metrics.rows).toBe(3);
   expect(metrics.perRow).toEqual([3,3,3]);
-  expect(metrics.minHeight).toBeGreaterThanOrEqual(44);
+  expect(metrics.minHeight).toBeGreaterThanOrEqual(56);
   const topButtonHeights = await page.locator('.top-btn').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().height));
   expect(Math.min(...topButtonHeights)).toBeGreaterThanOrEqual(44);
 
-  for(const view of ['adventure','world','practice','exam','review','codex','profile','home']){
-    await page.locator(`[data-view="${view}"]`).first().click();
+  for(const view of ['adventure','world','practice','exam','raid','review','codex','profile','home']){
+    if(view==='world') await openWorld(page);
+    else await page.locator(`[data-view="${view}"]`).first().click();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),`${view} overflowed horizontally`).toBe(false);
   }
-  await page.locator('[data-view="world"]').click();
+  await openWorld(page);
   await page.locator('.zone[data-module="disability"]').click();
   const modalFits = await page.locator('.modal-card').evaluate(card=>{
     const box=card.getBoundingClientRect();
@@ -270,6 +281,8 @@ test('mobile navigation is a usable 3 by 3 grid with no horizontal overflow',asy
   await page.locator('[data-view="home"]').first().click();
   await page.locator('#quickStart').click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),'battle overflowed horizontally').toBe(false);
+  const optionHeight=await page.locator('.option').first().evaluate(element=>element.getBoundingClientRect().height);
+  expect(optionHeight).toBeGreaterThanOrEqual(60);
 });
 
 test('pixel adventure supports held movement, map, portal interaction and complete quest entry',async({page})=>{
@@ -341,10 +354,17 @@ test('touch d-pad holds movement and adventure position survives navigation',asy
   await page.waitForTimeout(50);
   const after=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(after.x-before.x).toBeGreaterThan(25);
+  const canvas=page.locator('#adventureCanvas');
+  const box=await canvas.boundingBox();
+  await canvas.dispatchEvent('pointerdown',{pointerId:9,pointerType:'touch',isPrimary:true,clientX:box.x+box.width*.7,clientY:box.y+box.height*.55});
+  await page.waitForTimeout(450);
+  const tapped=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(tapped.x-after.x).toBeGreaterThan(20);
+  expect(tapped.tapTarget).not.toBeNull();
   await page.locator('[data-view="home"]').first().click();
   await page.locator('[data-view="adventure"]').first().click();
   const restored=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
-  expect(Math.abs(restored.x-after.x)).toBeLessThan(3);
+  expect(Math.abs(restored.x-tapped.x)).toBeLessThan(15);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });
 
@@ -401,6 +421,22 @@ test('configured production mode requires Google before the game becomes interac
   await expect(page.locator('#authGate')).toBeHidden();
   await expect(page.locator('body')).not.toHaveClass(/auth-locked/);
   expect(await page.locator('.app-shell').evaluate(element=>element.inert)).toBe(false);
+
+  await page.evaluate(()=>{window.TeacherQuestOnline.diagnosePermissions=async()=>({
+    ok:false,claims:{emailVerified:true,signInProvider:'google.com',googleLinked:true,rulesRevision:'2026-07-18.1'},
+    steps:[
+      {key:'profile-read',label:'อ่านโปรไฟล์ของตนเอง',ok:true,error:''},
+      {key:'progress-read',label:'อ่านความคืบหน้าบน Cloud',ok:true,error:''},
+      {key:'presence-write',label:'เขียนสถานะออนไลน์',ok:true,error:''},
+      {key:'raid-create',label:'สร้างและลบห้อง Raid ทดสอบ',ok:false,error:'Firebase ปฏิเสธการสร้างห้อง Raid โดยเฉพาะ'}
+    ]
+  });});
+  await page.locator('#onlineBtn').click();
+  await page.locator('#runFirebaseDiagnostic').click();
+  await expect(page.locator('.firebase-diagnostic-result')).toContainText('พบจุดที่ถูกปฏิเสธ');
+  await expect(page.locator('.firebase-diagnostic-steps .fail')).toContainText('สร้างและลบห้อง Raid ทดสอบ');
+  await expect(page.locator('.firebase-diagnostic-result')).not.toContainText('@');
+  await page.locator('#modalClose').click();
 
   await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
     configured:true,
@@ -461,15 +497,18 @@ test('Firebase errors tell the owner exactly which console setting to fix',async
   await page.goto(url,{waitUntil:'networkidle'});
   const messages=await page.evaluate(()=>({
     rules:window.teacherQuestOnlineDebug.formatError({code:'PERMISSION_DENIED',message:'Permission denied'}),
+    raid:window.teacherQuestOnlineDebug.formatError({code:'PERMISSION_DENIED',message:'Permission denied'},'raid-create'),
     domain:window.teacherQuestOnlineDebug.formatError({code:'auth/unauthorized-domain'})
   }));
   expect(messages.rules).toContain('Realtime Database → Rules');
   expect(messages.rules).toContain('กด Publish');
   expect(messages.rules).toContain('เข้าสู่ระบบ Google ใหม่');
+  expect(messages.raid).toContain('การสร้างห้อง Raid');
+  expect(messages.raid).toContain('ตรวจสิทธิ์ Firebase');
   expect(messages.domain).toContain('Authorized domains');
 });
 
-test('Raid rules permit an atomic lobby-to-active start and use server timestamps',async({page})=>{
+test('Raid rules validate new sibling values during room creation and atomic start',async({page})=>{
   const [rulesResponse,onlineResponse]=await Promise.all([
     page.request.get(`${url}/database.rules.json`),
     page.request.get(`${url}/online.js`)
@@ -478,10 +517,14 @@ test('Raid rules permit an atomic lobby-to-active start and use server timestamp
   expect(onlineResponse.ok()).toBe(true);
   const rules=await rulesResponse.json();
   const startedAt=rules.rules.raids['$room'].meta.startedAt['.validate'];
+  const bossHp=rules.rules.raids['$room'].meta.bossHp['.validate'];
   const online=await onlineResponse.text();
-  expect(startedAt).toContain("status').val() === 'lobby'");
-  expect(startedAt).toContain("status').val() === 'active'");
+  expect(startedAt).toContain("newData.parent().child('status').val() === 'active'");
+  expect(bossHp).toContain("newData.parent().child('bossMax')");
+  expect(bossHp).not.toContain("root.child('raids').child($room).child('meta').child('bossMax')");
   expect(online).toContain('const createdAt=databaseModule.serverTimestamp()');
+  expect(online).toContain('function raidRoomPayload(moduleId="all")');
+  expect(online).toContain('getIdTokenResult(true)');
   expect(online).toContain('await user.getIdToken(true)');
 });
 
@@ -545,7 +588,28 @@ test('multiplayer Raid renders a live lobby, deterministic questions and respons
 
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
+  const mobileTargets=await page.evaluate(()=>({
+    option:document.querySelector('[data-raid-answer]')?.getBoundingClientRect().height || 0,
+    attack:document.querySelector('#raidAttackBtn')?.getBoundingClientRect().height || 0
+  }));
+  expect(mobileTargets.option).toBeGreaterThanOrEqual(56);
+  expect(mobileTargets.attack).toBeGreaterThanOrEqual(50);
   expect(pageErrors).toEqual([]);
+});
+
+test('Raid creation failures stay visible and link to the Firebase diagnostic',async({page})=>{
+  await page.goto(url,{waitUntil:'networkidle'});
+  await page.evaluate(()=>{
+    window.teacherQuestOnlineDebug.simulate({configured:true,phase:'online',connected:true,user:{uid:'raid-host',isAnonymous:false,provider:'google'},profile:{nickname:'ครูหัวหน้าทีม',avatar:{}},raid:null,error:''});
+    window.TeacherQuestOnline.createRaid=async()=>{throw new Error('Firebase ปฏิเสธการสร้างห้อง Raid โดยเฉพาะ');};
+    window.teacherQuestRaidDebug.render();
+  });
+  await page.locator('#createRaidBtn').click();
+  await expect(page.locator('#raidEntryError')).toBeVisible();
+  await expect(page.locator('#raidEntryErrorText')).toContainText('ปฏิเสธการสร้างห้อง Raid');
+  await page.locator('#raidEntryDiagnostic').click();
+  await expect(page.getByRole('heading',{name:'บัญชีและตัวละคร'})).toBeVisible();
+  await expect(page.locator('#runFirebaseDiagnostic')).toBeVisible();
 });
 
 test('Raid answers trigger Pixel attacks and boss counter actions',async({page})=>{
