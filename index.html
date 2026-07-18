@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="adventure.css?v=20260718.3">
 <link rel="stylesheet" href="online.css?v=20260718.1">
 <link rel="stylesheet" href="raid.css?v=20260718.1">
+<link rel="stylesheet" href="economy.css?v=20260718.1">
 </head>
 <body class="scanlines auth-checking">
 <a class="skip" href="#main">ข้ามไปยังเนื้อหา</a>
@@ -39,7 +40,7 @@
     </button>
     <div class="top-spacer"></div>
     <div class="hud-chip level-chip" title="เลเวล"><span>LV</span><b id="topLevel">1</b></div>
-    <div class="hud-chip coin-chip" title="เหรียญ"><span aria-hidden="true">◉</span><b id="topCoins">0</b></div>
+    <button class="hud-chip coin-chip" id="shopShortcut" type="button" title="เปิดร้านค้าและคลังไอเทม" aria-label="เปิดร้านค้า มี 0 เหรียญ"><span aria-hidden="true">◉</span><b id="topCoins">0</b></button>
     <button class="online-chip setup" id="onlineBtn" title="บัญชีและผู้เล่นออนไลน์" aria-label="เปิดบัญชี ตัวละคร และสถานะออนไลน์"><span class="online-dot" aria-hidden="true"></span><span class="online-label" id="onlineCount">ตั้งค่าออนไลน์</span></button>
     <button class="top-btn" id="musicBtn" title="เปิดหรือปิดเพลง" aria-label="เปิดหรือปิดเพลง">♫</button>
     <button class="top-btn" id="soundBtn" title="เปิดหรือปิดเสียงเอฟเฟกต์" aria-label="เปิดหรือปิดเสียงเอฟเฟกต์">SFX</button>
@@ -66,6 +67,7 @@
       <button class="nav-btn" data-view="raid"><span aria-hidden="true">⚡</span>Raid ทีม</button>
       <button class="nav-btn" data-view="review"><span aria-hidden="true">◎</span>ห้องทบทวน</button>
       <button class="nav-btn" data-view="codex"><span aria-hidden="true">▤</span>คัมภีร์ความรู้</button>
+      <button class="nav-btn" data-view="shop"><span aria-hidden="true">◉</span>ร้านค้านักผจญภัย</button>
       <button class="nav-btn" data-view="profile"><span aria-hidden="true">★</span>สมุดนักผจญภัย</button>
     </nav>
     <div class="side-quest">
@@ -87,11 +89,12 @@
   </div>
 </div>
 <script src="data.js"></script>
+<script src="economy-core.js?v=20260718.1"></script>
 <script src="online-config.js"></script>
-<script src="online.js?v=20260718.2"></script>
+<script src="online.js?v=20260718.3"></script>
 <script src="world-core.js?v=20260718.3"></script>
-<script src="adventure.js?v=20260718.3"></script>
-<script src="app.js?v=20260718.3"></script>
+<script src="adventure.js?v=20260718.4"></script>
+<script src="app.js?v=20260718.4"></script>
 <script src="v4.js"></script>
 </body>
 </html>

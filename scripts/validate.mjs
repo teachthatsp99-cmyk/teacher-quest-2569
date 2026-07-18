@@ -108,7 +108,7 @@ if(data?.questionBankAudit?.sourceInventory?.length !== 26) fail('source invento
 if((data?.questionBankAudit?.verifiedCount || 0) + (data?.questionBankAudit?.referenceBackedCount || 0) !== questions.length) fail('verification counts do not cover the full bank');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','data.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','economy.css','data.js','economy-core.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
@@ -121,18 +121,33 @@ for(const retired of ['cloud-sync.js','firebase-config.js','v4-cleanup.js','FIRE
 const app = fs.readFileSync('app.js','utf8');
 const adventure = fs.readFileSync('adventure.js','utf8');
 const online = fs.readFileSync('online.js','utf8');
+const economy = fs.readFileSync('economy-core.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES']){
+for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES','renderShop','teacherQuestEconomyDebug','ECONOMY.consume']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','switchMap','training-grove','active-choice']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','data-emote','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','startAction','switchMap','training-grove','active-choice']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
 for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
-if(!(html.indexOf('data.js') < html.indexOf('online-config.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('online/world/adventure scripts are not loaded in dependency order');
+if(!(html.indexOf('data.js') < html.indexOf('economy-core.js') && html.indexOf('economy-core.js') < html.indexOf('online.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('economy/online/world/adventure scripts are not loaded in dependency order');
+try{
+  const economyContext={window:{}};
+  vm.createContext(economyContext);
+  vm.runInContext(economy,economyContext,{filename:'economy-core.js'});
+  const core=economyContext.window.TeacherQuestEconomyCore;
+  const starter=core?.defaults?.();
+  const bought=core?.purchase?.(starter,100,'fifty');
+  const used=core?.consume?.(bought?.economy,'fifty');
+  const emote=core?.purchase?.(used?.economy,bought?.coins,'emote-cheer');
+  const equipped=core?.equip?.(emote?.economy,'emote-cheer');
+  if(core?.catalog?.length!==10 || starter?.inventory?.hint!==2) fail('economy starter inventory or catalog is invalid');
+  if(!bought?.ok || bought.coins!==82 || used?.economy?.inventory?.fifty!==2) fail('economy purchase/consume flow is invalid');
+  if(!emote?.ok || !equipped?.ok || equipped.economy.equipped.emote!=='cheer') fail('economy permanent unlock/equip flow is invalid');
+}catch(error){ fail(`economy-core.js is invalid: ${error.message}`); }
 try{
   const worldContext={window:{}};
   vm.createContext(worldContext);
@@ -160,6 +175,8 @@ try{
   if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
   if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
   if(!rulesText.includes("$zone === 'training-grove'")) fail('database rules do not allow the Phase 2 training map presence zone');
+  if(!rulesText.includes("newData.val() === 'crown'")) fail('database rules do not allow the Phase 3 accessory allowlist');
+  if(!rulesText.includes("newData.val() === 'spin'")) fail('database rules do not allow the Phase 3 action allowlist');
   const raidMeta=rules.rules?.raids?.['$room']?.meta || {};
   const raidStartedAtRule=raidMeta.startedAt?.['.validate'] || '';
   const raidBossHpRule=raidMeta.bossHp?.['.validate'] || '';

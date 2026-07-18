@@ -12,12 +12,13 @@
         "createdAt": { ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())" },
         "updatedAt": { ".validate": "newData.isNumber()" },
         "avatar": {
-          ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString()",
+          ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style','accessory']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString() && newData.child('accessory').isString()",
           "skin": { ".validate": "newData.val() === '#f4c7a1' || newData.val() === '#e8b989' || newData.val() === '#c98f65' || newData.val() === '#8b5b3f'" },
           "hair": { ".validate": "newData.val() === '#24182f' || newData.val() === '#4a2d28' || newData.val() === '#815226' || newData.val() === '#d9b65a' || newData.val() === '#5b4b85'" },
           "shirt": { ".validate": "newData.val() === '#3d68af' || newData.val() === '#1e8a72' || newData.val() === '#9b4e86' || newData.val() === '#b86535' || newData.val() === '#5c55a7'" },
           "accent": { ".validate": "newData.val() === '#ffd45c' || newData.val() === '#58e7b2' || newData.val() === '#5dcbff' || newData.val() === '#ff72b4' || newData.val() === '#a88cff'" },
           "style": { ".validate": "newData.val() === 'short' || newData.val() === 'spike' || newData.val() === 'long' || newData.val() === 'cap'" },
+          "accessory": { ".validate": "newData.val() === 'none' || newData.val() === 'cape' || newData.val() === 'book' || newData.val() === 'crown'" },
           "$other": { ".validate": false }
         },
         "$other": { ".validate": false }
@@ -61,20 +62,23 @@
         ".read": "auth != null && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove') && query.limitToLast != null && query.limitToLast <= 40",
         "$uid": {
           ".write": "auth != null && auth.uid === $uid && auth.token.firebase.identities['google.com'] != null && ($zone === 'plaza' || $zone === 'district-0' || $zone === 'district-1' || $zone === 'district-2' || $zone === 'district-3' || $zone === 'training-grove')",
-          ".validate": "!newData.exists() || (newData.hasChildren(['nickname','avatar','x','y','direction','moving','lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2048 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1536 && (newData.child('direction').val() === 'up' || newData.child('direction').val() === 'down' || newData.child('direction').val() === 'left' || newData.child('direction').val() === 'right') && newData.child('moving').isBoolean() && newData.child('lastSeen').isNumber() && newData.child('lastSeen').val() >= now - 120000 && newData.child('lastSeen').val() <= now + 120000)",
+          ".validate": "!newData.exists() || (newData.hasChildren(['nickname','avatar','x','y','direction','moving','action','actionAt','lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 20 && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2048 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1536 && (newData.child('direction').val() === 'up' || newData.child('direction').val() === 'down' || newData.child('direction').val() === 'left' || newData.child('direction').val() === 'right') && newData.child('moving').isBoolean() && newData.child('action').isString() && newData.child('actionAt').isNumber() && newData.child('lastSeen').isNumber() && newData.child('lastSeen').val() >= now - 120000 && newData.child('lastSeen').val() <= now + 120000)",
           "nickname": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 20" },
           "x": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2048" },
           "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1536" },
           "direction": { ".validate": "newData.val() === 'up' || newData.val() === 'down' || newData.val() === 'left' || newData.val() === 'right'" },
           "moving": { ".validate": "newData.isBoolean()" },
+          "action": { ".validate": "newData.val() === '' || newData.val() === 'wave' || newData.val() === 'cheer' || newData.val() === 'spin'" },
+          "actionAt": { ".validate": "newData.val() === 0 || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
           "lastSeen": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
           "avatar": {
-            ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString()",
+            ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style','accessory']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString() && newData.child('accessory').isString()",
             "skin": { ".validate": "newData.val() === '#f4c7a1' || newData.val() === '#e8b989' || newData.val() === '#c98f65' || newData.val() === '#8b5b3f'" },
             "hair": { ".validate": "newData.val() === '#24182f' || newData.val() === '#4a2d28' || newData.val() === '#815226' || newData.val() === '#d9b65a' || newData.val() === '#5b4b85'" },
             "shirt": { ".validate": "newData.val() === '#3d68af' || newData.val() === '#1e8a72' || newData.val() === '#9b4e86' || newData.val() === '#b86535' || newData.val() === '#5c55a7'" },
             "accent": { ".validate": "newData.val() === '#ffd45c' || newData.val() === '#58e7b2' || newData.val() === '#5dcbff' || newData.val() === '#ff72b4' || newData.val() === '#a88cff'" },
             "style": { ".validate": "newData.val() === 'short' || newData.val() === 'spike' || newData.val() === 'long' || newData.val() === 'cap'" },
+            "accessory": { ".validate": "newData.val() === 'none' || newData.val() === 'cape' || newData.val() === 'book' || newData.val() === 'crown'" },
             "$other": { ".validate": false }
           },
           "$other": { ".validate": false }
@@ -120,12 +124,13 @@
             "emote": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'hi' || newData.val() === 'go' || newData.val() === 'help' || newData.val() === 'wow' || newData.val() === 'gg')" },
             "emoteAt": { ".validate": "newData.isNumber() && (newData.val() === 0 || (newData.val() >= now - 120000 && newData.val() <= now + 120000) || (data.exists() && newData.val() === data.val()))" },
             "avatar": {
-              ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString()",
+              ".validate": "newData.hasChildren(['skin','hair','shirt','accent','style','accessory']) && newData.child('skin').isString() && newData.child('hair').isString() && newData.child('shirt').isString() && newData.child('accent').isString() && newData.child('style').isString() && newData.child('accessory').isString()",
               "skin": { ".validate": "newData.val() === '#f4c7a1' || newData.val() === '#e8b989' || newData.val() === '#c98f65' || newData.val() === '#8b5b3f'" },
               "hair": { ".validate": "newData.val() === '#24182f' || newData.val() === '#4a2d28' || newData.val() === '#815226' || newData.val() === '#d9b65a' || newData.val() === '#5b4b85'" },
               "shirt": { ".validate": "newData.val() === '#3d68af' || newData.val() === '#1e8a72' || newData.val() === '#9b4e86' || newData.val() === '#b86535' || newData.val() === '#5c55a7'" },
               "accent": { ".validate": "newData.val() === '#ffd45c' || newData.val() === '#58e7b2' || newData.val() === '#5dcbff' || newData.val() === '#ff72b4' || newData.val() === '#a88cff'" },
               "style": { ".validate": "newData.val() === 'short' || newData.val() === 'spike' || newData.val() === 'long' || newData.val() === 'cap'" },
+              "accessory": { ".validate": "newData.val() === 'none' || newData.val() === 'cape' || newData.val() === 'book' || newData.val() === 'crown'" },
               "$other": { ".validate": false }
             },
             "$other": { ".validate": false }
