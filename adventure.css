@@ -83,3 +83,5 @@
 }
 @media(hover:hover) and (pointer:fine){.adventure-mobile-controls{display:none}}
 @media(prefers-reduced-motion:reduce){.adventure-prompt{transition:none}}
+
+@media(max-width:620px){.adventure-intro-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.adventure-intro-actions .btn{width:100%;min-height:44px}.adventure-mobile-controls{padding-bottom:env(safe-area-inset-bottom)}.pixel-dpad button{min-width:44px;min-height:44px}.pixel-dpad{width:128px;height:128px}.pixel-dpad [data-move=up]{left:42px}.pixel-dpad [data-move=left]{top:42px}.pixel-dpad [data-move=right]{top:42px}.pixel-dpad [data-move=down]{left:42px}.adventure-interact-button{width:60px;height:60px}.adventure-dialogue{bottom:calc(8px + env(safe-area-inset-bottom));max-height:88%;padding:10px}.adventure-dialogue-actions{display:grid;grid-template-columns:1fr}.adventure-dialogue-actions .btn{width:100%;min-height:48px;font-size:11px}.adventure-map-panel{inset:6px;padding:9px;padding-bottom:calc(9px + env(safe-area-inset-bottom))}.adventure-map-head{top:-9px;margin:-9px -9px 10px;padding:9px}.adventure-prompt{bottom:calc(82px + env(safe-area-inset-bottom))}}

@@ -125,10 +125,10 @@ const v4 = fs.readFileSync('v4.js','utf8');
 for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
-for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS']){
+for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)']){
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
@@ -141,8 +141,12 @@ try{
   if(!rulesText.includes("auth.token.firebase.identities['google.com'] != null")) fail('database rules do not require a linked Google identity');
   if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
   if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
-  const raidStartedAtRule=rules.rules?.raids?.['$room']?.meta?.startedAt?.['.validate'] || '';
-  if(!(raidStartedAtRule.includes("status').val() === 'lobby'") && raidStartedAtRule.includes("status').val() === 'active'"))) fail('raid rules must allow the atomic lobby-to-active start transition');
+  const raidMeta=rules.rules?.raids?.['$room']?.meta || {};
+  const raidStartedAtRule=raidMeta.startedAt?.['.validate'] || '';
+  const raidBossHpRule=raidMeta.bossHp?.['.validate'] || '';
+  if(!raidStartedAtRule.includes("newData.parent().child('status').val() === 'active'")) fail('raid rules must validate the post-write active status during an atomic start');
+  if(!raidBossHpRule.includes("newData.parent().child('bossMax')")) fail('raid creation must validate bossHp against the post-write bossMax sibling');
+  if(raidBossHpRule.includes("root.child('raids').child($room).child('meta').child('bossMax')")) fail('raid creation still compares bossHp with the pre-write room');
   const expressions=[];
   const collectRuleExpressions=value=>{
     if(!value || typeof value!=='object') return;
@@ -152,7 +156,7 @@ try{
     }
   };
   collectRuleExpressions(rules);
-  const supportedRuleMethods=new Set(['child','exists','getPriority','hasChild','hasChildren','isBoolean','isNumber','isString','matches','val']);
+  const supportedRuleMethods=new Set(['child','exists','getPriority','hasChild','hasChildren','isBoolean','isNumber','isString','matches','parent','val']);
   for(const expression of expressions){
     for(const match of expression.matchAll(/\.([A-Za-z_$][\w$]*)\s*\(/g)){
       if(!supportedRuleMethods.has(match[1])) fail(`database rules use unsupported method ${match[1]}()`);

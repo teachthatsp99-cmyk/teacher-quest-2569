@@ -95,7 +95,7 @@
           },
           "bossHp": {
             ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('members').child(auth.uid).exists() && root.child('raids').child($room).child('meta').child('status').val() === 'active'",
-            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= root.child('raids').child($room).child('meta').child('bossMax').val() && (!data.exists() || (newData.val() <= data.val() && newData.val() >= data.val() - 40))"
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.parent().child('bossMax').isNumber() && newData.val() <= newData.parent().child('bossMax').val() && (!data.exists() || (newData.val() <= data.val() && newData.val() >= data.val() - 40))"
           },
           "bossMax": { ".validate": "newData.isNumber() && newData.val() >= 240 && newData.val() <= 1200 && (!data.exists() || newData.val() === data.val())" },
           "moduleId": { ".validate": "newData.isString() && (newData.val() === 'all' || newData.val() === 'learn' || newData.val() === 'curriculum' || newData.val() === 'measure' || newData.val() === 'research' || newData.val() === 'psych' || newData.val() === 'media' || newData.val() === 'classroom' || newData.val() === 'profession' || newData.val() === 'eduact' || newData.val() === 'child' || newData.val() === 'disability' || newData.val() === 'civil' || newData.val() === 'ksp' || newData.val() === 'voclaw' || newData.val() === 'culture' || newData.val() === 'policy' || newData.val() === 'student' || newData.val() === 'admin' || newData.val() === 'quality' || newData.val() === 'current') && (!data.exists() || newData.val() === data.val())" },
@@ -103,7 +103,7 @@
           "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() >= now - 120000 && newData.val() <= now + 120000) || (data.exists() && newData.val() === data.val()))" },
           "startedAt": {
             ".write": "auth != null && auth.token.firebase.identities['google.com'] != null && root.child('raids').child($room).child('meta').child('hostUid').val() === auth.uid",
-            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (data.val() === 0 && newData.val() >= now - 120000 && newData.val() <= now + 120000 && (root.child('raids').child($room).child('meta').child('status').val() === 'lobby' || root.child('raids').child($room).child('meta').child('status').val() === 'active')))"
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (data.val() === 0 && newData.val() >= now - 120000 && newData.val() <= now + 120000 && newData.parent().child('status').val() === 'active'))"
           },
           "$other": { ".validate": false }
         },

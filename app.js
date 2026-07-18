@@ -330,7 +330,8 @@ function openModal(html){
     element.setAttribute("aria-hidden","true");
   });
   document.body.classList.add("modal-open");
-  setTimeout(() => $("button,input,select",modalBody)?.focus() || $("#modalClose")?.focus(),30);
+  const initialFocus = $("button,input,select",modalBody) || $("#modalClose");
+  initialFocus?.focus({preventScroll:true});
 }
 function closeModal(){
   if(modal.classList.contains("hidden")) return;
@@ -543,7 +544,7 @@ function renderAdventure(){
         <div>
           <div class="eyebrow">ADVENTURE MODE • PIXEL WORLD</div>
           <h1>โลกครูเควสต์</h1>
-          <p id="adventureInstructions">กดค้าง WASD หรือปุ่มลูกศรเพื่อเดิน • คีย์บอร์ดไทยใช้ ไฟหก • โต้ตอบด้วย E/ปุ่ม ำ, SPACE หรือ ACTION โดยไม่ต้องสลับภาษา</p>
+          <p id="adventureInstructions">มือถือแตะพื้นให้ตัวละครเดินไปหาเป้าหมาย หรือใช้ D-pad • คีย์บอร์ดใช้ WASD/ลูกศร (ภาษาไทยใช้ ไฟหก) • โต้ตอบด้วย E/ำ, SPACE หรือปุ่ม A</p>
         </div>
         <div class="adventure-intro-actions">
           <button class="btn small pink" data-go="raid">⚡ เรด Co-op</button>
@@ -586,7 +587,7 @@ function renderAdventure(){
         </div>
       </div>
       <div class="adventure-help" aria-label="วิธีเล่น">
-        <div><kbd>WASD</kbd><span><strong>เดินสำรวจ</strong>ภาษาไทยใช้ปุ่ม ไ ฟ ห ก ได้ทันที</span></div>
+        <div><kbd>แตะ / WASD</kbd><span><strong>เดินสำรวจ</strong>มือถือแตะพื้นได้ • ภาษาไทยใช้ ไ ฟ ห ก</span></div>
         <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
         <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
         <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
@@ -614,9 +615,9 @@ function renderAdventure(){
       adventureInstance?.destroy();
       adventureInstance = null;
       void window.TeacherQuestOnline?.leaveWorld?.();
-      if(mode === "complete") startBattle({mode:"module",module:id,count:total,complete:true,returnView:"adventure"});
-      else if(mode === "boss") startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.boss,bossTotal),boss:true,returnView:"adventure"});
-      else startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.zone,total),returnView:"adventure"});
+      if(mode === "complete") startBattle({mode:"module",module:id,count:total,complete:true,returnView:"adventure",adventureQuest:true});
+      else if(mode === "boss") startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.boss,bossTotal),boss:true,returnView:"adventure",adventureQuest:true});
+      else startBattle({mode:"module",module:id,count:Math.min(ROUND_COUNTS.zone,total),returnView:"adventure",adventureQuest:true});
     },
     onNavigate:name => go(name)
   });
@@ -652,7 +653,7 @@ function renderHome(){
       <div class="stat-card pixel-box"><b>${state.maxCombo}</b><span>คอมโบสูงสุด</span></div>
       <div class="stat-card pixel-box"><b>${stats.weak}</b><span>ข้อที่ยังต้องฝึก</span></div>
     </section>
-    <div class="section-head"><div><h2>ทางลัดนักผจญภัย</h2><p>เลือกสนามให้ตรงกับเป้าหมายวันนี้</p></div></div>
+    <div class="section-head"><div><h2>ทางลัดฝึกทบทวน</h2><p>เริ่มตอบได้ทันทีโดยไม่เดินเรื่อง; ภารกิจในโลกผจญภัยมีโบนัสเพิ่ม</p></div></div>
     <section class="quest-strip">
       <button class="quest-card pixel-box" id="weakStart"><span class="quest-ico">◎</span><span><h3>ล่าจุดอ่อน</h3><p>ระบบเลือกข้อที่ยังไม่แม่น</p></span><b>+EXP</b></button>
       <button class="quest-card pixel-box" id="lawStart"><span class="quest-ico">⚖</span><span><h3>ศึกกฎหมาย</h3><p>รวมกฎหมายและวิชาชีพฉบับตรวจทาน</p></span><b>BOSS</b></button>
@@ -669,7 +670,7 @@ function renderHome(){
 }
 
 function renderWorld(){
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>แผนที่ภารกิจ</h2><small>ภารกิจหลักทำครบทุกข้อในด่าน ส่วนโหมดด่วนและบอสเป็นชุดฝึกเสริม</small></div><button class="btn small" id="allRandom">สุ่มรวม ${ROUND_COUNTS.all} ข้อ</button></div><div class="world-map">${D.modules.map(zoneHtml).join("")}</div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สารบัญด่าน</h2><small>ทางลัดเลือกเนื้อหาโดยไม่ต้องเดิน • ถ้าต้องการเนื้อเรื่องและโบนัสเควสต์ ให้เข้าผ่านประตูในโลกผจญภัย</small></div><button class="btn small" id="allRandom">สุ่มรวม ${ROUND_COUNTS.all} ข้อ</button></div><div class="mode-explainer"><strong>เลือกให้ตรงกับเวลาของคุณ</strong><span>สารบัญ/ฝึกด่วน = ทบทวนทันที • โลกผจญภัย = NPC ประตู บอส และโบนัสภารกิจ • สนามสอบ = จำลองสอบจริง</span></div><div class="world-map">${D.modules.map(zoneHtml).join("")}</div></section>`;
   $$('[data-module]').forEach(button => button.onclick = () => openZone(button.dataset.module));
   $("#allRandom").onclick = () => startBattle({mode:"random",count:ROUND_COUNTS.all});
 }
@@ -688,7 +689,8 @@ function openZone(id){
 
 function renderPractice(options={}){
   if(options.start){ startBattle(options.start); return; }
-  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>สนามฝึก</h2><small>เลือกดินแดน แล้วเลือกทำครบคลังหรือฝึกเป็นชุดสั้น</small></div></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select></label></div><p class="practice-availability" id="practiceAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" data-mode="complete"><div class="mode-icon" aria-hidden="true">✦</div><h3>พิชิตครบทั้งคลัง</h3><p id="completePoolText"></p><span class="tag">COMPLETE QUEST</span></button><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p id="normalPoolText"></p><span class="tag">NORMAL ROUND</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p id="bossPoolText"></p><span class="tag">HARD ROUND</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p id="weakPoolText"></p><span class="tag">SMART REVIEW</span></button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>ฝึกด่วน</h2><small>ทางลัดสำหรับทบทวนทันที ไม่เดินเนื้อเรื่องและไม่มีโบนัสจบเควสต์</small></div><button class="btn small mint" data-go="adventure">ไปเล่นเนื้อเรื่อง + โบนัส</button></div><div class="filter-row"><label>ดินแดน <select id="practiceModule"><option value="all">ทุกดินแดน</option>${D.modules.map(item => `<option value="${item.id}" ${state.lastModule === item.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select></label></div><p class="practice-availability" id="practiceAvailability" role="status"></p><div class="mode-grid"><button class="mode-card" data-mode="complete"><div class="mode-icon" aria-hidden="true">✦</div><h3>พิชิตครบทั้งคลัง</h3><p id="completePoolText"></p><span class="tag">COMPLETE PRACTICE</span></button><button class="mode-card" data-mode="normal"><div class="mode-icon" aria-hidden="true">⚔</div><h3>ศึกมาตรฐาน</h3><p id="normalPoolText"></p><span class="tag">NORMAL ROUND</span></button><button class="mode-card" data-mode="boss"><div class="mode-icon" aria-hidden="true">◆</div><h3>ล่าบอส</h3><p id="bossPoolText"></p><span class="tag">HARD ROUND</span></button><button class="mode-card" data-mode="weak"><div class="mode-icon" aria-hidden="true">◎</div><h3>ห้องล้างแค้น</h3><p id="weakPoolText"></p><span class="tag">SMART REVIEW</span></button></div></section>`;
+  bindCommon();
   const syncAvailability = () => {
     const selected = $("#practiceModule").value;
     const item = selected === "all" ? null : moduleById(selected);
@@ -742,7 +744,7 @@ function startBattle(config){
     enemyHp:config.boss ? 150 : 100,enemyMax:config.boss ? 150 : 100,
     combo:0,selected:null,locked:false,hidden:[],shield:false,
     skills:{fifty:1,heal:1,shield:1,hint:1},boss:Boolean(config.boss),correct:0,
-    returnView:config.returnView || ""
+    returnView:config.returnView || "",adventureQuest:Boolean(config.adventureQuest)
   };
   const moduleIndex = config.module ? D.modules.findIndex(item => item.id === config.module) : 0;
   const battleLabel = config.module ? moduleById(config.module)?.title : config.boss ? "ศึกบอสใหญ่" : "สนามต่อสู้";
@@ -903,8 +905,10 @@ function finishBattle(defeat=false){
   const total = result ? result.pool.length : 0;
   if(!defeat) sfx.win();
   const returnToAdventure = result?.returnView === "adventure";
+  const adventureBonus=Boolean(result?.adventureQuest && !defeat);
+  if(adventureBonus){state.xp+=25;state.coins+=10;saveState();}
   setMusicScene(defeat ? "retreat" : "victory");
-  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box ${defeat ? "retreat" : "mission-victory"}"><div class="result-battle-stage" data-result-action="${defeat ? "retreat" : "victory"}"><div class="victory-burst" aria-hidden="true"></div><div class="fighter result-fighter ${defeat ? "retreating" : "celebrating"}">${fighterArt()}</div><div class="victory-banner">${defeat ? "TRY AGAIN" : "VICTORY!"}</div></div><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p></div><div class="hero-actions">${returnToAdventure ? '<button class="btn" id="returnAdventure">◈ กลับสู่โลกผจญภัย</button>' : '<button class="btn" id="againBattle">ฝึกอีกชุด</button>'}<button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
+  view.innerHTML = `<section class="panel pixel-box"><div class="result-hero pixel-box ${defeat ? "retreat" : "mission-victory"}"><div class="result-battle-stage" data-result-action="${defeat ? "retreat" : "victory"}"><div class="victory-burst" aria-hidden="true"></div><div class="fighter result-fighter ${defeat ? "retreating" : "celebrating"}">${fighterArt()}</div><div class="victory-banner">${defeat ? "TRY AGAIN" : "VICTORY!"}</div></div><div class="eyebrow">${defeat ? "MISSION RETREAT" : "MISSION COMPLETE"}</div><b>${score}/${total}</b><h2>${defeat ? "ถอยมาตั้งหลัก แล้วกลับไปลุยใหม่" : "ภารกิจเสร็จสิ้น!"}</h2><p>${score / Math.max(total,1) >= .8 ? "ยอดเยี่ยม ความแม่นของคุณพร้อมลุยด่านยากขึ้น" : "ทบทวนข้อที่พลาด แล้วลองอีกครั้งจะเห็นพัฒนาการชัดเจน"}</p>${adventureBonus ? '<div class="adventure-bonus">โบนัสเนื้อเรื่อง +25 EXP • +10 เหรียญ</div>' : ''}</div><div class="hero-actions">${returnToAdventure ? '<button class="btn" id="returnAdventure">◈ กลับสู่โลกผจญภัย</button>' : '<button class="btn" id="againBattle">ฝึกอีกชุด</button>'}<button class="btn mint" data-go="review">ทบทวนข้อพลาด</button><button class="btn dark" data-go="home">กลับฐาน</button></div></section>`;
   battle = null;
   bindCommon();
   if(returnToAdventure) $("#returnAdventure").onclick = () => go("adventure");
@@ -991,7 +995,7 @@ function renderRaid(){
 }
 
 function renderRaidEntry(){
-  view.innerHTML=`<section class="raid-entry pixel-box"><div class="raid-entry-hero"><div><div class="eyebrow">CLASSROOM RAID • REALTIME CO-OP</div><h1>รวมปาร์ตี้<br><span>ปราบบอสความรู้</span></h1><p>สร้างห้องหรือใส่รหัส 6 ตัว เพื่อนแต่ละคนตอบข้อสอบบนหน้าจอของตนเอง ทุกคำตอบที่ถูกจะกลายเป็นพลังโจมตีบอสตัวเดียวกันแบบสด</p></div><div class="raid-entry-boss">${raidBossArt()}<span>8 PLAYERS MAX</span></div></div><div class="raid-entry-grid"><form class="raid-entry-card pixel-box" id="createRaidForm"><h2>◆ สร้างห้องใหม่</h2><label for="raidModule">ขอบเขตข้อสอบ<select id="raidModule"><option value="all">ทุกดินแดน • 400 ข้อ</option>${D.modules.map(item=>`<option value="${item.id}">${esc(item.title)} • 20 ข้อ</option>`).join("")}</select></label><p>หัวหน้าห้องเลือกเนื้อหาแล้วส่งรหัสให้เพื่อน จากนั้นกดเริ่มเมื่อทีมพร้อม</p><button class="btn pink" type="submit" id="createRaidBtn">⚡ สร้างห้อง Raid</button></form><form class="raid-entry-card pixel-box" id="joinRaidForm"><h2>◈ เข้าห้องเพื่อน</h2><label for="raidCodeInput">รหัสห้อง 6 ตัว<input id="raidCodeInput" class="raid-code-input" maxlength="6" inputmode="text" autocomplete="off" placeholder="ABC234" required></label><p>ใช้รหัสจากหัวหน้าห้อง ตัวอักษรพิมพ์เล็กหรือใหญ่ก็ได้</p><button class="btn mint" type="submit" id="joinRaidBtn">เข้าร่วมปาร์ตี้</button></form></div><div class="raid-safety"><strong>ปลอดภัยสำหรับห้องเรียน</strong><span>ไม่มีแชตอิสระ • แสดงเฉพาะชื่อในเกม ตัวละคร คะแนน และอีโมตที่กำหนดไว้</span></div><div class="hero-actions"><button class="btn dark" data-go="adventure">กลับโลกผจญภัย</button></div></section>`;
+  view.innerHTML=`<section class="raid-entry pixel-box"><div class="raid-entry-hero"><div><div class="eyebrow">CLASSROOM RAID • REALTIME CO-OP</div><h1>รวมปาร์ตี้<br><span>ปราบบอสความรู้</span></h1><p>สร้างห้องหรือใส่รหัส 6 ตัว เพื่อนแต่ละคนตอบข้อสอบบนหน้าจอของตนเอง ทุกคำตอบที่ถูกจะกลายเป็นพลังโจมตีบอสตัวเดียวกันแบบสด</p></div><div class="raid-entry-boss">${raidBossArt()}<span>8 PLAYERS MAX</span></div></div><div class="raid-entry-grid"><form class="raid-entry-card pixel-box" id="createRaidForm"><h2>◆ สร้างห้องใหม่</h2><label for="raidModule">ขอบเขตข้อสอบ<select id="raidModule"><option value="all">ทุกดินแดน • 400 ข้อ</option>${D.modules.map(item=>`<option value="${item.id}">${esc(item.title)} • 20 ข้อ</option>`).join("")}</select></label><p>หัวหน้าห้องเลือกเนื้อหาแล้วส่งรหัสให้เพื่อน จากนั้นกดเริ่มเมื่อทีมพร้อม</p><button class="btn pink" type="submit" id="createRaidBtn">⚡ สร้างห้อง Raid</button></form><form class="raid-entry-card pixel-box" id="joinRaidForm"><h2>◈ เข้าห้องเพื่อน</h2><label for="raidCodeInput">รหัสห้อง 6 ตัว<input id="raidCodeInput" class="raid-code-input" maxlength="6" inputmode="text" autocomplete="off" placeholder="ABC234" required></label><p>ใช้รหัสจากหัวหน้าห้อง ตัวอักษรพิมพ์เล็กหรือใหญ่ก็ได้</p><button class="btn mint" type="submit" id="joinRaidBtn">เข้าร่วมปาร์ตี้</button></form></div><div class="raid-entry-error" id="raidEntryError" role="alert" hidden><div><strong>สร้างห้องไม่สำเร็จ</strong><span id="raidEntryErrorText"></span></div><button class="btn small sky" type="button" id="raidEntryDiagnostic">ตรวจสิทธิ์ Firebase</button></div><div class="raid-safety"><strong>ปลอดภัยสำหรับห้องเรียน</strong><span>ไม่มีแชตอิสระ • แสดงเฉพาะชื่อในเกม ตัวละคร คะแนน และอีโมตที่กำหนดไว้</span></div><div class="hero-actions"><button class="btn dark" data-go="adventure">กลับโลกผจญภัย</button></div></section>`;
   bindCommon();
   const api=window.TeacherQuestOnline;
   $("#raidCodeInput").oninput=event=>{event.target.value=api?.normalizeRaidCode?.(event.target.value) || event.target.value.toUpperCase();};
@@ -1000,7 +1004,12 @@ function renderRaidEntry(){
     const button=$("#createRaidBtn");
     button.disabled=true;button.textContent="กำลังเปิดประตู Raid…";
     try{onlineState=await api.createRaid({moduleId:$("#raidModule").value});renderRaid();}
-    catch(error){button.disabled=false;button.textContent="⚡ สร้างห้อง Raid";showToast(error.message || "สร้างห้องไม่สำเร็จ");}
+    catch(error){
+      button.disabled=false;button.textContent="⚡ สร้างห้อง Raid";
+      $("#raidEntryError").hidden=false;
+      $("#raidEntryErrorText").textContent=error.message || "สร้างห้องไม่สำเร็จ";
+      showToast(error.message || "สร้างห้องไม่สำเร็จ");
+    }
   };
   $("#joinRaidForm").onsubmit=async event=>{
     event.preventDefault();
@@ -1009,6 +1018,7 @@ function renderRaidEntry(){
     try{onlineState=await api.joinRaid($("#raidCodeInput").value);renderRaid();}
     catch(error){button.disabled=false;button.textContent="เข้าร่วมปาร์ตี้";showToast(error.message || "เข้าห้องไม่สำเร็จ");}
   };
+  $("#raidEntryDiagnostic").onclick=openOnlineDialog;
 }
 
 function renderRaidLobby(raid){
@@ -1340,6 +1350,13 @@ function avatarOptionsMarkup(profile){
   }).join("")}</div></div>`).join("");
 }
 
+function firebaseDiagnosticMarkup(report){
+  const claims=report?.claims || {};
+  const steps=Array.isArray(report?.steps) ? report.steps : [];
+  const status=report?.ok ? "ผ่านทุกจุด" : "พบจุดที่ถูกปฏิเสธ";
+  return `<section class="firebase-diagnostic-result ${report?.ok ? "pass" : "fail"}"><h3>${report?.ok ? "✓" : "!"} ผลตรวจ Firebase: ${status}</h3><div class="firebase-claim-grid"><span>บัญชียืนยันอีเมล <b>${claims.emailVerified ? "ผ่าน" : "ไม่ผ่าน"}</b></span><span>เข้าใช้ผ่าน <b>${esc(claims.signInProvider || "unknown")}</b></span><span>ผูก Google <b>${claims.googleLinked ? "แล้ว" : "ยัง"}</b></span><span>Rules ที่เว็บต้องการ <b>${esc(claims.rulesRevision || "-")}</b></span></div><ol class="firebase-diagnostic-steps">${steps.map(step=>`<li class="${step.ok ? "pass" : "fail"}"><strong>${step.ok ? "ผ่าน" : "ไม่ผ่าน"} — ${esc(step.label)}</strong>${step.error ? `<small>${esc(step.error)}</small>` : ""}</li>`).join("")}</ol>${report?.ok ? "<p>สิทธิ์พื้นฐานและการสร้าง Raid ผ่านแล้ว ลองสร้างห้องจริงได้ทันที</p>" : "<p>ถ้าผ่านทุกข้อยกเว้น Raid แปลว่า Realtime Database ยังใช้ Rules ชุดเก่า ให้คัดลอกไฟล์ล่าสุดและกด Publish อีกครั้ง</p>"}</section>`;
+}
+
 function openOnlineDialog(){
   onlineState=window.TeacherQuestOnline?.getState?.() || onlineState;
   const api=window.TeacherQuestOnline;
@@ -1350,7 +1367,8 @@ function openOnlineDialog(){
     : onlineState.error ? `<div class="online-alert error">${esc(onlineState.error)}</div>` : "";
   const googleConnected=onlineState.user && !onlineState.user.isAnonymous;
   const retryButton=googleConnected && onlineState.phase==="error" ? '<button class="btn small sky" type="button" id="retryOnline">ลองเชื่อมต่อใหม่</button>' : "";
-  openModal(`<div class="eyebrow">ONLINE PIXEL ID • CLOUD SAVE</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${retryButton}${googleConnected ? '<button class="btn small dark" type="button" id="signOutGoogle">ออกจากระบบ</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><p class="online-help">Google ID ใช้บันทึกคะแนน ข้อที่เคยทำ บุ๊กมาร์ก ประวัติสอบ และตำแหน่งขึ้น Cloud ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม โดยไม่เห็นอีเมล</p></form>`);
+  const diagnosticButton=googleConnected ? '<button class="btn small sky" type="button" id="runFirebaseDiagnostic">ตรวจสิทธิ์ Firebase</button>' : "";
+  openModal(`<div class="eyebrow">ONLINE PIXEL ID • CLOUD SAVE</div><h2 id="modalTitle">บัญชีและตัวละคร</h2><div class="online-summary"><div class="online-avatar-preview" id="onlineAvatarPreview">${api?.avatarMarkup?.(draft,"large") || ""}</div><div><div class="online-status-line"><span class="online-dot" aria-hidden="true"></span><span>${esc(statusText)}</span></div><div class="online-stats"><div class="online-stat"><b>${onlineState.onlineCount || 0}</b><small>ออนไลน์ตอนนี้</small></div><div class="online-stat"><b>${onlineState.totalPlayers || 0}</b><small>นักผจญภัยทั้งหมด</small></div></div></div></div>${setupNotice}<form class="online-form" id="onlineProfileForm"><label for="onlineNickname">ชื่อที่แสดงในเกม<input id="onlineNickname" type="text" minlength="2" maxlength="20" value="${esc(draft.nickname)}" autocomplete="nickname" required></label>${avatarOptionsMarkup(draft)}<div class="online-actions"><button class="btn small mint" type="submit" id="saveOnlineProfile">บันทึกตัวละคร</button>${retryButton}${diagnosticButton}${googleConnected ? '<button class="btn small dark" type="button" id="signOutGoogle">ออกจากระบบ</button>' : ""}${!onlineState.configured ? '<a class="btn small dark" href="FIREBASE_ONLINE_SETUP.md" target="_blank" rel="noopener">เปิดคู่มือตั้งค่า</a>' : ""}</div><div id="firebaseDiagnostic" class="firebase-diagnostic" role="status" aria-live="polite" hidden></div><p class="online-help">Google ID ใช้บันทึกคะแนน ข้อที่เคยทำ บุ๊กมาร์ก ประวัติสอบ และตำแหน่งขึ้น Cloud ผู้เล่นอื่นจะเห็นเฉพาะชื่อ ชุด และตำแหน่งในโลกเกม โดยไม่เห็นอีเมล</p></form>`);
   const refreshDraft=()=>{
     $("#onlineAvatarPreview").innerHTML=api?.avatarMarkup?.(draft,"large") || "";
     $$("[data-avatar-group]",modalBody).forEach(button=>{
@@ -1400,6 +1418,24 @@ function openOnlineDialog(){
       button.disabled=false;
       button.textContent="ลองเชื่อมต่อใหม่";
       showToast(error.message || "ยังเชื่อมต่อไม่สำเร็จ");
+    }
+  });
+  $("#runFirebaseDiagnostic")?.addEventListener("click",async event=>{
+    const button=event.currentTarget;
+    const panel=$("#firebaseDiagnostic");
+    button.disabled=true;
+    button.textContent="กำลังตรวจ 4 จุด…";
+    panel.hidden=false;
+    panel.innerHTML='<div class="firebase-diagnostic-loading">กำลังทดสอบโปรไฟล์ Cloud สถานะออนไลน์ และการสร้าง Raid ชั่วคราว…</div>';
+    try{
+      const report=await api.diagnosePermissions();
+      panel.innerHTML=firebaseDiagnosticMarkup(report);
+      button.textContent="ตรวจสิทธิ์อีกครั้ง";
+    }catch(error){
+      panel.innerHTML=`<div class="online-alert error">${esc(error.message || "ตรวจสิทธิ์ไม่สำเร็จ")}</div>`;
+      button.textContent="ลองตรวจอีกครั้ง";
+    }finally{
+      button.disabled=false;
     }
   });
 }

@@ -206,6 +206,8 @@ function createTeacherQuestAdventure(options={}){
   let lastPresenceTime = -Infinity;
   let lastPresenceFingerprint = "";
   const remoteCharacters = new Map();
+  let tapTarget = null;
+  let tapBlockedFrames = 0;
 
   canvas.width = VIEW_WIDTH;
   canvas.height = VIEW_HEIGHT;
@@ -276,6 +278,19 @@ function createTeacherQuestAdventure(options={}){
     if(!collides(player.x,nextY)) player.y = nextY;
   }
 
+  function setTapTarget(event){
+    if(dialogueOpen || mapOpen) return;
+    const rect=canvas.getBoundingClientRect();
+    if(!rect.width || !rect.height) return;
+    tapTarget={
+      x:clamp(camera.x+(event.clientX-rect.left)*VIEW_WIDTH/rect.width,20,WORLD_WIDTH-20),
+      y:clamp(camera.y+(event.clientY-rect.top)*VIEW_HEIGHT/rect.height,36,WORLD_HEIGHT-18)
+    };
+    tapBlockedFrames=0;
+    keys.clear();
+    canvas.focus({preventScroll:true});
+  }
+
   function updateNearest(){
     const candidates = [...portals.map(portal => ({...portal,type:"portal"})),...npcs];
     const candidate = candidates.reduce((best,item) => {
@@ -307,9 +322,9 @@ function createTeacherQuestAdventure(options={}){
     dialogueText.textContent = `${portal.module.summary} บอสประจำด่าน: ${portal.module.boss}`;
     dialogueStats.innerHTML = `<span><b>${stats.total}</b> ข้อในคลัง</span><span><b>${stats.done}</b> ข้อที่เคยทำ</span><span><b>${stats.accuracy}%</b> ความแม่น</span>`;
     dialogueActions.innerHTML = `
-      <button class="btn mint adventure-choice" data-adventure-mode="complete"><strong>พิชิตครบ ${stats.total} ข้อ</strong><small>ครบทุกข้อ ไม่ซ้ำในภารกิจนี้</small></button>
+      <button class="btn mint adventure-choice" data-adventure-mode="complete"><strong>พิชิตครบ ${stats.total} ข้อ</strong><small>ครบทุกข้อ • โบนัสเนื้อเรื่อง +25 EXP +10 เหรียญ</small></button>
       <button class="btn adventure-choice" data-adventure-mode="quick"><strong>ฝึกด่วน ${Math.min(10,stats.total)} ข้อ</strong><small>สุ่มชุดใหม่จากคลังด่าน</small></button>
-      <button class="btn pink adventure-choice" data-adventure-mode="boss"><strong>ท้าบอส ${bossCount} ข้อ</strong><small>โจทย์ระดับกลาง–ยาก</small></button>
+      <button class="btn pink adventure-choice" data-adventure-mode="boss"><strong>ท้าบอส ${bossCount} ข้อ</strong><small>โจทย์กลาง–ยาก • รับโบนัสเมื่อจบภารกิจ</small></button>
       <button class="btn dark" data-dialogue-close>เดินสำรวจต่อ</button>`;
     dialogueActions.querySelectorAll("[data-adventure-mode]").forEach(button => button.addEventListener("click",() => {
       savePosition(player);
@@ -341,6 +356,7 @@ function createTeacherQuestAdventure(options={}){
 
   function showDialogue(){
     dialogueOpen = true;
+    tapTarget = null;
     keys.clear();
     dialogue.hidden = false;
     dialogue.setAttribute("aria-hidden","false");
@@ -375,6 +391,7 @@ function createTeacherQuestAdventure(options={}){
   function toggleMap(force){
     mapOpen = typeof force === "boolean" ? force : !mapOpen;
     keys.clear();
+    tapTarget = null;
     mapPanel.hidden = !mapOpen;
     mapPanel.setAttribute("aria-hidden",String(!mapOpen));
     if(mapOpen){ renderMapPanel(); mapPanel.querySelector("[data-map-close]")?.focus({preventScroll:true}); }
@@ -383,6 +400,7 @@ function createTeacherQuestAdventure(options={}){
   }
 
   function resetPosition(){
+    tapTarget = null;
     Object.assign(player,SPAWN,{direction:"down"});
     camera.x = clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
     camera.y = clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
@@ -404,7 +422,7 @@ function createTeacherQuestAdventure(options={}){
     }
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     const direction = DIRECTION_BY_CODE[event.code] || DIRECTION_BY_KEY[key];
-    if(direction && !inControl){ event.preventDefault(); keys.add(direction); }
+    if(direction && !inControl){ event.preventDefault(); tapTarget=null; keys.add(direction); }
     const interactKey = ["KeyE","Space","Enter","NumpadEnter"].includes(event.code) || ["e","ำ"," ","Enter"].includes(key);
     if(!inControl && !event.repeat && interactKey){
       event.preventDefault();
@@ -608,6 +626,11 @@ function createTeacherQuestAdventure(options={}){
     ctx.translate(-Math.round(camera.x),-Math.round(camera.y));
     drawGround();
     drawDecor();
+    if(tapTarget){
+      const pulse=Math.floor(elapsed*6)%2?3:0;
+      ctx.fillStyle="#081027";ctx.fillRect(tapTarget.x-12-pulse,tapTarget.y-3-pulse,24+pulse*2,6+pulse*2);ctx.fillRect(tapTarget.x-3-pulse,tapTarget.y-12-pulse,6+pulse*2,24+pulse*2);
+      ctx.fillStyle="#ffd45c";ctx.fillRect(tapTarget.x-7,tapTarget.y-2,14,4);ctx.fillRect(tapTarget.x-2,tapTarget.y-7,4,14);
+    }
     drawSign(1018,776,"ศูนย์กลาง");
     DISTRICTS.forEach(district => drawSign(district.hub.x,district.hub.y+76,district.short,district.color));
     BUILDINGS.forEach(drawBuilding);
@@ -662,13 +685,25 @@ function createTeacherQuestAdventure(options={}){
       if(remote.moving) remote.step+=delta*8;
     });
     if(dialogueOpen||mapOpen){player.moving=false;return;}
-    const horizontal=(keys.has("right")?1:0)-(keys.has("left")?1:0);
-    const vertical=(keys.has("down")?1:0)-(keys.has("up")?1:0);
+    let horizontal=(keys.has("right")?1:0)-(keys.has("left")?1:0);
+    let vertical=(keys.has("down")?1:0)-(keys.has("up")?1:0);
+    if(!horizontal && !vertical && tapTarget){
+      const dx=tapTarget.x-player.x;
+      const dy=tapTarget.y-player.y;
+      const gap=Math.hypot(dx,dy);
+      if(gap<=9){tapTarget=null;tapBlockedFrames=0;}
+      else{horizontal=dx/gap;vertical=dy/gap;}
+    }
     player.moving=Boolean(horizontal||vertical);
     if(player.moving){
       const length=Math.hypot(horizontal,vertical)||1;
       const speed=PLAYER_SPEED*delta;
+      const beforeX=player.x,beforeY=player.y;
       tryMove(horizontal/length*speed,vertical/length*speed);
+      if(tapTarget){
+        tapBlockedFrames=Math.hypot(player.x-beforeX,player.y-beforeY)<.15 ? tapBlockedFrames+1 : 0;
+        if(tapBlockedFrames>18){tapTarget=null;tapBlockedFrames=0;}
+      }
       player.step+=delta*9;
       if(Math.abs(horizontal)>Math.abs(vertical)) player.direction=horizontal>0?"right":"left";
       else player.direction=vertical>0?"down":"up";
@@ -710,7 +745,7 @@ function createTeacherQuestAdventure(options={}){
   const mobileBindings=[];
   root.querySelectorAll("[data-move]").forEach(button=>{
     const key=button.dataset.move;
-    const down=event=>{event.preventDefault();button.classList.add("pressed");keys.add(key);try{button.setPointerCapture?.(event.pointerId);}catch(error){/* Synthetic test events do not own a pointer. */}canvas.focus({preventScroll:true});};
+    const down=event=>{event.preventDefault();tapTarget=null;button.classList.add("pressed");keys.add(key);try{button.setPointerCapture?.(event.pointerId);}catch(error){/* Synthetic test events do not own a pointer. */}canvas.focus({preventScroll:true});};
     const up=event=>{event.preventDefault();button.classList.remove("pressed");keys.delete(key);};
     button.addEventListener("pointerdown",down);button.addEventListener("pointerup",up);button.addEventListener("pointercancel",up);button.addEventListener("lostpointercapture",up);
     mobileBindings.push([button,"pointerdown",down],[button,"pointerup",up],[button,"pointercancel",up],[button,"lostpointercapture",up]);
@@ -727,6 +762,7 @@ function createTeacherQuestAdventure(options={}){
     camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
     camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
     keys.clear();
+    tapTarget=null;
     updateNearest();
     updateHud();
   };
@@ -739,7 +775,7 @@ function createTeacherQuestAdventure(options={}){
   window.addEventListener("keyup",onKeyUp);
   window.addEventListener("blur",onBlur);
   window.addEventListener("teacherquest:cloud-progress",applyCloudPosition);
-  canvas.addEventListener("pointerdown",()=>canvas.focus({preventScroll:true}));
+  canvas.addEventListener("pointerdown",setTapTarget);
 
   function destroy(){
     if(destroyed) return;
@@ -752,6 +788,7 @@ function createTeacherQuestAdventure(options={}){
     window.removeEventListener("keyup",onKeyUp);
     window.removeEventListener("blur",onBlur);
     window.removeEventListener("teacherquest:cloud-progress",applyCloudPosition);
+    canvas.removeEventListener("pointerdown",setTapTarget);
     mobileBindings.forEach(([element,event,handler])=>element.removeEventListener(event,handler));
     interactButton?.removeEventListener("click",interactClick);
     if(window.teacherQuestAdventureDebug?.destroy===destroy) delete window.teacherQuestAdventureDebug;
@@ -764,7 +801,7 @@ function createTeacherQuestAdventure(options={}){
   raf=requestAnimationFrame(frame);
 
   window.teacherQuestAdventureDebug={
-    getState:()=>({x:player.x,y:player.y,direction:player.direction,moving:player.moving,district:locationNameAt(player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size}),
+    getState:()=>({x:player.x,y:player.y,direction:player.direction,moving:player.moving,district:locationNameAt(player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null}),
     teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();updateHud();return true;},
     teleportToNpc:id=>{const npc=npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";updateNearest();updateHud();return true;},
     interact,

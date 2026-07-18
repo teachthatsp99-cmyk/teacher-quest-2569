@@ -18,6 +18,7 @@ const RAID_CODE_LENGTH = 6;
 const RAID_MAX_PLAYERS = 8;
 const RAID_BOSS_HP = 480;
 const RAID_HEARTBEAT = 25000;
+const RAID_RULES_REVISION = "2026-07-18.1";
 const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
 const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","policy","student","admin","quality","current"]);
@@ -127,6 +128,17 @@ function raidMemberPayload({joinedAt=null,ready=false}={}){
     ready:Boolean(ready),
     emote:"",
     emoteAt:0
+  };
+}
+
+function raidRoomPayload(moduleId="all"){
+  const createdAt=databaseModule.serverTimestamp();
+  return {
+    meta:{
+      hostUid:state.user.uid,status:"lobby",bossHp:RAID_BOSS_HP,bossMax:RAID_BOSS_HP,
+      moduleId:validRaidModule(moduleId),questionSeed:Math.floor(1+Math.random()*2147483646),createdAt,startedAt:0
+    },
+    members:{[state.user.uid]:raidMemberPayload({joinedAt:createdAt,ready:true})}
   };
 }
 
@@ -267,9 +279,12 @@ function avatarMarkup(profile=state.profile,className=""){
   return `<span class="pixel-avatar ${String(className).replace(/[^a-zA-Z0-9 _-]/g,"")}" data-hair-style="${avatar.style}" style="--avatar-skin:${avatar.skin};--avatar-hair:${avatar.hair};--avatar-shirt:${avatar.shirt};--avatar-accent:${avatar.accent}" aria-hidden="true"><i class="pixel-avatar-hair"></i><i class="pixel-avatar-face"></i><i class="pixel-avatar-body"></i><i class="pixel-avatar-accent"></i><i class="pixel-avatar-feet"></i></span>`;
 }
 
-function friendlyError(error){
+function friendlyError(error,context=""){
   const rawError=`${String(error?.code || "")} ${String(error?.message || "")}`;
   if(/permission[_\s-]*denied/i.test(rawError)){
+    if(context==="raid-create"){
+      return "Firebase ปฏิเสธการสร้างห้อง Raid โดยเฉพาะ กฎออนไลน์ส่วนอื่นอาจยังทำงานได้ กรุณาใช้ Rules ชุดล่าสุดแล้วกด Publish จากนั้นเปิด ‘บัญชีและตัวละคร’ > ‘ตรวจสิทธิ์ Firebase’";
+    }
     return "Firebase ปฏิเสธสิทธิ์ในการทำรายการนี้: รีโหลดเว็บและเข้าสู่ระบบ Google ใหม่ หากเพิ่งแก้ Realtime Database → Rules ให้ตรวจว่ากด Publish แล้ว";
   }
   const map={
@@ -748,6 +763,56 @@ async function reconnect(){
   return attachUser(auth.currentUser);
 }
 
+function claimSummary(tokenResult){
+  const firebaseClaims=tokenResult?.claims?.firebase || {};
+  const googleIdentity=firebaseClaims.identities?.["google.com"];
+  return {
+    emailVerified:tokenResult?.claims?.email_verified===true,
+    signInProvider:String(firebaseClaims.sign_in_provider || "unknown").slice(0,40),
+    googleLinked:Array.isArray(googleIdentity) ? googleIdentity.length>0 : Boolean(googleIdentity),
+    rulesRevision:RAID_RULES_REVISION
+  };
+}
+
+async function diagnosticStep(key,label,task){
+  try{
+    await task();
+    return {key,label,ok:true,error:""};
+  }catch(error){
+    return {key,label,ok:false,error:friendlyError(error,key==="raid-create" ? "raid-create" : "")};
+  }
+}
+
+async function diagnosePermissions(){
+  if(!configured || !auth?.currentUser || auth.currentUser.isAnonymous || !database || !databaseModule){
+    throw new Error("กรุณาเข้าสู่ระบบ Google และรอให้ Firebase เชื่อมต่อก่อนตรวจสิทธิ์");
+  }
+  const user=auth.currentUser;
+  const tokenResult=await user.getIdTokenResult(true);
+  const steps=[];
+  steps.push(await diagnosticStep("profile-read","อ่านโปรไฟล์ของตนเอง",()=>databaseModule.get(databaseModule.ref(database,`profiles/${user.uid}`))));
+  steps.push(await diagnosticStep("progress-read","อ่านความคืบหน้าบน Cloud",()=>databaseModule.get(databaseModule.ref(database,`progress/${user.uid}`))));
+  const diagnosticConnection=`${connectionId.slice(0,64)}_diag`;
+  const connectionRef=databaseModule.ref(database,`online/${user.uid}/${diagnosticConnection}`);
+  steps.push(await diagnosticStep("presence-write","เขียนสถานะออนไลน์",async()=>{
+    await databaseModule.set(connectionRef,{connectedAt:databaseModule.serverTimestamp()});
+    await databaseModule.remove(connectionRef);
+  }));
+  const code=randomRaidCode();
+  const roomRef=databaseModule.ref(database,`raids/${code}`);
+  let raidCreated=false;
+  steps.push(await diagnosticStep("raid-create","สร้างและลบห้อง Raid ทดสอบ",async()=>{
+    await databaseModule.set(roomRef,raidRoomPayload("all"));
+    raidCreated=true;
+    await databaseModule.remove(roomRef);
+    raidCreated=false;
+  }));
+  if(raidCreated){
+    try{await databaseModule.remove(roomRef);}catch(error){console.warn("Could not clean up diagnostic Raid",error);}
+  }
+  return {ok:steps.every(step=>step.ok),checkedAt:Date.now(),claims:claimSummary(tokenResult),steps};
+}
+
 async function leaveWorld(){
   pendingWorldState=null;
   await removePresence();
@@ -850,15 +915,7 @@ async function createRaid({moduleId="all"}={}){
   for(let attempt=0;attempt<6;attempt++){
     const code=randomRaidCode();
     const roomRef=databaseModule.ref(database,`raids/${code}`);
-    const createdAt=databaseModule.serverTimestamp();
-    const member=raidMemberPayload({joinedAt:createdAt,ready:true});
-    const payload={
-      meta:{
-        hostUid:state.user.uid,status:"lobby",bossHp:RAID_BOSS_HP,bossMax:RAID_BOSS_HP,
-        moduleId:safeModule,questionSeed:Math.floor(1+Math.random()*2147483646),createdAt,startedAt:0
-      },
-      members:{[state.user.uid]:member}
-    };
+    const payload=raidRoomPayload(safeModule);
     try{
       await databaseModule.set(roomRef,payload);
       raidCode=code;
@@ -869,7 +926,7 @@ async function createRaid({moduleId="all"}={}){
       return publicState();
     }catch(error){ lastError=error; }
   }
-  throw new Error(friendlyError(lastError) || "สร้างห้อง Raid ไม่สำเร็จ กรุณาลองใหม่");
+  throw new Error(friendlyError(lastError,"raid-create") || "สร้างห้อง Raid ไม่สำเร็จ กรุณาลองใหม่");
 }
 
 async function joinRaid(value,{restoring=false}={}){
@@ -1003,13 +1060,13 @@ function simulateForTests(value={}){
 window.TeacherQuestOnline={
   init,getState:publicState,subscribe,updateProfile,signInGoogle,signOut,reconnect,
   updatePresence,leaveWorld,saveProgress,saveAdventurePosition,avatarMarkup,
-  createRaid,joinRaid,startRaid,attackRaid,sendRaidEmote,setRaidReady,leaveRaid,
+  createRaid,joinRaid,startRaid,attackRaid,sendRaidEmote,setRaidReady,leaveRaid,diagnosePermissions,
   avatarOptions:AVATAR_OPTIONS,raidEmotes:RAID_EMOTES,normalizeProfile,normalizeRaidCode,
   isConfigured:()=>configured
 };
 window.teacherQuestOnlineDebug={
   simulate:simulateForTests,getState:publicState,flushPresence,formatError:friendlyError,
-  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid
+  buildProgressBundle,applyProgressBundle,normalizeRaidCode,normalizeRaid,claimSummary,raidRoomPayload
 };
 
 window.addEventListener("pagehide",()=>{void leaveWorld();});
