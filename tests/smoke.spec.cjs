@@ -349,8 +349,8 @@ test('adventure selection, readable labels and map foundation stay synchronized'
   await page.goto(url,{waitUntil:'networkidle'});
   const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(initial.mapId).toBe('academy-plaza');
-  expect(initial.worldVersion).toBe(2);
-  expect(initial.mapIds).toEqual(['academy-plaza']);
+  expect(initial.worldVersion).toBe(3);
+  expect(initial.mapIds).toEqual(['academy-plaza','training-grove']);
   expect(initial.playerLabel).toMatch(/^คุณ • /);
   await expect(page.locator('.adventure-mini-legend')).toContainText('คุณ');
   await expect(page.locator('.adventure-mini-legend')).toContainText('เพื่อน');
@@ -379,10 +379,58 @@ test('adventure selection, readable labels and map foundation stay synchronized'
   expect(pageErrors).toEqual([]);
 });
 
+test('survival exploration reveals fog, discovers POIs, changes maps and uses jump shortcuts',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  const initial=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(initial.visionRadius).toBe(190);
+  expect(initial.exploredCells).toBeGreaterThan(0);
+  expect(initial.explorationPercent).toBeGreaterThan(0);
+  expect(initial.explorationPercent).toBeLessThan(100);
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToGate(0))).toBe(true);
+  const discovered=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(discovered.discoveredPoi).toBeGreaterThan(initial.discoveredPoi);
+  await page.evaluate(()=>window.teacherQuestAdventureDebug.interact());
+  await expect(page.locator('[data-gate-travel]')).toContainText('ป่าฝึกเอาตัวรอด');
+  await page.locator('[data-gate-travel]').click();
+  const training=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  expect(training.mapId).toBe('training-grove');
+  expect(training.mapTitle).toBe('ป่าฝึกเอาตัวรอด');
+  expect(training.barrierCount).toBeGreaterThanOrEqual(4);
+  await expect(page.locator('body')).toHaveAttribute('data-music-scene','district1');
+
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToBarrier(0))).toBe(true);
+  const blocked=await page.evaluate(()=>window.teacherQuestAdventureDebug.moveBy(0,-25));
+  expect(Math.abs(blocked.y)).toBeLessThan(1);
+  expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.startJump())).toBe(true);
+  const jumped=await page.evaluate(()=>window.teacherQuestAdventureDebug.moveBy(0,-25));
+  expect(jumped.y).toBeLessThan(-20);
+  await expect(page.locator('[data-jump]')).toHaveAttribute('aria-label',/กระโดด/);
+
+  await page.locator('[data-adventure-map]').first().click();
+  await expect(page.locator('#adventureMapTitle')).toContainText('ป่าฝึกเอาตัวรอด');
+  await expect(page.locator('.map-world-card')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
+  expect(stored.version).toBe(3);
+  expect(stored.mapId).toBe('training-grove');
+  expect(stored.exploration['academy-plaza']).toHaveLength(192);
+  expect(stored.exploration['training-grove']).toHaveLength(192);
+  expect(JSON.stringify(stored).length).toBeLessThan(1000);
+  expect(pageErrors).toEqual([]);
+});
+
 test('touch d-pad holds movement and adventure position survives navigation',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto(url,{waitUntil:'networkidle'});
   const before=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
+  const jumpButton=page.locator('[data-jump]');
+  await expect(jumpButton).toBeVisible();
+  const jumpBox=await jumpButton.boundingBox();
+  expect(jumpBox.width).toBeGreaterThanOrEqual(44);
+  expect(jumpBox.height).toBeGreaterThanOrEqual(44);
   const right=page.locator('[data-move="right"]');
   await right.dispatchEvent('pointerdown',{pointerId:7,pointerType:'touch',isPrimary:true});
   await page.waitForTimeout(300);
@@ -402,7 +450,7 @@ test('touch d-pad holds movement and adventure position survives navigation',asy
   const restored=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(Math.abs(restored.x-tapped.x)).toBeLessThan(15);
   const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
-  expect(stored.version).toBe(2);
+  expect(stored.version).toBe(3);
   expect(stored.mapId).toBe('academy-plaza');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
 });

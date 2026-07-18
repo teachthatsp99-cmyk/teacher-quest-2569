@@ -125,7 +125,7 @@ const v4 = fs.readFileSync('v4.js','utf8');
 for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
-for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','active-choice']){
+for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','switchMap','training-grove','active-choice']){
   if(!adventure.includes(feature)) fail(`adventure.js is missing ${feature}`);
 }
 for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','onDisconnect','updatePresence','POSITION_INTERVAL','MAX_ZONE_PLAYERS','avatarMarkup','saveProgress','buildProgressBundle','signin-required','attachPromise','clearCounterSubscriptions','runTransaction(profileRef','reconnect','createRaid','joinRaid','attackRaid','sendRaidEmote','RAID_MAX_PLAYERS','diagnosePermissions','raidRoomPayload','getIdTokenResult(true)']){
@@ -138,12 +138,18 @@ try{
   vm.createContext(worldContext);
   vm.runInContext(fs.readFileSync('world-core.js','utf8'),worldContext,{filename:'world-core.js'});
   const worldCore=worldContext.window.TeacherQuestWorldCore;
-  const registry=worldCore?.createMapRegistry?.([{id:'academy-plaza',title:'โลกครูเควสต์',width:2048,height:1536,spawn:{x:1024,y:812}}]);
+  const registry=worldCore?.createMapRegistry?.([{id:'academy-plaza',title:'โลกครูเควสต์',width:2048,height:1536,spawn:{x:1024,y:812}},{id:'training-grove',title:'ป่าฝึก',width:2048,height:1536,spawn:{x:1024,y:930}}]);
   const migrated=registry?.normalizePosition?.({x:1200,y:900,direction:'left'});
-  if(worldCore?.version!==2 || registry?.defaultMapId!=='academy-plaza') fail('world core registry is not initialized at version 2');
-  if(migrated?.mapId!=='academy-plaza' || migrated?.version!==2 || migrated?.x!==1200 || migrated?.direction!=='left') fail('world core cannot migrate the legacy single-map position');
+  if(worldCore?.version!==3 || registry?.defaultMapId!=='academy-plaza' || registry?.ids?.length!==2) fail('world core registry is not initialized at version 3 with two maps');
+  if(migrated?.mapId!=='academy-plaza' || migrated?.version!==3 || migrated?.x!==1200 || migrated?.direction!=='left') fail('world core cannot migrate the legacy single-map position');
   const bounded=registry?.normalizePosition?.({mapId:'missing-map',x:-50,y:99999,direction:'invalid'});
   if(bounded?.mapId!=='academy-plaza' || bounded?.x!==40 || bounded?.y!==1504 || bounded?.direction!=='down') fail('world core does not clamp or recover invalid position data');
+  const codec=registry?.exploration?.('academy-plaza');
+  const explored=new Set();
+  codec?.reveal?.(explored,1024,812,190);
+  const encoded=codec?.encode?.(explored);
+  const decoded=codec?.decode?.(encoded);
+  if(!explored.size || decoded?.size!==explored.size || encoded?.length!==192) fail('world core exploration bitset cannot round-trip the fog state');
 }catch(error){ fail(`world-core.js is invalid: ${error.message}`); }
 try{
   const rules=JSON.parse(fs.readFileSync('database.rules.json','utf8'));
@@ -153,6 +159,7 @@ try{
   if(!rulesText.includes("auth.token.firebase.identities['google.com'] != null")) fail('database rules do not require a linked Google identity');
   if(!rulesText.includes("newData.val() >= data.val() - 40")) fail('raid rules do not cap one attack at 40 damage');
   if(!rulesText.includes("newData.val() === 'gg'")) fail('raid rules do not restrict emotes to a safe allowlist');
+  if(!rulesText.includes("$zone === 'training-grove'")) fail('database rules do not allow the Phase 2 training map presence zone');
   const raidMeta=rules.rules?.raids?.['$room']?.meta || {};
   const raidStartedAtRule=raidMeta.startedAt?.['.validate'] || '';
   const raidBossHpRule=raidMeta.bossHp?.['.validate'] || '';

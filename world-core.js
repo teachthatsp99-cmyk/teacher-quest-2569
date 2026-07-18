@@ -1,7 +1,8 @@
 (()=>{
 "use strict";
 
-const WORLD_STATE_VERSION=2;
+const WORLD_STATE_VERSION=3;
+const EXPLORATION_CELL_SIZE=64;
 const DIRECTIONS=Object.freeze(["up","down","left","right"]);
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,Number(value)||0));
 const safeId=(value,fallback="")=>{
@@ -36,6 +37,56 @@ function createMapRegistry(definitions=[]){
   const defaultMapId=ids[0];
   const get=id=>maps.get(safeId(id))||maps.get(defaultMapId);
   const has=id=>maps.has(safeId(id));
+  const exploration=id=>{
+    const map=get(id);
+    const columns=Math.ceil(map.width/EXPLORATION_CELL_SIZE);
+    const rows=Math.ceil(map.height/EXPLORATION_CELL_SIZE);
+    const total=columns*rows;
+    const bytes=Math.ceil(total/8);
+    const cellIndex=(x,y)=>{
+      const column=Math.max(0,Math.min(columns-1,Math.floor((Number(x)||0)/EXPLORATION_CELL_SIZE)));
+      const row=Math.max(0,Math.min(rows-1,Math.floor((Number(y)||0)/EXPLORATION_CELL_SIZE)));
+      return row*columns+column;
+    };
+    const encode=value=>{
+      const bits=new Uint8Array(bytes);
+      const entries=value&&typeof value[Symbol.iterator]==="function"?value:[];
+      for(const raw of entries){
+        const index=Math.floor(Number(raw));
+        if(index>=0&&index<total) bits[index>>3]|=1<<(index&7);
+      }
+      return [...bits].map(byte=>byte.toString(16).padStart(2,"0")).join("");
+    };
+    const decode=value=>{
+      const result=new Set();
+      const source=typeof value==="string"&&/^[0-9a-f]*$/i.test(value)?value.slice(0,bytes*2):"";
+      for(let byteIndex=0;byteIndex<bytes;byteIndex++){
+        const byte=Number.parseInt(source.slice(byteIndex*2,byteIndex*2+2)||"00",16)||0;
+        for(let bit=0;bit<8;bit++){
+          const index=byteIndex*8+bit;
+          if(index<total&&(byte&(1<<bit))) result.add(index);
+        }
+      }
+      return result;
+    };
+    const reveal=(set,x,y,radius)=>{
+      const result=set&&typeof set.add==="function"&&typeof set.has==="function"?set:new Set();
+      const centerColumn=Math.floor((Number(x)||0)/EXPLORATION_CELL_SIZE);
+      const centerRow=Math.floor((Number(y)||0)/EXPLORATION_CELL_SIZE);
+      const reach=Math.ceil((Number(radius)||0)/EXPLORATION_CELL_SIZE);
+      let added=0;
+      for(let row=centerRow-reach;row<=centerRow+reach;row++) for(let column=centerColumn-reach;column<=centerColumn+reach;column++){
+        if(row<0||column<0||row>=rows||column>=columns) continue;
+        const cellX=column*EXPLORATION_CELL_SIZE+EXPLORATION_CELL_SIZE/2;
+        const cellY=row*EXPLORATION_CELL_SIZE+EXPLORATION_CELL_SIZE/2;
+        if(Math.hypot(cellX-x,cellY-y)>radius+EXPLORATION_CELL_SIZE*.72) continue;
+        const index=row*columns+column;
+        if(!result.has(index)){result.add(index);added++;}
+      }
+      return added;
+    };
+    return Object.freeze({cellSize:EXPLORATION_CELL_SIZE,columns,rows,total,cellIndex,encode,decode,reveal});
+  };
   const normalizePosition=(value={},fallback={})=>{
     const requestedMap=safeId(value?.mapId||fallback?.mapId,defaultMapId);
     const map=get(requestedMap);
@@ -51,7 +102,7 @@ function createMapRegistry(definitions=[]){
       direction:DIRECTIONS.includes(value?.direction)?value.direction:(DIRECTIONS.includes(fallback?.direction)?fallback.direction:"down")
     };
   };
-  return Object.freeze({version:WORLD_STATE_VERSION,defaultMapId,ids,get,has,normalizePosition});
+  return Object.freeze({version:WORLD_STATE_VERSION,defaultMapId,ids,get,has,exploration,normalizePosition});
 }
 
 window.TeacherQuestWorldCore=Object.freeze({version:WORLD_STATE_VERSION,createMapRegistry});

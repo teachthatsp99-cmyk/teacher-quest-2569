@@ -6,23 +6,22 @@ const VIEW_WIDTH = 960;
 const VIEW_HEIGHT = 540;
 const WORLD_CORE = window.TeacherQuestWorldCore;
 if(!WORLD_CORE) throw new Error("TeacherQuestWorldCore must load before adventure.js");
-const MAP_REGISTRY = WORLD_CORE.createMapRegistry([{
-  id:"academy-plaza",
-  title:"โลกครูเควสต์",
-  short:"ศูนย์กลาง",
-  width:2048,
-  height:1536,
-  tile:32,
-  spawn:{x:1024,y:812},
-  musicScene:"plaza"
-}]);
-const ACTIVE_MAP = MAP_REGISTRY.get(MAP_REGISTRY.defaultMapId);
-const WORLD_WIDTH = ACTIVE_MAP.width;
-const WORLD_HEIGHT = ACTIVE_MAP.height;
-const TILE = ACTIVE_MAP.tile;
+const ACADEMY_MAP_ID="academy-plaza";
+const TRAINING_MAP_ID="training-grove";
+const MAP_REGISTRY = WORLD_CORE.createMapRegistry([
+  {id:ACADEMY_MAP_ID,title:"โลกครูเควสต์",short:"ศูนย์กลาง",width:2048,height:1536,tile:32,spawn:{x:1024,y:812},musicScene:"plaza"},
+  {id:TRAINING_MAP_ID,title:"ป่าฝึกเอาตัวรอด",short:"สนามกระโดด",width:2048,height:1536,tile:32,spawn:{x:1024,y:930},musicScene:"district1"}
+]);
+const DEFAULT_MAP = MAP_REGISTRY.get(MAP_REGISTRY.defaultMapId);
+const WORLD_WIDTH = DEFAULT_MAP.width;
+const WORLD_HEIGHT = DEFAULT_MAP.height;
+const TILE = DEFAULT_MAP.tile;
 const PLAYER_SPEED = 176;
 const INTERACT_DISTANCE = 76;
-const SPAWN = ACTIVE_MAP.spawn;
+const VISION_RADIUS = 190;
+const JUMP_DURATION = .54;
+const JUMP_COOLDOWN = .18;
+const SPAWN = DEFAULT_MAP.spawn;
 const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 const DIRECTION_BY_CODE = Object.freeze({
@@ -66,6 +65,43 @@ const WATER = Object.freeze([
   {x:1760,y:96,w:208,h:170}
 ]);
 
+const TRAINING_ROADS = Object.freeze([
+  {x:0,y:744,w:WORLD_WIDTH,h:56,main:true},
+  {x:996,y:0,w:56,h:WORLD_HEIGHT,main:true},
+  {x:280,y:476,w:1488,h:44},
+  {x:280,y:1036,w:1488,h:44},
+  {x:284,y:480,w:44,h:600},
+  {x:1724,y:480,w:44,h:600}
+]);
+const TRAINING_WATER = Object.freeze([
+  {x:64,y:112,w:660,h:304},{x:1320,y:108,w:648,h:308},
+  {x:96,y:1152,w:520,h:272},{x:1432,y:1144,w:520,h:280}
+]);
+const TRAINING_BUILDINGS = Object.freeze([
+  {x:872,y:560,w:304,h:150,kind:"fort",name:"หอฝึกการเคลื่อนไหว"},
+  {x:300,y:884,w:154,h:108,kind:"house",name:"ค่ายพักนักสำรวจ"},
+  {x:1594,y:884,w:154,h:108,kind:"house",name:"ฐานฝึกทางลัด"}
+]);
+const LOW_BARRIERS = Object.freeze({
+  [ACADEMY_MAP_ID]:[
+    {x:1210,y:794,w:18,h:116,label:"รั้วทางลัด"}
+  ],
+  [TRAINING_MAP_ID]:[
+    {x:930,y:858,w:188,h:18,label:"แนวรั้วฝึก 1"},
+    {x:760,y:1008,w:220,h:18,label:"แนวรั้วฝึก 2"},
+    {x:1070,y:1008,w:220,h:18,label:"แนวรั้วฝึก 3"},
+    {x:1376,y:720,w:18,h:210,label:"แนวรั้วฝึก 4"}
+  ]
+});
+const WORLD_GATES = Object.freeze({
+  [ACADEMY_MAP_ID]:[
+    {id:"gate-training",x:1280,y:850,name:"ป่าฝึกเอาตัวรอด",targetMap:TRAINING_MAP_ID,target:{x:1024,y:930,direction:"up"},color:"#58e7b2"}
+  ],
+  [TRAINING_MAP_ID]:[
+    {id:"gate-academy",x:1024,y:790,name:"กลับโลกครูเควสต์",targetMap:ACADEMY_MAP_ID,target:{x:1280,y:910,direction:"down"},color:"#ffd45c"}
+  ]
+});
+
 const NPC_DEFINITIONS = Object.freeze([
   {id:"guide",x:1018,y:866,name:"ครูผู้พิทักษ์",role:"ไกด์ประจำโลก",color:"#ffd45c",dialogue:"ยินดีต้อนรับสู่ครูเควสต์! เดินสำรวจโลกทั้ง 4 เขต เข้าใกล้ประตูวิชา แล้วกด E (ปุ่ม ำ เมื่อเป็นภาษาไทย) หรือ SPACE เพื่อเริ่มภารกิจ โดยไม่ต้องสลับภาษาคีย์บอร์ด",action:"help"},
   {id:"trainer",x:900,y:830,name:"ครูฝึกคอมโบ",role:"สนามฝึก",color:"#ff72b4",dialogue:"อยากซ้อมแบบรวดเร็ว หรือไล่ล่าข้อที่ยังไม่แม่นใช่ไหม? สนามฝึกเดิมยังอยู่ครบและใช้ความคืบหน้าชุดเดียวกับโลกนี้",action:"practice"},
@@ -77,21 +113,34 @@ const NPC_DEFINITIONS = Object.freeze([
   {id:"ranger",x:1536,y:1268,name:"ผู้สังเกตการณ์ 2569",role:"ผู้ดูแลเขตอนาคต",color:"#a88cff",dialogue:"เขตนี้รวมภาษา วัฒนธรรม นโยบาย คุณภาพ และสถานการณ์ปัจจุบัน เนื้อหาที่ผันแปรมีวันที่ตรวจสอบและลิงก์ต้นทางกำกับ",action:"district"}
 ]);
 
-function loadPosition(){
+const TRAINING_NPCS = Object.freeze([
+  {id:"jump-coach",x:1160,y:938,name:"ครูฝึกกระโดด",role:"บทเรียนการเคลื่อนไหว",color:"#58e7b2",dialogue:"กด SPACE หรือ J ได้แม้แป้นพิมพ์เป็นภาษาไทย ใช้กระโดดข้ามรั้วเตี้ยเพื่อเปิดทางลัด ส่วน E/ำ และ ENTER ใช้พูดคุยหรือเข้าประตู",action:"district"},
+  {id:"path-scout",x:1540,y:1030,name:"นักสำรวจทางลัด",role:"ผู้ดูแลป่าฝึก",color:"#a88cff",dialogue:"พื้นที่ที่เดินผ่านจะถูกเปิดบนมินิแมพ จุดสำคัญจะปรากฏต่อเมื่อคุณสำรวจพบแล้ว ความคืบหน้านี้บันทึกไปกับ Cloud Save",action:"district"}
+]);
+
+function loadAdventureState(){
   try{
     const saved = JSON.parse(localStorage.getItem(STORAGE) || "{}");
-    return MAP_REGISTRY.normalizePosition(saved,{mapId:ACTIVE_MAP.id,...SPAWN,direction:"down"});
+    return {
+      position:MAP_REGISTRY.normalizePosition(saved,{mapId:DEFAULT_MAP.id,...SPAWN,direction:"down"}),
+      exploration:saved?.exploration&&typeof saved.exploration==="object"&&!Array.isArray(saved.exploration)?saved.exploration:{}
+    };
   }catch(error){
     console.warn("Could not load adventure position",error);
   }
-  return MAP_REGISTRY.normalizePosition({mapId:ACTIVE_MAP.id,...SPAWN,direction:"down"});
+  return {position:MAP_REGISTRY.normalizePosition({mapId:DEFAULT_MAP.id,...SPAWN,direction:"down"}),exploration:{}};
 }
 
-function savePosition(player,{immediate=false}={}){
-  const position=MAP_REGISTRY.normalizePosition({mapId:ACTIVE_MAP.id,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction});
+function savePosition(player,explorationSets,{immediate=false}={}){
+  const position=MAP_REGISTRY.normalizePosition({mapId:player.mapId,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction});
+  const exploration={};
+  MAP_REGISTRY.ids.forEach(mapId=>{
+    exploration[mapId]=MAP_REGISTRY.exploration(mapId).encode(explorationSets?.get(mapId));
+  });
+  const snapshot={...position,exploration};
   try{
-    localStorage.setItem(STORAGE,JSON.stringify(position));
-    window.TeacherQuestOnline?.saveAdventurePosition?.(position,{immediate});
+    localStorage.setItem(STORAGE,JSON.stringify(snapshot));
+    window.TeacherQuestOnline?.saveAdventurePosition?.(snapshot,{immediate});
   }catch(error){
     console.warn("Could not save adventure position",error);
   }
@@ -124,21 +173,21 @@ function makeRoads(portals){
   return roads;
 }
 
-function makeTrees(portals,roads){
+function makeTrees({portals=[],roads=[],npcs=[],buildings=[],water=[],spawn=SPAWN,salt=0,density=.61}={}){
   const trees = [];
   for(let ty=2;ty<46;ty+=2){
     for(let tx=2;tx<62;tx+=2){
-      if(seeded(tx,ty,7) < .61) continue;
-      const x = tx*TILE + Math.floor(seeded(tx,ty,8)*18-9);
-      const y = ty*TILE + Math.floor(seeded(tx,ty,9)*18-9);
+      if(seeded(tx,ty,7+salt) < density) continue;
+      const x = tx*TILE + Math.floor(seeded(tx,ty,8+salt)*18-9);
+      const y = ty*TILE + Math.floor(seeded(tx,ty,9+salt)*18-9);
       const nearRoad = roads.some(road => rectContains(road,x,y,34));
       const nearPortal = portals.some(portal => Math.hypot(portal.x-x,portal.y-y) < 96);
-      const nearNpc = NPC_DEFINITIONS.some(npc => Math.hypot(npc.x-x,npc.y-y) < 76);
-      const nearBuilding = BUILDINGS.some(building => rectContains(building,x,y,52));
-      const inWater = WATER.some(water => rectContains(water,x,y,16));
-      const nearSpawn = Math.hypot(SPAWN.x-x,SPAWN.y-y) < 170;
+      const nearNpc = npcs.some(npc => Math.hypot(npc.x-x,npc.y-y) < 76);
+      const nearBuilding = buildings.some(building => rectContains(building,x,y,52));
+      const inWater = water.some(area => rectContains(area,x,y,16));
+      const nearSpawn = Math.hypot(spawn.x-x,spawn.y-y) < 170;
       if(!nearRoad && !nearPortal && !nearNpc && !nearBuilding && !inWater && !nearSpawn){
-        trees.push({x,y,variant:Math.floor(seeded(tx,ty,10)*3)});
+        trees.push({x,y,variant:Math.floor(seeded(tx,ty,10+salt)*3)});
       }
     }
   }
@@ -150,12 +199,14 @@ function districtAt(x,y){
   return DISTRICTS[index];
 }
 
-function locationNameAt(x,y){
+function locationNameAt(mapId,x,y){
+  if(mapId===TRAINING_MAP_ID) return "ป่าฝึกเอาตัวรอด";
   if(x>=816&&x<=1232&&y>=520&&y<=976) return "ลานสถาบันครูเควสต์";
   return districtAt(x,y).name;
 }
 
-function musicSceneAt(x,y){
+function musicSceneAt(mapId,x,y){
+  if(mapId===TRAINING_MAP_ID) return "district1";
   if(x>=816&&x<=1232&&y>=520&&y<=976) return "plaza";
   return `district${DISTRICTS.indexOf(districtAt(x,y))}`;
 }
@@ -192,18 +243,29 @@ function createTeacherQuestAdventure(options={}){
   const dialogueActions = root.querySelector("#adventureDialogueActions");
   const mapPanel = root.querySelector("#adventureMapPanel");
   const keys = new Set();
-  const player = {...loadPosition(),moving:false,step:0};
+  const storedState=loadAdventureState();
+  const player = {...storedState.position,moving:false,step:0,jumping:false,jumpElapsed:0,jumpHeight:0,jumpCooldown:0};
+  let activeMap=MAP_REGISTRY.get(player.mapId);
   const camera = {x:clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH),y:clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT)};
   const modules = options.modules || [];
   const portals = modules.map((module,index) => ({...PORTAL_POSITIONS[index],module,index,district:Math.floor(index/5)}));
   const statsCache = new Map();
-  const roads = makeRoads(portals);
-  const trees = makeTrees(portals,roads);
-  const npcs = NPC_DEFINITIONS.map(npc => ({...npc,type:"npc"}));
-  const obstacles = [
-    ...BUILDINGS.map(building => ({x:building.x+8,y:building.y+36,w:building.w-16,h:building.h-38})),
-    ...trees.map(tree => ({x:tree.x-10,y:tree.y-8,w:20,h:17})),
+  const academyRoads = makeRoads(portals);
+  const academyNpcs = NPC_DEFINITIONS.map(npc => ({...npc,type:"npc"}));
+  const trainingNpcs = TRAINING_NPCS.map(npc => ({...npc,type:"npc"}));
+  const academyTrees = makeTrees({portals,roads:academyRoads,npcs:academyNpcs,buildings:BUILDINGS,water:WATER,spawn:MAP_REGISTRY.get(ACADEMY_MAP_ID).spawn});
+  const trainingTrees = makeTrees({roads:TRAINING_ROADS,npcs:trainingNpcs,buildings:TRAINING_BUILDINGS,water:TRAINING_WATER,spawn:MAP_REGISTRY.get(TRAINING_MAP_ID).spawn,salt:37,density:.54});
+  const buildObstacles=(buildings,trees)=>[
+    ...buildings.map(building => ({x:building.x+8,y:building.y+36,w:building.w-16,h:building.h-38})),
+    ...trees.map(tree => ({x:tree.x-10,y:tree.y-8,w:20,h:17}))
   ];
+  const scenes={
+    [ACADEMY_MAP_ID]:{map:MAP_REGISTRY.get(ACADEMY_MAP_ID),portals,npcs:academyNpcs,roads:academyRoads,trees:academyTrees,buildings:BUILDINGS,water:WATER,gates:WORLD_GATES[ACADEMY_MAP_ID],barriers:LOW_BARRIERS[ACADEMY_MAP_ID],obstacles:buildObstacles(BUILDINGS,academyTrees),palette:["#3c8351","#34805d","#507b49","#3d7161"],road:["#c79e5a","#bd914d"]},
+    [TRAINING_MAP_ID]:{map:MAP_REGISTRY.get(TRAINING_MAP_ID),portals:[],npcs:trainingNpcs,roads:TRAINING_ROADS,trees:trainingTrees,buildings:TRAINING_BUILDINGS,water:TRAINING_WATER,gates:WORLD_GATES[TRAINING_MAP_ID],barriers:LOW_BARRIERS[TRAINING_MAP_ID],obstacles:buildObstacles(TRAINING_BUILDINGS,trainingTrees),palette:["#254f3d","#275948","#31583b","#294b44"],road:["#8e7653","#816747"]}
+  };
+  const explorationSets=new Map(MAP_REGISTRY.ids.map(mapId=>[mapId,MAP_REGISTRY.exploration(mapId).decode(storedState.exploration?.[mapId])]));
+  let explorationDirty=false;
+  let lastExplorationCell=-1;
   let nearest = null;
   let destroyed = false;
   let dialogueOpen = false;
@@ -220,6 +282,9 @@ function createTeacherQuestAdventure(options={}){
   let tapTarget = null;
   let tapBlockedFrames = 0;
   let dialogueChoiceIndex = -1;
+
+  const currentScene=()=>scenes[activeMap.id]||scenes[ACADEMY_MAP_ID];
+  const currentExploration=()=>explorationSets.get(activeMap.id);
 
   canvas.width = VIEW_WIDTH;
   canvas.height = VIEW_HEIGHT;
@@ -271,8 +336,25 @@ function createTeacherQuestAdventure(options={}){
     [...remoteCharacters.keys()].forEach(uid=>{if(!seen.has(uid))remoteCharacters.delete(uid);});
   }
 
-  function isRoad(x,y){ return roads.some(road => rectContains(road,x,y)); }
-  function isWater(x,y){ return WATER.some(water => rectContains(water,x,y)) && !isRoad(x,y); }
+  function isRoad(x,y){ return currentScene().roads.some(road => rectContains(road,x,y)); }
+  function isWater(x,y){ return currentScene().water.some(water => rectContains(water,x,y)) && !isRoad(x,y); }
+  function isExploredAt(x,y,mapId=activeMap.id){
+    const codec=MAP_REGISTRY.exploration(mapId);
+    return explorationSets.get(mapId)?.has(codec.cellIndex(x,y)) || false;
+  }
+  function explorationPercent(mapId=activeMap.id){
+    const codec=MAP_REGISTRY.exploration(mapId);
+    return Math.round((explorationSets.get(mapId)?.size||0)/codec.total*100);
+  }
+  function revealAroundPlayer(force=false){
+    const codec=MAP_REGISTRY.exploration(activeMap.id);
+    const cell=codec.cellIndex(player.x,player.y);
+    if(!force&&cell===lastExplorationCell) return false;
+    lastExplorationCell=cell;
+    const added=codec.reveal(currentExploration(),player.x,player.y,VISION_RADIUS);
+    if(added){explorationDirty=true;updateHud();}
+    return added>0;
+  }
   function collides(x,y){
     const halfW = 11;
     const top = y-11;
@@ -280,7 +362,8 @@ function createTeacherQuestAdventure(options={}){
     if(x-halfW<18 || x+halfW>WORLD_WIDTH-18 || top<32 || bottom>WORLD_HEIGHT-16) return true;
     const points = [[x-halfW,top],[x+halfW,top],[x-halfW,bottom],[x+halfW,bottom]];
     if(points.some(([px,py]) => isWater(px,py))) return true;
-    return obstacles.some(rect => points.some(([px,py]) => rectContains(rect,px,py)));
+    if(currentScene().obstacles.some(rect => points.some(([px,py]) => rectContains(rect,px,py)))) return true;
+    return !player.jumping&&currentScene().barriers.some(rect => points.some(([px,py]) => rectContains(rect,px,py)));
   }
 
   function tryMove(dx,dy){
@@ -288,6 +371,37 @@ function createTeacherQuestAdventure(options={}){
     const nextY = player.y+dy;
     if(!collides(nextX,player.y)) player.x = nextX;
     if(!collides(player.x,nextY)) player.y = nextY;
+  }
+
+  function startJump(){
+    if(dialogueOpen||mapOpen||player.jumping||player.jumpCooldown>0) return false;
+    player.jumping=true;
+    player.jumpElapsed=0;
+    player.jumpHeight=1;
+    player.jumpCooldown=JUMP_COOLDOWN;
+    tapTarget=null;
+    return true;
+  }
+
+  function switchMap(targetMapId,target){
+    if(!MAP_REGISTRY.has(targetMapId)) return false;
+    const nextMap=MAP_REGISTRY.get(targetMapId);
+    const position=MAP_REGISTRY.normalizePosition({mapId:nextMap.id,...(target||nextMap.spawn)},{mapId:nextMap.id,...nextMap.spawn,direction:"down"});
+    activeMap=nextMap;
+    Object.assign(player,position,{moving:false,jumping:false,jumpElapsed:0,jumpHeight:0});
+    remoteCharacters.clear();
+    tapTarget=null;
+    keys.clear();
+    camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
+    camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
+    lastExplorationCell=-1;
+    previousDistrict="";
+    revealAroundPlayer(true);
+    updateNearest();
+    updateHud();
+    reportPlayerState(performance.now(),true);
+    savePosition(player,explorationSets,{immediate:true});
+    return true;
   }
 
   function setTapTarget(event){
@@ -304,7 +418,12 @@ function createTeacherQuestAdventure(options={}){
   }
 
   function updateNearest(){
-    const candidates = [...portals.map(portal => ({...portal,type:"portal"})),...npcs];
+    const scene=currentScene();
+    const candidates = [
+      ...scene.portals.map(portal => ({...portal,type:"portal"})),
+      ...scene.npcs,
+      ...scene.gates.map(gate=>({...gate,type:"gate"}))
+    ];
     const candidate = candidates.reduce((best,item) => {
       const range = distance(player,item);
       return range < (best?.range ?? Infinity) ? {item,range} : best;
@@ -315,7 +434,9 @@ function createTeacherQuestAdventure(options={}){
     if(nearest){
       prompt.innerHTML = nearest.type === "portal"
         ? `<kbd>E</kbd><span>เข้าสู่ด่าน ${nearest.index+1}: ${escapeHtml(nearest.module.title)}</span>`
-        : `<kbd>E</kbd><span>คุยกับ ${escapeHtml(nearest.name)}</span>`;
+        : nearest.type === "gate"
+          ? `<kbd>E</kbd><span>เดินทางไป ${escapeHtml(nearest.name)}</span>`
+          : `<kbd>E</kbd><span>คุยกับ ${escapeHtml(nearest.name)}</span>`;
       prompt.classList.add("visible");
     }else{
       prompt.classList.remove("visible");
@@ -377,9 +498,26 @@ function createTeacherQuestAdventure(options={}){
       <button class="btn pink adventure-choice" data-adventure-mode="boss"><strong>ท้าบอส ${bossCount} ข้อ</strong><small>โจทย์กลาง–ยาก • รับโบนัสเมื่อจบภารกิจ</small></button>
       <button class="btn dark" data-dialogue-close>เดินสำรวจต่อ</button>`;
     dialogueActions.querySelectorAll("[data-adventure-mode]").forEach(button => button.addEventListener("click",() => {
-      savePosition(player);
+      savePosition(player,explorationSets);
       options.onStartModule?.(portal.module.id,button.dataset.adventureMode);
     }));
+    dialogueActions.querySelector("[data-dialogue-close]")?.addEventListener("click",closeDialogue);
+    showDialogue();
+  }
+
+  function openGate(gate){
+    const destination=MAP_REGISTRY.get(gate.targetMap);
+    dialogueEyebrow.textContent="WORLD GATE • ทางเชื่อมหลายแผนที่";
+    dialogueTitle.textContent=gate.name;
+    dialogueText.textContent=gate.targetMap===TRAINING_MAP_ID
+      ? "เข้าสู่สนามฝึกที่มีหมอกบดบัง ทางลัด และรั้วเตี้ยสำหรับฝึกกระโดด ความคืบหน้าการสำรวจจะถูกบันทึกไว้"
+      : "กลับสู่ศูนย์กลางและประตูข้อสอบ 20 ด่าน โดยตำแหน่งและพื้นที่ที่เคยสำรวจยังคงอยู่";
+    dialogueStats.innerHTML=`<span><b>${explorationPercent(destination.id)}%</b> สำรวจแล้ว</span><span><b>${destination.short}</b> จุดหมาย</span>`;
+    dialogueActions.innerHTML=`<button class="btn mint" data-gate-travel>เดินทางไป ${escapeHtml(destination.title)}</button><button class="btn dark" data-dialogue-close>อยู่ที่นี่ต่อ</button>`;
+    dialogueActions.querySelector("[data-gate-travel]")?.addEventListener("click",()=>{
+      closeDialogue();
+      switchMap(gate.targetMap,gate.target);
+    });
     dialogueActions.querySelector("[data-dialogue-close]")?.addEventListener("click",closeDialogue);
     showDialogue();
   }
@@ -396,7 +534,7 @@ function createTeacherQuestAdventure(options={}){
         ? `<button class="btn mint" data-map-open>เปิดแผนที่ 4 เขต</button><button class="btn dark" data-dialogue-close>เข้าใจแล้ว</button>`
         : `<button class="btn dark" data-dialogue-close>ขอบคุณสำหรับคำแนะนำ</button>`;
     dialogueActions.querySelector("[data-npc-action]")?.addEventListener("click",event => {
-      savePosition(player);
+      savePosition(player,explorationSets);
       options.onNavigate?.(event.currentTarget.dataset.npcAction);
     });
     dialogueActions.querySelector("[data-map-open]")?.addEventListener("click",() => { closeDialogue(); toggleMap(true); });
@@ -428,18 +566,34 @@ function createTeacherQuestAdventure(options={}){
 
   function interact(){
     if(dialogueOpen || mapOpen || !nearest) return;
-    nearest.type === "portal" ? openPortal(nearest) : openNpc(nearest);
+    if(nearest.type==="portal") openPortal(nearest);
+    else if(nearest.type==="gate") openGate(nearest);
+    else openNpc(nearest);
   }
 
   function renderMapPanel(){
     if(!mapPanel) return;
-    mapPanel.querySelector(".adventure-map-grid").innerHTML = DISTRICTS.map((district,districtIndex) => {
-      const districtPortals = portals.slice(districtIndex*5,districtIndex*5+5);
-      return `<section class="map-district" style="--district:${district.color}"><h4>${escapeHtml(district.name)}</h4>${districtPortals.map(portal => {
-        const stats = statsFor(portal);
-        return `<div class="map-zone ${stats.done >= stats.total ? "cleared" : stats.done ? "started" : ""}"><span>${portal.index+1}</span><b>${escapeHtml(portal.module.title)}</b><small>${stats.done}/${stats.total} • ${stats.accuracy}%</small></div>`;
-      }).join("")}</section>`;
-    }).join("");
+    const title=mapPanel.querySelector("#adventureMapTitle");
+    const description=mapPanel.querySelector("#adventureMapDescription");
+    if(title) title.textContent=`แผนที่: ${activeMap.title}`;
+    if(description) description.textContent=`สำรวจแล้ว ${explorationPercent()}% • จุดสำคัญจะแสดงเมื่อค้นพบ`;
+    const maps=`<section class="map-world-summary">${MAP_REGISTRY.ids.map(mapId=>{
+      const map=MAP_REGISTRY.get(mapId);
+      const percent=explorationPercent(mapId);
+      const discovered=percent>0||mapId===activeMap.id;
+      return `<div class="map-world-card ${mapId===activeMap.id?"active":""} ${discovered?"":"locked"}"><span>${mapId===ACADEMY_MAP_ID?"⌂":"♜"}</span><b>${discovered?escapeHtml(map.title):"พื้นที่ลับยังไม่ค้นพบ"}</b><small>${discovered?`${percent}% สำรวจแล้ว`:"ค้นหาประตูเชื่อมโลก"}</small></div>`;
+    }).join("")}</section>`;
+    const content=activeMap.id===ACADEMY_MAP_ID
+      ? DISTRICTS.map((district,districtIndex) => {
+          const districtPortals = portals.slice(districtIndex*5,districtIndex*5+5);
+          return `<section class="map-district" style="--district:${district.color}"><h4>${escapeHtml(district.name)}</h4>${districtPortals.map(portal => {
+            const stats = statsFor(portal);
+            const discovered=isExploredAt(portal.x,portal.y,ACADEMY_MAP_ID);
+            return `<div class="map-zone ${discovered?"":"undiscovered"} ${stats.done >= stats.total ? "cleared" : stats.done ? "started" : ""}"><span>${discovered?escapeHtml(portal.module.icon):"?"}</span><b>${discovered?escapeHtml(portal.module.title):"ด่านที่ยังไม่ค้นพบ"}</b><small>${discovered?`${stats.done}/${stats.total} • ${stats.accuracy}%`:"สำรวจเพื่อเปิด"}</small></div>`;
+          }).join("")}</section>`;
+        }).join("")
+      : `<section class="map-district training-map-card" style="--district:#58e7b2"><h4>สนามกระโดดและทางลัด</h4><div class="map-zone started"><span>J</span><b>แนวรั้วฝึก ${currentScene().barriers.length} จุด</b><small>SPACE / J</small></div><div class="map-zone ${isExploredAt(currentScene().gates[0].x,currentScene().gates[0].y)?"started":"undiscovered"}"><span>↔</span><b>ประตูกลับโลกหลัก</b><small>${isExploredAt(currentScene().gates[0].x,currentScene().gates[0].y)?"ค้นพบแล้ว":"ยังไม่ค้นพบ"}</small></div></section>`;
+    mapPanel.querySelector(".adventure-map-grid").innerHTML = maps+content;
   }
 
   function toggleMap(force){
@@ -455,10 +609,11 @@ function createTeacherQuestAdventure(options={}){
 
   function resetPosition(){
     tapTarget = null;
-    Object.assign(player,SPAWN,{direction:"down"});
+    Object.assign(player,activeMap.spawn,{mapId:activeMap.id,direction:"down",jumping:false,jumpHeight:0});
     camera.x = clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
     camera.y = clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
-    savePosition(player);
+    revealAroundPlayer(true);
+    savePosition(player,explorationSets);
     updateNearest();
     updateHud();
   }
@@ -500,7 +655,12 @@ function createTeacherQuestAdventure(options={}){
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     const direction = DIRECTION_BY_CODE[event.code] || DIRECTION_BY_KEY[key];
     if(direction && !inControl){ event.preventDefault(); tapTarget=null; keys.add(direction); }
-    const interactKey = ["KeyE","Space","Enter","NumpadEnter"].includes(event.code) || ["e","ำ"," ","Enter"].includes(key);
+    const jumpKey = ["Space","KeyJ"].includes(event.code) || [" ","j","่"].includes(key);
+    if(!inControl&&!event.repeat&&jumpKey){
+      event.preventDefault();
+      startJump();
+    }
+    const interactKey = ["KeyE","Enter","NumpadEnter"].includes(event.code) || ["e","ำ","Enter"].includes(key);
     if(!inControl && !event.repeat && interactKey){
       event.preventDefault();
       interact();
@@ -539,19 +699,18 @@ function createTeacherQuestAdventure(options={}){
           ctx.fillRect(wx+4+(Math.floor(elapsed*12)%8),wy+9,16,3);
           ctx.fillRect(wx+14,wy+23,12,2);
         }else if(road){
-          ctx.fillStyle = seeded(tx,ty,2)>.55 ? "#c79e5a" : "#bd914d";
+          ctx.fillStyle = seeded(tx,ty,2+(activeMap.id===TRAINING_MAP_ID?37:0))>.55 ? currentScene().road[0] : currentScene().road[1];
           ctx.fillRect(wx,wy,TILE,TILE);
           ctx.fillStyle = "#a97c42";
           if(seeded(tx,ty,3)>.58) ctx.fillRect(wx+6,wy+8,5,4);
           if(seeded(tx,ty,4)>.67) ctx.fillRect(wx+21,wy+22,4,3);
-          if(WATER.some(area => rectContains(area,cx,cy))){
+          if(currentScene().water.some(area => rectContains(area,cx,cy))){
             ctx.fillStyle="#765336"; ctx.fillRect(wx,wy,TILE,4); ctx.fillRect(wx,wy+28,TILE,4);
             ctx.fillStyle="#e2bc6d"; ctx.fillRect(wx+3,wy+6,26,20);
             ctx.fillStyle="#8c633c"; ctx.fillRect(wx+5,wy+14,22,3);
           }
         }else{
-          const palettes = ["#3c8351","#34805d","#507b49","#3d7161"];
-          ctx.fillStyle = palettes[DISTRICTS.indexOf(district)];
+          ctx.fillStyle = currentScene().palette[DISTRICTS.indexOf(district)];
           ctx.fillRect(wx,wy,TILE,TILE);
           const grain = seeded(tx,ty,5);
           ctx.fillStyle = grain>.5 ? "rgba(139,200,104,.25)" : "rgba(25,75,47,.22)";
@@ -575,7 +734,8 @@ function createTeacherQuestAdventure(options={}){
     const colors=["#ffd45c","#ff72b4","#e9efff","#8dd9ff"];
     for(let ty=startY;ty<=endY;ty++) for(let tx=startX;tx<=endX;tx++){
       const x=tx*TILE+16,y=ty*TILE+16;
-      if(!isWater(x,y) && !isRoad(x,y) && seeded(tx,ty,15)>.88) drawFlower(x+(tx%3)*4-4,y+(ty%2)*5,colors[(tx+ty+4)%colors.length]);
+      const salt=activeMap.id===TRAINING_MAP_ID?37:0;
+      if(!isWater(x,y) && !isRoad(x,y) && seeded(tx,ty,15+salt)>.88) drawFlower(x+(tx%3)*4-4,y+(ty%2)*5,colors[(tx+ty+4+salt)%colors.length]);
     }
   }
 
@@ -637,6 +797,31 @@ function createTeacherQuestAdventure(options={}){
     ctx.fillStyle="#171127"; ctx.fillRect(portal.x-34,portal.y+22,68,8);
   }
 
+  function drawGate(gate){
+    const pulse=Math.floor(elapsed*5)%2?3:0;
+    ctx.fillStyle="rgba(4,8,18,.45)";ctx.fillRect(gate.x-34,gate.y+20,68,12);
+    ctx.fillStyle="#12152c";ctx.fillRect(gate.x-31,gate.y-42,62,68);
+    ctx.fillStyle=gate.color;ctx.fillRect(gate.x-25-pulse/2,gate.y-36-pulse/2,50+pulse,55+pulse);
+    ctx.fillStyle="#071b27";ctx.fillRect(gate.x-17,gate.y-29,34,47);
+    ctx.fillStyle="#dff8ff";ctx.fillRect(gate.x-3,gate.y-13,6,19);
+    ctx.fillStyle=gate.color;ctx.fillRect(gate.x-8,gate.y-4,16,5);
+  }
+
+  function drawBarrier(barrier){
+    ctx.fillStyle="rgba(4,8,18,.35)";ctx.fillRect(barrier.x+4,barrier.y+8,barrier.w,barrier.h+5);
+    ctx.fillStyle="#162c2a";ctx.fillRect(barrier.x,barrier.y,barrier.w,barrier.h);
+    ctx.fillStyle="#2f6d48";ctx.fillRect(barrier.x+3,barrier.y+2,barrier.w-6,Math.max(5,barrier.h-6));
+    ctx.fillStyle="#66a45e";
+    if(barrier.w>barrier.h){for(let x=barrier.x+8;x<barrier.x+barrier.w-5;x+=20)ctx.fillRect(x,barrier.y-4,8,7);}
+    else{for(let y=barrier.y+8;y<barrier.y+barrier.h-5;y+=20)ctx.fillRect(barrier.x-4,y,7,8);}
+  }
+
+  function drawPoiBadge(symbol,x,y,color){
+    ctx.fillStyle="#050713";ctx.fillRect(x-12,y-12,24,24);
+    ctx.fillStyle=color;ctx.fillRect(x-9,y-9,18,18);
+    drawPixelText(ctx,symbol,x,y,{size:11,color:"#07101f",align:"center",stroke:null});
+  }
+
   function drawCharacter(character,isPlayer=false){
     const x=Math.round(character.x),y=Math.round(character.y);
     const walking=isPlayer&&character.moving;
@@ -665,9 +850,10 @@ function createTeacherQuestAdventure(options={}){
   function drawAdventurer(character,profile,remote=false){
     const normalized=normalizedProfile(profile);
     const avatar=normalized.avatar;
-    const x=Math.round(character.x),y=Math.round(character.y);
+    const x=Math.round(character.x),groundY=Math.round(character.y);
+    const y=groundY-Math.round(remote?0:Number(character.jumpHeight)||0);
     const step=character.moving&&Math.floor(character.step)%2?3:0;
-    ctx.fillStyle="rgba(4,8,18,.38)";ctx.fillRect(x-16,y+11,32,9);
+    ctx.fillStyle=`rgba(4,8,18,${character.jumping && !remote ? .22 : .38})`;ctx.fillRect(x-16,groundY+11,32,9);
 
     ctx.fillStyle="#171127";
     if(avatar.style==="long") ctx.fillRect(x-15,y-35,30,30);
@@ -737,15 +923,20 @@ function createTeacherQuestAdventure(options={}){
   }
 
   function drawWorldLabels(){
-    BUILDINGS.forEach(building=>{
+    const scene=currentScene();
+    scene.buildings.forEach(building=>{
       if(building.name) drawPixelText(ctx,building.name,building.x+building.w/2,building.y+54,{size:11,color:"#fff6d2",align:"center",stroke:"#272039"});
     });
-    portals.forEach(portal=>{
-      drawPixelText(ctx,String(portal.index+1),portal.x,portal.y-44,{size:11,color:"#fff",align:"center"});
+    scene.portals.forEach(portal=>{
+      if(isExploredAt(portal.x,portal.y)) drawPoiBadge(portal.module.icon,portal.x,portal.y-51,DISTRICTS[portal.district].color);
       if(distance(player,portal)<125) drawPixelText(ctx,portal.module.title,portal.x,portal.y+43,{size:11,color:"#fff6d2",align:"center"});
     });
+    scene.gates.forEach(gate=>{
+      if(isExploredAt(gate.x,gate.y)) drawPoiBadge("↔",gate.x,gate.y-58,gate.color);
+      if(distance(player,gate)<140) drawPixelText(ctx,gate.name,gate.x,gate.y+45,{size:10,color:"#fff6d2",align:"center"});
+    });
     const occupied=[];
-    npcs.forEach(npc=>{
+    scene.npcs.forEach(npc=>{
       if(distance(player,npc)<150) drawNameplate(npc.name,npc.x,npc.y-56,{accent:npc.color,occupied});
     });
     remoteCharacters.forEach(remote=>{
@@ -753,10 +944,32 @@ function createTeacherQuestAdventure(options={}){
       drawNameplate(profile.nickname,remote.x,remote.y-48,{accent:profile.avatar.accent,occupied});
     });
     const profile=normalizedProfile(playerProfile);
-    drawNameplate(`คุณ • ${profile.nickname}`,player.x,player.y-50,{accent:profile.avatar.accent,self:true,occupied});
+    drawNameplate(`คุณ • ${profile.nickname}`,player.x,player.y-50-player.jumpHeight,{accent:profile.avatar.accent,self:true,occupied});
+  }
+
+  function drawFog(){
+    const codec=MAP_REGISTRY.exploration(activeMap.id);
+    const explored=currentExploration();
+    const startColumn=Math.max(0,Math.floor(camera.x/codec.cellSize)-1);
+    const startRow=Math.max(0,Math.floor(camera.y/codec.cellSize)-1);
+    const endColumn=Math.min(codec.columns-1,Math.ceil((camera.x+VIEW_WIDTH)/codec.cellSize)+1);
+    const endRow=Math.min(codec.rows-1,Math.ceil((camera.y+VIEW_HEIGHT)/codec.cellSize)+1);
+    for(let row=startRow;row<=endRow;row++) for(let column=startColumn;column<=endColumn;column++){
+      const index=row*codec.columns+column;
+      const x=column*codec.cellSize,y=row*codec.cellSize;
+      const center={x:x+codec.cellSize/2,y:y+codec.cellSize/2};
+      const inSight=distance(player,center)<=VISION_RADIUS+codec.cellSize*.58;
+      if(inSight) continue;
+      ctx.fillStyle=explored.has(index)?"rgba(3,8,20,.68)":"rgba(1,3,10,.97)";
+      ctx.fillRect(x,y,codec.cellSize+1,codec.cellSize+1);
+      if(!explored.has(index)&&((row+column)%2===0)){
+        ctx.fillStyle="rgba(12,21,43,.38)";ctx.fillRect(x+4,y+4,codec.cellSize-8,codec.cellSize-8);
+      }
+    }
   }
 
   function drawWorld(){
+    const scene=currentScene();
     ctx.save();
     ctx.translate(-Math.round(camera.x),-Math.round(camera.y));
     drawGround();
@@ -766,18 +979,26 @@ function createTeacherQuestAdventure(options={}){
       ctx.fillStyle="#081027";ctx.fillRect(tapTarget.x-12-pulse,tapTarget.y-3-pulse,24+pulse*2,6+pulse*2);ctx.fillRect(tapTarget.x-3-pulse,tapTarget.y-12-pulse,6+pulse*2,24+pulse*2);
       ctx.fillStyle="#ffd45c";ctx.fillRect(tapTarget.x-7,tapTarget.y-2,14,4);ctx.fillRect(tapTarget.x-2,tapTarget.y-7,4,14);
     }
-    drawSign(1018,776,"ศูนย์กลาง");
-    DISTRICTS.forEach(district => drawSign(district.hub.x,district.hub.y+76,district.short,district.color));
-    BUILDINGS.forEach(drawBuilding);
+    if(activeMap.id===ACADEMY_MAP_ID){
+      drawSign(1018,776,"ศูนย์กลาง");
+      DISTRICTS.forEach(district => drawSign(district.hub.x,district.hub.y+76,district.short,district.color));
+    }else{
+      drawSign(1024,1030,"สนามกระโดด","#58e7b2");
+      drawSign(1536,1010,"ทางลัด","#a88cff");
+    }
+    scene.buildings.forEach(drawBuilding);
     const sprites = [
-      ...trees.map(tree => ({y:tree.y,draw:()=>drawTree(tree)})),
-      ...portals.map(portal => ({y:portal.y+25,draw:()=>drawPortal(portal)})),
-      ...npcs.map(npc => ({y:npc.y,draw:()=>drawCharacter(npc,false)})),
+      ...scene.trees.map(tree => ({y:tree.y,draw:()=>drawTree(tree)})),
+      ...scene.barriers.map(barrier=>({y:barrier.y+barrier.h,draw:()=>drawBarrier(barrier)})),
+      ...scene.portals.map(portal => ({y:portal.y+25,draw:()=>drawPortal(portal)})),
+      ...scene.gates.map(gate=>({y:gate.y+26,draw:()=>drawGate(gate)})),
+      ...scene.npcs.map(npc => ({y:npc.y,draw:()=>drawCharacter(npc,false)})),
       ...[...remoteCharacters.values()].map(remote=>({y:remote.y,draw:()=>drawAdventurer(remote,remote.profile,true)})),
       {y:player.y,draw:()=>drawAdventurer(player,playerProfile,false)}
     ].sort((a,b)=>a.y-b.y);
     sprites.forEach(sprite=>sprite.draw());
     drawWorldLabels();
+    drawFog();
     ctx.restore();
   }
 
@@ -797,33 +1018,60 @@ function createTeacherQuestAdventure(options={}){
 
   function drawMiniMap(){
     if(!mini) return;
+    const scene=currentScene();
+    const codec=MAP_REGISTRY.exploration(activeMap.id);
     const sx=miniCanvas.width/WORLD_WIDTH,sy=miniCanvas.height/WORLD_HEIGHT;
-    mini.fillStyle="#10172d";mini.fillRect(0,0,miniCanvas.width,miniCanvas.height);
-    DISTRICTS.forEach((district,index)=>{
-      mini.fillStyle=["#29563c","#28534a","#4b5135","#3d4059"][index];
-      mini.fillRect(district.x*sx,district.y*sy,district.w*sx,district.h*sy);
+    mini.fillStyle="#050814";mini.fillRect(0,0,miniCanvas.width,miniCanvas.height);
+    currentExploration().forEach(index=>{
+      const column=index%codec.columns,row=Math.floor(index/codec.columns);
+      const wx=column*codec.cellSize,wy=row*codec.cellSize;
+      const cx=wx+codec.cellSize/2,cy=wy+codec.cellSize/2;
+      const district=districtAt(cx,cy);
+      if(isWater(cx,cy)) mini.fillStyle="#367f98";
+      else if(isRoad(cx,cy)) mini.fillStyle=scene.road[0];
+      else mini.fillStyle=scene.palette[DISTRICTS.indexOf(district)];
+      mini.fillRect(Math.floor(wx*sx),Math.floor(wy*sy),Math.ceil(codec.cellSize*sx)+1,Math.ceil(codec.cellSize*sy)+1);
     });
-    mini.fillStyle="#b88a4c";mini.fillRect(0,744*sy,miniCanvas.width,56*sy);mini.fillRect(996*sx,0,56*sx,miniCanvas.height);
-    WATER.forEach(water=>{mini.fillStyle="#367f98";mini.fillRect(water.x*sx,water.y*sy,water.w*sx,water.h*sy);});
-    portals.forEach(portal=>{const stats=statsFor(portal);mini.fillStyle=stats.done>=stats.total?"#58e7b2":DISTRICTS[portal.district].color;mini.fillRect(portal.x*sx-2,portal.y*sy-2,4,4);});
-    remoteCharacters.forEach(remote=>drawMiniAvatar(remote,remote.profile));
+    scene.portals.forEach(portal=>{
+      if(!isExploredAt(portal.x,portal.y)) return;
+      const stats=statsFor(portal),x=Math.round(portal.x*sx),y=Math.round(portal.y*sy);
+      mini.fillStyle="#050713";mini.fillRect(x-3,y-3,7,7);
+      mini.fillStyle=stats.done>=stats.total?"#58e7b2":DISTRICTS[portal.district].color;mini.fillRect(x-2,y-2,5,5);
+      mini.fillStyle="#fff";mini.fillRect(x,y,1,1);
+    });
+    scene.gates.forEach(gate=>{
+      if(!isExploredAt(gate.x,gate.y)) return;
+      const x=Math.round(gate.x*sx),y=Math.round(gate.y*sy);
+      mini.fillStyle="#050713";mini.fillRect(x-4,y-4,9,9);
+      mini.fillStyle=gate.color;mini.fillRect(x-2,y-3,5,7);mini.fillRect(x-3,y-2,7,5);
+    });
+    scene.npcs.forEach(npc=>{
+      if(!isExploredAt(npc.x,npc.y)) return;
+      mini.fillStyle=npc.color;mini.fillRect(Math.round(npc.x*sx)-1,Math.round(npc.y*sy)-1,3,3);
+    });
+    remoteCharacters.forEach(remote=>{if(isExploredAt(remote.x,remote.y))drawMiniAvatar(remote,remote.profile);});
     drawMiniAvatar(player,playerProfile,{self:true});
     mini.strokeStyle="#10101e";mini.lineWidth=3;mini.strokeRect(1.5,1.5,miniCanvas.width-3,miniCanvas.height-3);
+    miniCanvas.setAttribute("aria-label",`มินิแมป ${activeMap.title} สำรวจแล้ว ${explorationPercent()} เปอร์เซ็นต์ ผู้เล่นของคุณมีกรอบสีทอง`);
   }
 
   function updateHud(){
-    const locationName=locationNameAt(player.x,player.y);
+    const locationName=locationNameAt(activeMap.id,player.x,player.y);
     if(locationName!==previousDistrict){
       previousDistrict=locationName;
       if(districtLabel) districtLabel.textContent=locationName;
-      options.onMusicScene?.(musicSceneAt(player.x,player.y),locationName);
+      options.onMusicScene?.(musicSceneAt(activeMap.id,player.x,player.y),locationName);
     }
     const totals=portals.reduce((result,portal)=>{const stats=statsFor(portal);result.done+=Math.min(stats.done,stats.total);result.total+=stats.total;return result;},{done:0,total:0});
-    const pct=totals.total?Math.round(totals.done/totals.total*100):0;
-    if(progressText) progressText.textContent=`สำรวจคลัง ${totals.done}/${totals.total} ข้อ`;
-    if(progressBar) progressBar.style.width=`${pct}%`;
+    const explored=explorationPercent();
+    if(progressText) progressText.textContent=`แผนที่ ${explored}% • คลัง ${totals.done}/${totals.total}`;
+    if(progressBar) progressBar.style.width=`${explored}%`;
     const unstarted=portals.find(portal=>statsFor(portal).done===0);
-    if(objective) objective.textContent=unstarted?`ภารกิจแนะนำ: ค้นหาประตู ${unstarted.index+1} • ${unstarted.module.title}`:"เยี่ยมมาก! คุณเคยสำรวจครบทุกประตูแล้ว กลับไปเก็บความแม่นให้ถึง 80%";
+    if(objective){
+      if(activeMap.id===TRAINING_MAP_ID) objective.textContent="ภารกิจ: กระโดดข้ามรั้วและค้นหาประตูกลับโลกหลัก";
+      else if(unstarted) objective.textContent=isExploredAt(unstarted.x,unstarted.y)?`ด่านที่พบแล้ว: ${unstarted.module.icon} ${unstarted.module.title}`:"สำรวจหมอกเพื่อค้นหาด่านข้อสอบที่ยังไม่เคยทำ";
+      else objective.textContent="เยี่ยมมาก! คุณเคยสำรวจครบทุกประตูแล้ว กลับไปเก็บความแม่นให้ถึง 80%";
+    }
   }
 
   function update(delta){
@@ -834,6 +1082,13 @@ function createTeacherQuestAdventure(options={}){
       remote.y+=(remote.targetY-remote.y)*ease;
       if(remote.moving) remote.step+=delta*8;
     });
+    player.jumpCooldown=Math.max(0,player.jumpCooldown-delta);
+    if(player.jumping){
+      player.jumpElapsed+=delta;
+      const progress=Math.min(1,player.jumpElapsed/JUMP_DURATION);
+      player.jumpHeight=Math.sin(progress*Math.PI)*25;
+      if(progress>=1){player.jumping=false;player.jumpElapsed=0;player.jumpHeight=0;}
+    }
     if(dialogueOpen||mapOpen){player.moving=false;return;}
     let horizontal=(keys.has("right")?1:0)-(keys.has("left")?1:0);
     let vertical=(keys.has("down")?1:0)-(keys.has("up")?1:0);
@@ -858,19 +1113,21 @@ function createTeacherQuestAdventure(options={}){
       if(Math.abs(horizontal)>Math.abs(vertical)) player.direction=horizontal>0?"right":"left";
       else player.direction=vertical>0?"down":"up";
     }
+    revealAroundPlayer();
     const targetX=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
     const targetY=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
     const ease=1-Math.pow(.0005,delta);
     camera.x+=(targetX-camera.x)*ease;
     camera.y+=(targetY-camera.y)*ease;
     updateNearest();
-    if(locationNameAt(player.x,player.y)!==previousDistrict) updateHud();
+    if(locationNameAt(activeMap.id,player.x,player.y)!==previousDistrict) updateHud();
   }
 
   function reportPlayerState(time,force=false){
     if(typeof options.onPlayerState!=="function") return;
-    const snapshot={mapId:ACTIVE_MAP.id,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district:locationNameAt(player.x,player.y)};
-    const fingerprint=`${snapshot.mapId}|${snapshot.x}|${snapshot.y}|${snapshot.direction}|${Number(snapshot.moving)}|${snapshot.district}`;
+    const district=locationNameAt(activeMap.id,player.x,player.y);
+    const snapshot={mapId:activeMap.id,zone:activeMap.id===TRAINING_MAP_ID?TRAINING_MAP_ID:district,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district};
+    const fingerprint=`${snapshot.mapId}|${snapshot.zone}|${snapshot.x}|${snapshot.y}|${snapshot.direction}|${Number(snapshot.moving)}|${snapshot.district}`;
     if(force || (fingerprint!==lastPresenceFingerprint && time-lastPresenceTime>=250) || time-lastPresenceTime>=20000){
       lastPresenceTime=time;
       lastPresenceFingerprint=fingerprint;
@@ -888,7 +1145,7 @@ function createTeacherQuestAdventure(options={}){
     reportPlayerState(time);
     drawWorld();
     drawMiniMap();
-    if(time-lastSave>2500){savePosition(player);lastSave=time;}
+    if(time-lastSave>2500){savePosition(player,explorationSets);explorationDirty=false;lastSave=time;}
     raf=requestAnimationFrame(frame);
   }
 
@@ -902,16 +1159,25 @@ function createTeacherQuestAdventure(options={}){
   });
   const interactButton=root.querySelector("[data-interact]");
   const interactClick=event=>{event.preventDefault();canvas.focus({preventScroll:true});interact();};
+  const jumpButton=root.querySelector("[data-jump]");
+  const jumpClick=event=>{event.preventDefault();canvas.focus({preventScroll:true});startJump();};
   const onBlur=()=>keys.clear();
   const applyCloudPosition=event=>{
     const saved=event.detail?.adventure;
     if(!saved || !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) return;
-    const position=MAP_REGISTRY.normalizePosition(saved,{mapId:ACTIVE_MAP.id,...SPAWN,direction:"down"});
-    player.mapId=position.mapId;
+    const position=MAP_REGISTRY.normalizePosition(saved,{mapId:activeMap.id,...activeMap.spawn,direction:"down"});
+    activeMap=MAP_REGISTRY.get(position.mapId);
+    player.mapId=activeMap.id;
     player.version=position.version;
     player.x=position.x;
     player.y=position.y;
     player.direction=position.direction;
+    if(saved.exploration&&typeof saved.exploration==="object") MAP_REGISTRY.ids.forEach(mapId=>{
+      const cloudSet=MAP_REGISTRY.exploration(mapId).decode(saved.exploration[mapId]);
+      if(cloudSet.size) explorationSets.set(mapId,cloudSet);
+    });
+    lastExplorationCell=-1;
+    revealAroundPlayer(true);
     camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);
     camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);
     keys.clear();
@@ -920,6 +1186,7 @@ function createTeacherQuestAdventure(options={}){
     updateHud();
   };
   interactButton?.addEventListener("click",interactClick);
+  jumpButton?.addEventListener("click",jumpClick);
   const mapButtons=[...root.querySelectorAll("[data-adventure-map]")];
   mapButtons.forEach(button=>button.addEventListener("click",()=>toggleMap()));
   mapPanel?.querySelector("[data-map-close]")?.addEventListener("click",()=>toggleMap(false));
@@ -934,7 +1201,7 @@ function createTeacherQuestAdventure(options={}){
     if(destroyed) return;
     destroyed=true;
     cancelAnimationFrame(raf);
-    savePosition(player,{immediate:true});
+    savePosition(player,explorationSets,{immediate:true});
     options.onLeave?.();
     keys.clear();
     window.removeEventListener("keydown",onKeyDown);
@@ -944,9 +1211,11 @@ function createTeacherQuestAdventure(options={}){
     canvas.removeEventListener("pointerdown",setTapTarget);
     mobileBindings.forEach(([element,event,handler])=>element.removeEventListener(event,handler));
     interactButton?.removeEventListener("click",interactClick);
+    jumpButton?.removeEventListener("click",jumpClick);
     if(window.teacherQuestAdventureDebug?.destroy===destroy) delete window.teacherQuestAdventureDebug;
   }
 
+  revealAroundPlayer(true);
   updateNearest();
   updateHud();
   setPlayerProfile(playerProfile);
@@ -954,10 +1223,19 @@ function createTeacherQuestAdventure(options={}){
   raf=requestAnimationFrame(frame);
 
   window.teacherQuestAdventureDebug={
-    getState:()=>({mapId:ACTIVE_MAP.id,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,district:locationNameAt(player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`}),
-    teleportToModule:id=>{const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();updateHud();return true;},
-    teleportToNpc:id=>{const npc=npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";updateNearest();updateHud();return true;},
-    teleportToTree:index=>{const tree=trees[Math.max(0,Math.min(trees.length-1,Number(index)||0))];if(!tree)return false;player.x=clamp(tree.x+28,40,WORLD_WIDTH-40);player.y=clamp(tree.y,64,WORLD_HEIGHT-32);camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);updateNearest();updateHud();return true;},
+    getState:()=>{
+      const scene=currentScene();
+      const codec=MAP_REGISTRY.exploration(activeMap.id);
+      return {mapId:activeMap.id,mapTitle:activeMap.title,worldVersion:MAP_REGISTRY.version,mapIds:[...MAP_REGISTRY.ids],x:player.x,y:player.y,direction:player.direction,moving:player.moving,jumping:player.jumping,jumpHeight:player.jumpHeight,district:locationNameAt(activeMap.id,player.x,player.y),nearest:nearest?.module?.id||nearest?.id||null,remotePlayers:remoteCharacters.size,tapTarget:tapTarget?{...tapTarget}:null,fadedTrees:scene.trees.filter(tree=>treeOpacity(tree)<.99).length,playerLabel:`คุณ • ${normalizedProfile(playerProfile).nickname}`,visionRadius:VISION_RADIUS,exploredCells:currentExploration().size,explorationTotal:codec.total,explorationPercent:explorationPercent(),discoveredPoi:[...scene.portals,...scene.gates,...scene.npcs].filter(item=>isExploredAt(item.x,item.y)).length,barrierCount:scene.barriers.length};
+    },
+    teleportToModule:id=>{if(activeMap.id!==ACADEMY_MAP_ID)switchMap(ACADEMY_MAP_ID);const portal=portals.find(item=>item.module.id===id);if(!portal)return false;player.x=portal.x;player.y=portal.y+54;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
+    teleportToNpc:id=>{const npc=currentScene().npcs.find(item=>item.id===id);if(!npc)return false;player.x=npc.x;player.y=npc.y+48;player.direction="up";lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
+    teleportToTree:index=>{const trees=currentScene().trees;const tree=trees[Math.max(0,Math.min(trees.length-1,Number(index)||0))];if(!tree)return false;player.x=clamp(tree.x+28,40,WORLD_WIDTH-40);player.y=clamp(tree.y,64,WORLD_HEIGHT-32);camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
+    teleportToGate:index=>{const gate=currentScene().gates[Math.max(0,Math.min(currentScene().gates.length-1,Number(index)||0))];if(!gate)return false;player.x=gate.x;player.y=gate.y+52;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
+    teleportToBarrier:index=>{const barrier=currentScene().barriers[Math.max(0,Math.min(currentScene().barriers.length-1,Number(index)||0))];if(!barrier)return false;player.x=barrier.x+barrier.w/2;player.y=barrier.y+barrier.h+22;player.direction="up";camera.x=clamp(player.x-VIEW_WIDTH/2,0,WORLD_WIDTH-VIEW_WIDTH);camera.y=clamp(player.y-VIEW_HEIGHT/2,0,WORLD_HEIGHT-VIEW_HEIGHT);lastExplorationCell=-1;revealAroundPlayer(true);updateNearest();updateHud();return true;},
+    moveBy:(dx,dy)=>{const before={x:player.x,y:player.y};tryMove(Number(dx)||0,Number(dy)||0);revealAroundPlayer();return {x:player.x-before.x,y:player.y-before.y};},
+    switchMap,
+    startJump,
     interact,
     setRemotePlayers,
     setPlayerProfile,

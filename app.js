@@ -544,11 +544,11 @@ function renderAdventure(){
         <div>
           <div class="eyebrow">ADVENTURE MODE • PIXEL WORLD</div>
           <h1>โลกครูเควสต์</h1>
-          <p id="adventureInstructions">มือถือแตะพื้นให้ตัวละครเดินไปหาเป้าหมาย หรือใช้ D-pad • คีย์บอร์ดใช้ WASD/ลูกศร (ภาษาไทยใช้ ไฟหก) • โต้ตอบด้วย E/ำ, SPACE หรือปุ่ม A</p>
+          <p id="adventureInstructions">มือถือแตะพื้นหรือใช้ D-pad • คีย์บอร์ดใช้ WASD/ลูกศร (ภาษาไทยใช้ ไฟหก) • E/ำ หรือ ENTER โต้ตอบ • SPACE หรือ J/่ กระโดด</p>
         </div>
         <div class="adventure-intro-actions">
           <button class="btn small pink" data-go="raid">⚡ เรด Co-op</button>
-          <button class="btn small mint" data-adventure-map>▤ แผนที่ 20 ด่าน</button>
+          <button class="btn small mint" data-adventure-map>▤ แผนที่สำรวจ</button>
           <button class="btn small dark" data-adventure-reset>⌂ กลับจุดเริ่ม</button>
           <button class="btn small dark" data-go="home">◆ ฐานบัญชาการ</button>
         </div>
@@ -564,7 +564,7 @@ function renderAdventure(){
           </div>
           <div class="adventure-mini-wrap">
             <canvas id="adventureMiniMap" width="176" height="124" role="img" aria-label="มินิแมป ผู้เล่นของคุณมีกรอบสีทอง เพื่อนมีสีตามตัวละคร"></canvas>
-            <span class="adventure-mini-legend"><b>◆ คุณ</b><i>■ เพื่อน</i></span>
+            <span class="adventure-mini-legend"><b>◆ คุณ</b><i>■ เพื่อน</i><i>▣ จุดสำคัญ</i></span>
             <span class="adventure-mini-label">MINI MAP</span>
           </div>
         </div>
@@ -577,19 +577,20 @@ function renderAdventure(){
           <div class="adventure-dialogue-actions" id="adventureDialogueActions"></div>
         </section>
         <section class="adventure-map-panel" id="adventureMapPanel" role="dialog" aria-modal="false" aria-labelledby="adventureMapTitle" aria-hidden="true" hidden>
-          <header class="adventure-map-head"><div><h2 id="adventureMapTitle">แผนที่โลกครูเควสต์</h2><p>4 เขต • 20 ประตู • คลังข้อสอบ ${D.questions.length} ข้อ</p></div><button class="btn small red" data-map-close>ปิดแผนที่ ×</button></header>
+          <header class="adventure-map-head"><div><h2 id="adventureMapTitle">แผนที่โลกครูเควสต์</h2><p id="adventureMapDescription">พื้นที่ที่ยังไม่สำรวจจะถูกหมอกปิดไว้</p></div><button class="btn small red" data-map-close>ปิดแผนที่ ×</button></header>
           <div class="adventure-map-grid"></div>
         </section>
         <div class="adventure-mobile-controls" aria-label="ปุ่มควบคุมสำหรับจอสัมผัส">
           <div class="pixel-dpad">
             <button data-move="up" aria-label="เดินขึ้น">▲</button><button data-move="left" aria-label="เดินซ้าย">◀</button><button data-move="right" aria-label="เดินขวา">▶</button><button data-move="down" aria-label="เดินลง">▼</button>
           </div>
-          <button class="adventure-interact-button" data-interact aria-label="โต้ตอบกับคนหรือประตู">A</button>
+          <div class="adventure-action-buttons"><button class="adventure-jump-button" data-jump aria-label="กระโดดข้ามสิ่งกีดขวาง">B<small>JUMP</small></button><button class="adventure-interact-button" data-interact aria-label="โต้ตอบกับคนหรือประตู">A<small>ACT</small></button></div>
         </div>
       </div>
       <div class="adventure-help" aria-label="วิธีเล่น">
         <div><kbd>แตะ / WASD</kbd><span><strong>เดินสำรวจ</strong>มือถือแตะพื้นได้ • ภาษาไทยใช้ ไ ฟ ห ก</span></div>
-        <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ SPACE หรือ ENTER ได้</span></div>
+        <div><kbd>E / ำ</kbd><span><strong>พูดคุย / เข้าด่าน</strong>ใช้ ENTER ได้โดยไม่ต้องสลับภาษา</span></div>
+        <div><kbd>SPACE / J</kbd><span><strong>กระโดด</strong>ข้ามรั้วเตี้ยและเปิดทางลัด</span></div>
         <div><kbd>M / ท</kbd><span><strong>ดูแผนที่</strong>ตรวจความคืบหน้า 20 ด่าน</span></div>
         <div><kbd>ESC</kbd><span><strong>ปิดหน้าต่าง</strong>กลับไปเดินต่อทันที</span></div>
       </div>
