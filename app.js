@@ -3,7 +3,9 @@
 
 const D = window.GAME_DATA;
 const ECONOMY = window.TeacherQuestEconomyCore;
+const REVIEW = window.TeacherQuestContentReview;
 if(!ECONOMY) throw new Error("TeacherQuestEconomyCore must load before app.js");
+if(!REVIEW) throw new Error("TeacherQuestContentReview must load before app.js");
 const $ = (selector, root=document) => root.querySelector(selector);
 const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
 const view = $("#view");
@@ -17,6 +19,7 @@ const authGateStatus = $("#authGateStatus");
 const protectedSurfaces = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const modalBackground = [$(".topbar"),$(".app-shell")].filter(Boolean);
 const STORAGE = "teacherQuest2569_v3";
+const REVIEW_STORAGE = "teacherQuestContentReview_v1";
 const letters = ["ก","ข","ค","ง"];
 const ROUND_COUNTS = Object.freeze({quick:10,zone:10,boss:15,all:15,law:12,weak:10,complete:20});
 const RAID_EMOTES = Object.freeze({hi:"HI!",go:"ลุย!",help:"ช่วย!",wow:"สุดยอด!",gg:"GG"});
@@ -138,6 +141,9 @@ let modalPreviousFocus = null;
 let adventureInstance = null;
 let currentView = "";
 let shopFilter = "helper";
+let contentReviewFilters = {status:"priority",freshness:"all",evidence:"all",module:"all",query:""};
+let contentReviewVisible = 40;
+let reviewDrafts = loadReviewDrafts();
 let onlineState = window.TeacherQuestOnline?.getState?.() || {
   configured:false,phase:"setup",connected:false,user:null,
   profile:{nickname:"ครูนักผจญภัย",avatar:{}},onlineCount:0,totalPlayers:0,zonePlayers:[],zoneMessages:[],error:""
@@ -165,6 +171,17 @@ function loadState(){
     console.warn("Could not load progress",error);
     return clone(defaults);
   }
+}
+
+function loadReviewDrafts(){
+  try{
+    const loaded=JSON.parse(localStorage.getItem(REVIEW_STORAGE)||"{}");
+    return Object.fromEntries(Object.entries(loaded).map(([id,draft])=>[id,REVIEW.normalizeDraft(draft)]).filter(([,draft])=>draft.questionId));
+  }catch(error){console.warn("Could not load content review drafts",error);return {};}
+}
+
+function saveReviewDrafts(){
+  localStorage.setItem(REVIEW_STORAGE,JSON.stringify(reviewDrafts));
 }
 
 function saveState(){
@@ -339,6 +356,17 @@ function updateOnlineHud(){
   if(chatSubmit) chatSubmit.disabled=phase!=="online";
   const adminButton=$("#adminTestBtn");
   if(adminButton) adminButton.hidden=!onlineState.isAdmin;
+  let adminReviewNav=$("#adminReviewNav");
+  if(onlineState.isAdmin&&!adminReviewNav){
+    adminReviewNav=document.createElement("button");
+    adminReviewNav.className="nav-btn";adminReviewNav.id="adminReviewNav";adminReviewNav.dataset.view="content-review";
+    adminReviewNav.innerHTML='<span aria-hidden="true">✦</span>ศูนย์อัปเดต Admin';
+    adminReviewNav.onclick=()=>{sfx.select();go("content-review");};
+    $(".nav-list")?.append(adminReviewNav);
+  }else if(!onlineState.isAdmin&&adminReviewNav){
+    adminReviewNav.remove();
+    if(currentView==="content-review") go("adventure");
+  }
   updateVoiceHud();
   updateAuthGate();
 }
@@ -388,10 +416,12 @@ function showToast(message){
 function openAdminTestPanel(){
   onlineState=window.TeacherQuestOnline?.getState?.()||onlineState;
   if(!onlineState.isAdmin){showToast("บัญชีนี้ไม่มีสิทธิ์ Test Admin");return;}
-  openModal(`<div class="eyebrow">TEST ADMIN • PRIVATE ROLE</div><h2 id="modalTitle">แผงทดสอบเกม</h2><p>เครื่องมือเหล่านี้เปลี่ยนเฉพาะความคืบหน้าและตัวละครของบัญชีคุณเอง ไม่สามารถอ่านหรือแก้ข้อมูลส่วนตัวของผู้เล่นอื่น</p><div class="admin-test-grid"><button class="btn mint" type="button" data-admin-action="resources">+5,000 Coin / +2,000 EXP</button><button class="btn sky" type="button" data-admin-action="unlock">ปลดล็อกไอเทมทั้งหมด</button><button class="btn" type="button" data-admin-action="reveal">เปิดแผนที่โลกปัจจุบัน</button><button class="btn dark" type="button" data-admin-map="academy-plaza">วาร์ปศูนย์กลาง</button><button class="btn dark" type="button" data-admin-map="training-grove">วาร์ปป่าฝึก</button><button class="btn dark" type="button" data-admin-map="law-archive">วาร์ปโลกกฎหมาย</button><button class="btn dark" type="button" data-admin-map="future-campus">วาร์ปโลกอนาคต</button></div><p class="admin-test-note">การเพิ่มทรัพยากรและปลดล็อกจะบันทึกขึ้น Cloud Save ของบัญชีนี้ ใช้สำหรับทดสอบก่อนเปิดจริงเท่านั้น</p>`);
+  openModal(`<div class="eyebrow">TEST ADMIN • PRIVATE ROLE</div><h2 id="modalTitle">แผงทดสอบเกม</h2><p>เครื่องมือเหล่านี้เปลี่ยนเฉพาะความคืบหน้าและตัวละครของบัญชีคุณเอง ไม่สามารถอ่านหรือแก้ข้อมูลส่วนตัวของผู้เล่นอื่น</p><div class="admin-test-grid"><button class="btn pink" type="button" data-admin-action="content-review">✦ ศูนย์อัปเดตเนื้อหา</button><button class="btn mint" type="button" data-admin-action="resources">+5,000 Coin / +2,000 EXP</button><button class="btn sky" type="button" data-admin-action="unlock">ปลดล็อกไอเทมทั้งหมด</button><button class="btn" type="button" data-admin-action="reveal">เปิดแผนที่โลกปัจจุบัน</button><button class="btn dark" type="button" data-admin-map="academy-plaza">วาร์ปศูนย์กลาง</button><button class="btn dark" type="button" data-admin-map="training-grove">วาร์ปป่าฝึก</button><button class="btn dark" type="button" data-admin-map="law-archive">วาร์ปโลกกฎหมาย</button><button class="btn dark" type="button" data-admin-map="future-campus">วาร์ปโลกอนาคต</button></div><p class="admin-test-note">การเพิ่มทรัพยากรและปลดล็อกจะบันทึกขึ้น Cloud Save ของบัญชีนี้ ส่วนร่างตรวจเนื้อหาเก็บในเครื่องและต้องให้ผู้ดูแลอนุมัติก่อนแก้คลังจริง</p>`);
   $$('[data-admin-action]',modalBody).forEach(button=>button.onclick=()=>{
     if(!window.TeacherQuestOnline?.getState?.().isAdmin){closeModal();showToast("สิทธิ์ Test Admin หมดอายุ กรุณาเข้าสู่ระบบใหม่");return;}
-    if(button.dataset.adminAction==="resources"){
+    if(button.dataset.adminAction==="content-review"){
+      closeModal();go("content-review");
+    }else if(button.dataset.adminAction==="resources"){
       state.coins+=5000;state.xp+=2000;saveState();showToast("เพิ่มทรัพยากรทดสอบแล้ว");
     }else if(button.dataset.adminAction==="unlock"){
       const owned=ECONOMY.catalog.filter(item=>item.type==="unlock").map(item=>item.id);
@@ -618,7 +648,7 @@ function go(name,options={}){
   if(name !== "practice") battle = null;
   if(name !== "exam") exam = null;
   currentView=name;
-  const routeMusic = {home:"menu",world:"map",practice:"training",exam:"exam",review:"training",codex:"codex",shop:"menu",profile:"menu",raid:"boss"};
+  const routeMusic = {home:"menu",world:"map",practice:"training",exam:"exam",review:"training",codex:"codex","content-review":"codex",shop:"menu",profile:"menu",raid:"boss"};
   if(name !== "adventure") setMusicScene(routeMusic[name] || "menu");
   const routes = {
     adventure:renderAdventure,
@@ -628,6 +658,7 @@ function go(name,options={}){
     exam:renderExamLobby,
     review:renderReview,
     codex:renderCodex,
+    "content-review":renderContentReview,
     shop:renderShop,
     profile:renderProfile,
     raid:renderRaid
@@ -1501,6 +1532,103 @@ function renderCodex(){
   view.innerHTML = `<section class="panel pixel-box"><div class="panel-title"><div><h2>คัมภีร์ความรู้</h2><small>สูตรจำสั้น ๆ สำหรับเรียกคืนก่อนเข้าสนาม</small></div></div><div class="codex-grid">${D.codex.map(item => `<article class="codex-card pixel-box"><div class="codex-icon">${item.icon}</div><h3>${esc(item.title)}</h3><ul>${item.items.map(text => `<li>${esc(text)}</li>`).join("")}</ul></article>`).join("")}</div><div class="section-head"><div><h2>ศูนย์ตรวจหลักฐาน</h2><p>บอกระดับความแม่นของแหล่งอ้างอิงและรอบทบทวน ไม่ใช้เลขหน้า/มาตราที่ไม่ได้ตรวจจากต้นฉบับ</p></div><button class="btn small pink" id="freshnessDrill">ฝึกข่าวและนโยบายล่าสุด</button></div><section class="evidence-audit" aria-label="สรุปคุณภาพแหล่งอ้างอิง"><article><b>${audit.pinpointReferenceCount}</b><span>ข้อชี้จุดได้<br>หน้าเอกสารหรือแหล่งตรง</span></article><article><b>${audit.topicReferenceCount}</b><span>ข้ออ้างระดับหัวข้อ<br>ไม่สร้างเลขหน้าปลอม</span></article><article><b>${audit.appliedReferenceCount}</b><span>โจทย์ประยุกต์<br>อิงหลักการหลายส่วน</span></article><article class="fresh"><b>${audit.timeSensitiveCount}</b><span>ข้อมูลเปลี่ยนเร็ว<br>ทบทวนทุก 30 วัน</span></article></section><div class="freshness-legend"><span class="stable">${audit.stableCount} เนื้อหาหลักคงที่</span><span class="law">${audit.lawWatchCount} กฎหมาย/นโยบาย</span><span class="fast">${audit.timeSensitiveCount} ข้อมูลเปลี่ยนเร็ว</span><small>ตรวจโครงสร้างหลักฐานล่าสุด ${formatReviewDate(audit.evidenceReviewedOn)} • รายละเอียดวันครบกำหนดอยู่หลังตอบแต่ละข้อ</small></div><div class="section-head"><div><h2>หอจดหมายเหตุ</h2><p>ภาพรวมเอกสารของแต่ละหมวด ส่วนตำแหน่งหน้า หัวข้อ และวันทบทวนจะแสดงหลังตอบทุกข้อ</p></div></div><div class="codex-grid">${D.sources.map(source => `<article class="codex-card pixel-box"><h3>${esc(source.title)}</h3><p>${esc(source.note)}</p><p><b>${source.questionCount} ข้อ</b> • ${source.documents.length ? `${source.documents.length} เอกสารในชุดอ้างอิง` : "ตรวจจากหน่วยงานทางการ"}${source.timeSensitiveCount ? ` • <strong class="source-fresh-count">${source.timeSensitiveCount} ข้อเปลี่ยนเร็ว</strong>` : ""}</p>${source.documents.length ? `<ul class="source-document-list">${source.documents.map(document=>`<li>${esc(document)}</li>`).join("")}</ul>` : ""}<div class="source-links"><a href="${source.url}" target="_blank" rel="noopener" aria-label="เปิดแหล่งตรวจเทียบ: ${esc(source.title)}">เปิดแหล่งตรวจเทียบ ↗</a></div></article>`).join("")}</div></section>`;
   $("#freshnessDrill").onclick=()=>{state.lastModule="current";saveState();go("practice");};
 }
+
+function reviewStatusLabel(question,asOf=today()){
+  const status=REVIEW.statusOf(question,asOf);
+  if(status==="overdue") return ["เกินกำหนด",status];
+  if(status==="due-soon") return ["ใกล้ถึงกำหนด",status];
+  return [`เหลือ ${REVIEW.daysUntil(question.reviewDueOn,asOf)} วัน`,status];
+}
+
+function exportReviewPack(){
+  const pack=REVIEW.buildUpdatePack(reviewDrafts,{bankVersion:D.version,evidenceReviewedOn:D.questionBankAudit.evidenceReviewedOn});
+  if(!pack.drafts.length){showToast("ยังไม่มีร่างที่มีวันที่และลิงก์ต้นทางครบ");return;}
+  const blob=new Blob([JSON.stringify(pack,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;link.download=`teacher-quest-review-${today()}.json`;link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  showToast(`Export ร่างตรวจ ${pack.drafts.length} ข้อแล้ว`);
+}
+
+async function copyReviewBrief(question,draft){
+  const text=REVIEW.buildAIBrief(question,draft);
+  try{
+    if(navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else{
+      const area=document.createElement("textarea");area.value=text;area.style.position="fixed";area.style.opacity="0";document.body.append(area);area.select();document.execCommand("copy");area.remove();
+    }
+    showToast("คัดลอก AI Brief แล้ว • ต้องตรวจผลก่อนนำมาใช้");
+  }catch(error){console.warn(error);showToast("คัดลอกไม่สำเร็จ กรุณาลองใหม่");}
+}
+
+function reviewDraftFromForm(question){
+  return {
+    questionId:question.id,
+    status:$("#reviewDraftStatus")?.value,
+    finding:$("#reviewDraftFinding")?.value,
+    sourceUrl:$("#reviewDraftSource")?.value,
+    reviewedOn:$("#reviewDraftDate")?.value,
+    notes:$("#reviewDraftNotes")?.value,
+    savedAt:Date.now()
+  };
+}
+
+function openContentReviewDraft(questionId){
+  onlineState=window.TeacherQuestOnline?.getState?.()||onlineState;
+  if(!onlineState.isAdmin){showToast("บัญชีนี้ไม่มีสิทธิ์ตรวจเนื้อหา");go("adventure");return;}
+  const question=D.questions.find(item=>item.id===Number(questionId));
+  if(!question) return;
+  const existing=reviewDrafts[question.id]||{};
+  const draft=REVIEW.normalizeDraft({questionId:question.id,status:existing.status||"confirmed-current",finding:existing.finding||"",sourceUrl:existing.sourceUrl||question.sourceUrl||"",reviewedOn:existing.reviewedOn||today(),notes:existing.notes||"",savedAt:existing.savedAt});
+  const module=moduleById(question.module);
+  openModal(`<div class="eyebrow">HUMAN REVIEW • QUESTION ${question.id}</div><h2 id="modalTitle">ตรวจ ${esc(module.title)} — ข้อ ${question.id}</h2><p>${esc(question.question)}</p><div class="admin-review-warning">AI ช่วยวิเคราะห์และร่างข้อเสนอได้ แต่ปุ่มนี้ไม่แก้เฉลยหรือเผยแพร่เข้าคลังจริง ผู้ดูแลต้องตรวจหลักฐานและอนุมัติเอง</div><ul class="admin-review-checklist">${REVIEW.checklist(question).map(item=>`<li>${esc(item)}</li>`).join("")}</ul><form class="admin-review-form" id="reviewDraftForm"><label>ผลการตรวจ<select id="reviewDraftStatus"><option value="confirmed-current" ${draft.status==="confirmed-current"?"selected":""}>ยืนยันว่าปัจจุบัน</option><option value="needs-change" ${draft.status==="needs-change"?"selected":""}>พบจุดที่ต้องแก้</option><option value="needs-source" ${draft.status==="needs-source"?"selected":""}>ต้องหาแหล่งตรงเพิ่ม</option></select></label><label>สิ่งที่พบ / ข้อเสนอแก้ไข<textarea id="reviewDraftFinding" maxlength="1200" placeholder="ระบุข้อเท็จจริงที่เปลี่ยน ตัวเลือกที่ควรปรับ หรือจุดที่ยังยืนยันไม่ได้">${esc(draft.finding)}</textarea></label><label>ลิงก์ HTTPS ต้นทางที่ตรวจ<input id="reviewDraftSource" type="url" inputmode="url" value="${esc(draft.sourceUrl)}" placeholder="https://หน่วยงานทางการ/..." required></label><label>วันที่ตรวจ<input id="reviewDraftDate" type="date" value="${esc(draft.reviewedOn)}" required></label><label>บันทึกผู้ดูแล<textarea id="reviewDraftNotes" maxlength="2000" placeholder="เลขหนังสือ วันที่มีผลใช้บังคับ หน้า/มาตรา หรือเหตุผลที่ยังไม่แก้">${esc(draft.notes)}</textarea></label><div class="admin-review-modal-actions"><button class="btn mint" type="submit">บันทึกร่างตรวจ</button><button class="btn sky" type="button" id="copyReviewBrief">คัดลอก AI Brief</button>${existing.questionId?'<button class="btn red" type="button" id="deleteReviewDraft">ลบร่างนี้</button>':""}</div></form>`);
+  $("#reviewDraftForm").onsubmit=event=>{
+    event.preventDefault();
+    if(!window.TeacherQuestOnline?.getState?.().isAdmin){closeModal();showToast("สิทธิ์ Admin หมดอายุ กรุณาเข้าสู่ระบบใหม่");return;}
+    const result=REVIEW.validateDraft(reviewDraftFromForm(question));
+    if(!result.ok){showToast(result.errors[0]);return;}
+    reviewDrafts[question.id]=result.draft;saveReviewDrafts();closeModal();renderContentReview();showToast(`บันทึกร่างตรวจข้อ ${question.id} แล้ว`);
+  };
+  $("#copyReviewBrief").onclick=()=>copyReviewBrief(question,reviewDraftFromForm(question));
+  $("#deleteReviewDraft")?.addEventListener("click",()=>{delete reviewDrafts[question.id];saveReviewDrafts();closeModal();renderContentReview();showToast("ลบร่างตรวจแล้ว");});
+}
+
+function renderContentReview(){
+  onlineState=window.TeacherQuestOnline?.getState?.()||onlineState;
+  if(!onlineState.isAdmin){
+    view.innerHTML='<section class="panel pixel-box"><div class="eyebrow">ADMIN ONLY</div><h2>ไม่มีสิทธิ์เปิดศูนย์อัปเดตเนื้อหา</h2><p>หน้านี้เปิดเฉพาะ UID ที่กำหนดไว้ใน Firebase <code>admins</code> กรุณาเข้าสู่ระบบด้วยบัญชีผู้ดูแล</p><button class="btn" data-go="adventure">กลับโลกผจญภัย</button></section>';bindCommon();return;
+  }
+  const asOf=today();
+  const summary=REVIEW.summarize(D.questions,asOf);
+  const queue=REVIEW.buildQueue(D.questions,contentReviewFilters,asOf);
+  const visible=queue.slice(0,contentReviewVisible);
+  const draftCount=Object.keys(reviewDrafts).length;
+  const cards=visible.map(question=>{
+    const module=moduleById(question.module);
+    const [dueLabel,dueStatus]=reviewStatusLabel(question,asOf);
+    const draft=reviewDrafts[question.id];
+    return `<article class="admin-review-card ${esc(question.freshnessClass)} ${dueStatus==="overdue"?"is-overdue":""} ${draft?"has-draft":""}" data-review-question="${question.id}"><div><header><strong>${moduleIconMarkup(module,"tiny")} ข้อ ${question.id} • ${esc(module.title)}</strong><span>${esc(question.freshnessLabel)}</span><span>${esc(dueLabel)} • ${formatReviewDate(question.reviewDueOn)}</span>${draft?`<span>ร่าง: ${esc(draft.status)}</span>`:""}</header><h3>${esc(question.question)}</h3><p>${esc(question.sourceDocument||question.source)}</p><p>${esc(question.sourceLocator)} • ${esc(question.verificationStatus)}</p></div><div class="admin-review-card-actions"><button class="btn small mint" type="button" data-review-open="${question.id}">${draft?"แก้ร่างตรวจ":"เริ่มตรวจ"}</button>${question.sourceUrl?`<a class="btn small dark" href="${esc(question.sourceUrl)}" target="_blank" rel="noopener">เปิดต้นทาง ↗</a>`:""}</div></article>`;
+  }).join("");
+  view.innerHTML=`<section class="admin-review-page"><header class="admin-review-hero"><div><div class="eyebrow">CONTENT OPS • HUMAN IN THE LOOP</div><h1>ศูนย์อัปเดตเนื้อหา</h1><p>จัดคิวข้อสอบตามวันครบกำหนดและช่องว่างหลักฐาน สร้างบรีฟให้ AI ช่วยตรวจได้ แต่ไม่มีคำสั่งใดแก้หรือเผยแพร่คลังข้อสอบอัตโนมัติ</p></div><div class="admin-review-guard">★ ADMIN VERIFIED<br><small>ร่างเก็บเฉพาะเครื่องนี้</small></div></header><section class="admin-review-summary" aria-label="สรุปคิวตรวจ"><article class="urgent"><b>${summary.overdue}</b><span>เกินกำหนดตรวจ</span></article><article><b>${summary["due-soon"]}</b><span>ครบกำหนดใน 14 วัน</span></article><article class="fast"><b>${summary.timeSensitive}</b><span>ข้อมูลเปลี่ยนเร็ว</span></article><article class="gap"><b>${summary.evidenceGap}</b><span>ยังอ้างระดับหัวข้อ/ประยุกต์</span></article></section><section class="admin-review-tools" aria-label="ตัวกรองคิวตรวจ"><label>สถานะ<select id="reviewStatusFilter"><option value="priority">ลำดับสำคัญทั้งหมด</option><option value="overdue">เกินกำหนด</option><option value="due-soon">ใกล้ถึงกำหนด</option><option value="scheduled">ยังอยู่ในรอบ</option></select></label><label>ความสด<select id="reviewFreshnessFilter"><option value="all">ทุกกลุ่ม</option><option value="time-sensitive">ข้อมูลเปลี่ยนเร็ว</option><option value="law-watch">กฎหมาย/นโยบาย</option><option value="stable">เนื้อหาหลักคงที่</option></select></label><label>หลักฐาน<select id="reviewEvidenceFilter"><option value="all">ทุกระดับ</option><option value="gap">ต้องชี้จุดเพิ่ม</option><option value="official-current">แหล่งทางการตรง</option><option value="page-reference">อ้างหน้าเอกสาร</option><option value="exact-reference">อ้างข้อความเฉพาะ</option></select></label><label>หมวด<select id="reviewModuleFilter"><option value="all">ทุกหมวด</option>${D.modules.map(module=>`<option value="${esc(module.id)}">${esc(module.title)}</option>`).join("")}</select></label><label>ค้นหา<input id="reviewQueryFilter" type="search" value="${esc(contentReviewFilters.query)}" placeholder="รหัสข้อ คำถาม หรือแหล่งอ้างอิง"></label></section><div class="admin-review-actions"><button class="btn small sky" id="exportReviewPack" type="button">Export แพ็กตรวจ (${draftCount})</button><button class="btn small dark" id="clearReviewFilters" type="button">ล้างตัวกรอง</button><small>แสดง ${visible.length}/${queue.length} ข้อ • วันที่ประเมิน ${formatReviewDate(asOf)}</small></div><div class="admin-review-list">${cards||'<div class="admin-review-empty">ไม่พบข้อสอบตามตัวกรองนี้</div>'}</div>${visible.length<queue.length?`<button class="btn dark" id="loadMoreReviews" type="button">ดูเพิ่มอีก ${Math.min(40,queue.length-visible.length)} ข้อ</button>`:""}</section>`;
+  $("#reviewStatusFilter").value=contentReviewFilters.status;
+  $("#reviewFreshnessFilter").value=contentReviewFilters.freshness;
+  $("#reviewEvidenceFilter").value=contentReviewFilters.evidence;
+  $("#reviewModuleFilter").value=contentReviewFilters.module;
+  const rerender=(key,value)=>{contentReviewFilters[key]=value;contentReviewVisible=40;renderContentReview();};
+  $("#reviewStatusFilter").onchange=event=>rerender("status",event.target.value);
+  $("#reviewFreshnessFilter").onchange=event=>rerender("freshness",event.target.value);
+  $("#reviewEvidenceFilter").onchange=event=>rerender("evidence",event.target.value);
+  $("#reviewModuleFilter").onchange=event=>rerender("module",event.target.value);
+  $("#reviewQueryFilter").onchange=event=>{const value=event.target.value;setTimeout(()=>rerender("query",value),0);};
+  $("#reviewQueryFilter").onkeydown=event=>{if(event.key==="Enter"){event.preventDefault();event.target.blur();}};
+  $("#clearReviewFilters").onclick=()=>{contentReviewFilters={status:"priority",freshness:"all",evidence:"all",module:"all",query:""};contentReviewVisible=40;renderContentReview();};
+  $("#exportReviewPack").onclick=exportReviewPack;
+  $("#loadMoreReviews")?.addEventListener("click",()=>{contentReviewVisible+=40;renderContentReview();});
+  $$('[data-review-open]').forEach(button=>button.onclick=()=>openContentReviewDraft(button.dataset.reviewOpen));
+}
+
+window.teacherQuestContentReviewDebug={getFilters:()=>({...contentReviewFilters}),getDrafts:()=>clone(reviewDrafts),open:openContentReviewDraft,buildPack:()=>REVIEW.buildUpdatePack(reviewDrafts,{bankVersion:D.version,evidenceReviewedOn:D.questionBankAudit.evidenceReviewedOn})};
 
 function renderShop(){
   state.economy=ECONOMY.normalize(state.economy);
