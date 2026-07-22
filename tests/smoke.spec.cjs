@@ -717,6 +717,7 @@ test('configured production mode requires Google before the game becomes interac
     connected:true,
     user:{uid:'google-test',isAnonymous:false,provider:'google'},
     cloudSync:'saved',
+    presence:{zone:'plaza',read:'ready',write:'ready',error:'',lastSyncedAt:Date.now()},
     error:''
   }));
   await expect(page.locator('#authGate')).toBeHidden();
@@ -724,19 +725,38 @@ test('configured production mode requires Google before the game becomes interac
   expect(await page.locator('.app-shell').evaluate(element=>element.inert)).toBe(false);
 
   await page.evaluate(()=>{window.TeacherQuestOnline.diagnosePermissions=async()=>({
-    ok:false,claims:{emailVerified:true,signInProvider:'google.com',googleLinked:true,rulesRevision:'2026-07-18.1'},
+    ok:false,claims:{emailVerified:true,signInProvider:'google.com',googleLinked:true,rulesRevision:'2026-07-22.1'},
     steps:[
       {key:'profile-read',label:'อ่านโปรไฟล์ของตนเอง',ok:true,error:''},
       {key:'progress-read',label:'อ่านความคืบหน้าบน Cloud',ok:true,error:''},
       {key:'presence-write',label:'เขียนสถานะออนไลน์',ok:true,error:''},
-      {key:'raid-create',label:'สร้างและลบห้อง Raid ทดสอบ',ok:false,error:'Firebase ปฏิเสธการสร้างห้อง Raid โดยเฉพาะ'}
+      {key:'world-read',label:'อ่านผู้เล่นในพื้นที่',ok:true,error:''},
+      {key:'world-write',label:'ส่งและลบตำแหน่งตัวละครทดสอบ',ok:false,error:'Firebase ปฏิเสธ World Presence'},
+      {key:'chat-write',label:'ส่งและลบข้อความใกล้ตัวทดสอบ',ok:true,error:''},
+      {key:'raid-create',label:'สร้างและลบห้อง Raid ทดสอบ',ok:true,error:''}
     ]
   });});
   await page.locator('#onlineBtn').click();
   await page.locator('#runFirebaseDiagnostic').click();
   await expect(page.locator('.firebase-diagnostic-result')).toContainText('พบจุดที่ถูกปฏิเสธ');
-  await expect(page.locator('.firebase-diagnostic-steps .fail')).toContainText('สร้างและลบห้อง Raid ทดสอบ');
+  await expect(page.locator('.firebase-diagnostic-steps .fail')).toContainText('ส่งและลบตำแหน่งตัวละครทดสอบ');
+  await expect(page.locator('.firebase-diagnostic-result')).toContainText('Publish Realtime Database Rules');
   await expect(page.locator('.firebase-diagnostic-result')).not.toContainText('@');
+  await page.locator('#modalClose').click();
+
+  await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,
+    phase:'online',
+    connected:true,
+    user:{uid:'google-test',isAnonymous:false,provider:'google'},
+    presence:{zone:'plaza',read:'error',write:'ready',error:'Firebase ปฏิเสธ World Presence (อ่านผู้เล่นในพื้นที่)',lastSyncedAt:Date.now()},
+    error:''
+  }));
+  await expect(page.locator('#onlineBtn')).toHaveClass(/error/);
+  await expect(page.locator('#adventureOnlineStatus')).toContainText('พื้นที่ออนไลน์ขัดข้อง');
+  await page.locator('#onlineBtn').click();
+  await expect(page.locator('.online-alert.error')).toContainText('ตัวละครออนไลน์ยังไม่ซิงก์');
+  await expect(page.locator('.online-alert.error')).toContainText('World Presence');
   await page.locator('#modalClose').click();
 
   await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
@@ -744,6 +764,7 @@ test('configured production mode requires Google before the game becomes interac
     phase:'error',
     connected:false,
     user:{uid:'google-test',isAnonymous:false,provider:'google'},
+    presence:{zone:null,read:'idle',write:'idle',error:'',lastSyncedAt:0},
     error:'Firebase ปฏิเสธสิทธิ์'
   }));
   await page.locator('#onlineBtn').click();
@@ -799,6 +820,7 @@ test('Firebase errors tell the owner exactly which console setting to fix',async
   const messages=await page.evaluate(()=>({
     rules:window.teacherQuestOnlineDebug.formatError({code:'PERMISSION_DENIED',message:'Permission denied'}),
     raid:window.teacherQuestOnlineDebug.formatError({code:'PERMISSION_DENIED',message:'Permission denied'},'raid-create'),
+    world:window.teacherQuestOnlineDebug.formatError({code:'PERMISSION_DENIED',message:'Permission denied'},'world-read'),
     domain:window.teacherQuestOnlineDebug.formatError({code:'auth/unauthorized-domain'})
   }));
   expect(messages.rules).toContain('Realtime Database → Rules');
@@ -806,16 +828,20 @@ test('Firebase errors tell the owner exactly which console setting to fix',async
   expect(messages.rules).toContain('เข้าสู่ระบบ Google ใหม่');
   expect(messages.raid).toContain('การสร้างห้อง Raid');
   expect(messages.raid).toContain('ตรวจสิทธิ์ Firebase');
+  expect(messages.world).toContain('World Presence');
+  expect(messages.world).toContain('2026-07-22.1');
   expect(messages.domain).toContain('Authorized domains');
 });
 
-test('Firebase rules protect Raid, proximity chat, voice signaling and Test Admin roles',async({page})=>{
-  const [rulesResponse,onlineResponse]=await Promise.all([
+test('Firebase rules protect Raid, map presence, proximity chat, voice signaling and Test Admin roles',async({page})=>{
+  const [rulesResponse,onlineResponse,adventureResponse]=await Promise.all([
     page.request.get(`${url}/database.rules.json`),
-    page.request.get(`${url}/online.js`)
+    page.request.get(`${url}/online.js`),
+    page.request.get(`${url}/adventure.js`)
   ]);
   expect(rulesResponse.ok()).toBe(true);
   expect(onlineResponse.ok()).toBe(true);
+  expect(adventureResponse.ok()).toBe(true);
   const rules=await rulesResponse.json();
   const startedAt=rules.rules.raids['$room'].meta.startedAt['.validate'];
   const bossHp=rules.rules.raids['$room'].meta.bossHp['.validate'];
@@ -823,6 +849,7 @@ test('Firebase rules protect Raid, proximity chat, voice signaling and Test Admi
   const voice=rules.rules.voiceSignals['$zone']['$toUid']['$fromUid'];
   const admin=rules.rules.admins['$uid'];
   const online=await onlineResponse.text();
+  const adventure=await adventureResponse.text();
   expect(startedAt).toContain("newData.parent().child('status').val() === 'active'");
   expect(bossHp).toContain("newData.parent().child('bossMax')");
   expect(bossHp).not.toContain("root.child('raids').child($room).child('meta').child('bossMax')");
@@ -843,6 +870,13 @@ test('Firebase rules protect Raid, proximity chat, voice signaling and Test Admi
   expect(online).toContain('new RTCPeerConnection');
   expect(online).toContain('getUserMedia');
   expect(online).toContain('admins/${user.uid}');
+  expect(online).toContain('"หมู่บ้านครูนักคิด":"plaza"');
+  expect(online).toContain('"นครนวัตกรรม":"plaza"');
+  expect(online).toContain('"ป่าคัมภีร์กฎหมาย":"plaza"');
+  expect(online).toContain('"ป้อมอนาคตการศึกษา":"plaza"');
+  expect(online).toContain('diagnosticStep("world-read"');
+  expect(online).toContain('diagnosticStep("world-write"');
+  expect(adventure).toContain('activeMap.id===ACADEMY_MAP_ID?"plaza":activeMap.id');
 });
 
 test('online presence renders simulated friends only in the active pixel world',async({page})=>{
@@ -853,6 +887,7 @@ test('online presence renders simulated friends only in the active pixel world',
   await page.evaluate(({x,y})=>window.teacherQuestOnlineDebug.simulate({
     configured:true,phase:'online',connected:true,onlineCount:3,totalPlayers:42,
     user:{uid:'local-player',isAnonymous:false,provider:'google'},cloudSync:'saved',
+    presence:{zone:'plaza',read:'ready',write:'ready',error:'',lastSyncedAt:Date.now()},
     profile:{nickname:'ผู้ทดสอบ',avatar:{skin:'#f4c7a1',hair:'#815226',shirt:'#5c55a7',accent:'#58e7b2',style:'cap'}},
     zonePlayers:[
       {uid:'friend-a',nickname:'เพื่อนเอ',x:x+45,y:y+10,direction:'left',moving:true,avatar:{shirt:'#1e8a72',accent:'#ffd45c',style:'spike'}},

@@ -146,7 +146,8 @@ let contentReviewVisible = 40;
 let reviewDrafts = loadReviewDrafts();
 let onlineState = window.TeacherQuestOnline?.getState?.() || {
   configured:false,phase:"setup",connected:false,user:null,
-  profile:{nickname:"ครูนักผจญภัย",avatar:{}},onlineCount:0,totalPlayers:0,zonePlayers:[],zoneMessages:[],error:""
+  profile:{nickname:"ครูนักผจญภัย",avatar:{}},onlineCount:0,totalPlayers:0,zonePlayers:[],zoneMessages:[],
+  presence:{zone:null,read:"idle",write:"idle",error:"",lastSyncedAt:0},error:""
 };
 
 function mergeDeep(base, incoming){
@@ -324,6 +325,15 @@ function updateHud(){
   updateOnlineHud();
 }
 
+function presenceStatusText(value=onlineState){
+  const phase=value.phase||"setup";
+  const presence=value.presence||{};
+  if(phase!=="online") return phase==="setup"?"โหมดออฟไลน์":phase==="signin-required"?"รอเข้าสู่ระบบ":phase==="error"?"เชื่อมต่อขัดข้อง":"กำลังเชื่อม";
+  if(presence.error) return "พื้นที่ออนไลน์ขัดข้อง • กดตรวจ Firebase";
+  if(presence.read!=="ready" || presence.write!=="ready") return "กำลังเชื่อมพื้นที่…";
+  return `พื้นที่นี้ ${Math.max(1,(value.zonePlayers?.length||0)+1)} คน`;
+}
+
 function updateOnlineHud(){
   const button=$("#onlineBtn");
   if(!button) return;
@@ -338,17 +348,16 @@ function updateOnlineHud(){
   $("#playerName").textContent=profile.nickname || "ครูนักผจญภัย";
   $("#avatarArt").innerHTML=window.TeacherQuestOnline?.avatarMarkup?.(gameProfile(profile)) || '<div class="pixel-head"></div>';
   button.classList.toggle("online",phase==="online");
-  button.classList.toggle("error",phase==="error");
+  button.classList.toggle("error",phase==="error"||Boolean(onlineState.presence?.error));
   button.classList.toggle("setup",phase==="setup");
   button.title=phase==="online"
-    ? `${label} • นักผจญภัยทั้งหมด ${onlineState.totalPlayers || 1} คน`
+    ? `${label} • นักผจญภัยทั้งหมด ${onlineState.totalPlayers || 1} คน${onlineState.presence?.error?` • ${onlineState.presence.error}`:""}`
     : onlineState.error || (phase==="setup" ? "แต่งตัวได้ทันที • ต้องผูก Firebase เพื่อพบผู้เล่นอื่น" : "กำลังเชื่อม Firebase");
   const adventureStatus=$("#adventureOnlineStatus");
   if(adventureStatus){
-    adventureStatus.classList.toggle("online",phase==="online");
-    adventureStatus.querySelector("span:last-child").textContent=phase==="online"
-      ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน`
-      : phase==="setup" ? "โหมดออฟไลน์" : phase==="signin-required" ? "รอเข้าสู่ระบบ" : phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อม";
+    adventureStatus.classList.toggle("online",phase==="online"&&!onlineState.presence?.error);
+    adventureStatus.classList.toggle("error",Boolean(onlineState.presence?.error));
+    adventureStatus.querySelector("span:last-child").textContent=presenceStatusText();
   }
   const chatInput=$("#adventureChatInput");
   const chatSubmit=$("#adventureChatForm button[type='submit']");
@@ -701,7 +710,7 @@ function renderAdventure(){
           </div>
         </div>
         <div class="adventure-prompt" id="adventurePrompt" role="status" aria-live="polite"></div>
-        <div class="adventure-online-badge ${onlineState.phase==="online" ? "online" : ""}" id="adventureOnlineStatus"><span class="online-dot" aria-hidden="true"></span><span>${onlineState.phase==="online" ? `พื้นที่นี้ ${Math.max(1,(onlineState.zonePlayers?.length || 0)+1)} คน` : "โหมดออฟไลน์"}</span></div>
+        <div class="adventure-online-badge ${onlineState.phase==="online"&&!onlineState.presence?.error ? "online" : ""} ${onlineState.presence?.error ? "error" : ""}" id="adventureOnlineStatus"><span class="online-dot" aria-hidden="true"></span><span>${esc(presenceStatusText())}</span></div>
         <section class="adventure-chat is-collapsed" id="adventureChat" aria-label="แชตผู้เล่นที่อยู่ใกล้กัน">
           <button class="adventure-chat-toggle" type="button" id="adventureChatToggle" aria-expanded="false"><span>▣ คุยใกล้ตัว</span><b id="adventureChatNearby">0 คน</b></button>
           <div class="adventure-chat-body">
@@ -1683,7 +1692,9 @@ function renderProfile(){
   const stats = totalStats();
   const onlineProfile=onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}};
   const cloudLabel=onlineState.cloudSync==="saving" ? "กำลังบันทึก Cloud" : onlineState.cloudSync==="error" ? "Cloud Save ขัดข้อง" : "Cloud Save พร้อม";
-  const onlineStatus=onlineState.phase==="online" ? `เชื่อมต่อแล้ว • ${cloudLabel}` : onlineState.phase==="setup" ? "โหมดทดสอบในเครื่อง" : onlineState.phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อมต่อ";
+  const onlineStatus=onlineState.phase==="online"
+    ? `${onlineState.presence?.error?"บัญชีเชื่อมต่อแล้ว • พื้นที่ออนไลน์ขัดข้อง":"เชื่อมต่อแล้ว"} • ${cloudLabel}`
+    : onlineState.phase==="setup" ? "โหมดทดสอบในเครื่อง" : onlineState.phase==="error" ? "เชื่อมต่อขัดข้อง" : "กำลังเชื่อมต่อ";
   const onlineCard=`<section class="online-profile-card pixel-box">${window.TeacherQuestOnline?.avatarMarkup?.(onlineProfile) || ""}<div><h3>${esc(onlineProfile.nickname)} ${onlineState.isAdmin?'<span class="chip gold">TEST ADMIN</span>':""}</h3><p>${esc(onlineStatus)} • <b id="profileOnlineNow">${onlineState.onlineCount || 0}</b> ออนไลน์ • นักผจญภัยทั้งหมด <b id="profilePlayerTotal">${onlineState.totalPlayers || 0}</b> คน</p></div><button class="btn small mint" id="profileAvatarEdit">แต่งตัว / บัญชี</button></section>`;
   const achievements = [
     {icon:"⚔",name:"ก้าวแรก",desc:"ตอบข้อสอบครั้งแรก",ok:stats.attempted >= 1},
@@ -1714,16 +1725,19 @@ function firebaseDiagnosticMarkup(report){
   const claims=report?.claims || {};
   const steps=Array.isArray(report?.steps) ? report.steps : [];
   const status=report?.ok ? "ผ่านทุกจุด" : "พบจุดที่ถูกปฏิเสธ";
-  return `<section class="firebase-diagnostic-result ${report?.ok ? "pass" : "fail"}"><h3>${report?.ok ? "✓" : "!"} ผลตรวจ Firebase: ${status}</h3><div class="firebase-claim-grid"><span>บัญชียืนยันอีเมล <b>${claims.emailVerified ? "ผ่าน" : "ไม่ผ่าน"}</b></span><span>เข้าใช้ผ่าน <b>${esc(claims.signInProvider || "unknown")}</b></span><span>ผูก Google <b>${claims.googleLinked ? "แล้ว" : "ยัง"}</b></span><span>Rules ที่เว็บต้องการ <b>${esc(claims.rulesRevision || "-")}</b></span></div><ol class="firebase-diagnostic-steps">${steps.map(step=>`<li class="${step.ok ? "pass" : "fail"}"><strong>${step.ok ? "ผ่าน" : "ไม่ผ่าน"} — ${esc(step.label)}</strong>${step.error ? `<small>${esc(step.error)}</small>` : ""}</li>`).join("")}</ol>${report?.ok ? "<p>สิทธิ์พื้นฐานและการสร้าง Raid ผ่านแล้ว ลองสร้างห้องจริงได้ทันที</p>" : "<p>ถ้าผ่านทุกข้อยกเว้น Raid แปลว่า Realtime Database ยังใช้ Rules ชุดเก่า ให้คัดลอกไฟล์ล่าสุดและกด Publish อีกครั้ง</p>"}</section>`;
+  return `<section class="firebase-diagnostic-result ${report?.ok ? "pass" : "fail"}"><h3>${report?.ok ? "✓" : "!"} ผลตรวจ Firebase: ${status}</h3><div class="firebase-claim-grid"><span>บัญชียืนยันอีเมล <b>${claims.emailVerified ? "ผ่าน" : "ไม่ผ่าน"}</b></span><span>เข้าใช้ผ่าน <b>${esc(claims.signInProvider || "unknown")}</b></span><span>ผูก Google <b>${claims.googleLinked ? "แล้ว" : "ยัง"}</b></span><span>Rules ที่เว็บต้องการ <b>${esc(claims.rulesRevision || "-")}</b></span></div><ol class="firebase-diagnostic-steps">${steps.map(step=>`<li class="${step.ok ? "pass" : "fail"}"><strong>${step.ok ? "ผ่าน" : "ไม่ผ่าน"} — ${esc(step.label)}</strong>${step.error ? `<small>${esc(step.error)}</small>` : ""}</li>`).join("")}</ol>${report?.ok ? "<p>โปรไฟล์ Cloud, World Presence, แชต และ Raid ผ่านครบ พร้อมทดสอบผู้เล่นสองบัญชีได้ทันที</p>" : "<p>จุดที่ขึ้นไม่ผ่านคือสิทธิ์ที่ต้องแก้ หากเป็น World Presence ให้ Publish Realtime Database Rules รุ่นที่แสดงด้านบน</p>"}</section>`;
 }
 
 function openOnlineDialog(){
   onlineState=window.TeacherQuestOnline?.getState?.() || onlineState;
   const api=window.TeacherQuestOnline;
   const draft=clone(onlineState.profile || {nickname:"ครูนักผจญภัย",avatar:{}});
-  const statusText=onlineState.phase==="online" ? "เชื่อมต่อ Firebase แล้ว" : onlineState.phase==="connecting" ? "กำลังเชื่อม Firebase" : onlineState.phase==="error" ? "เชื่อมต่อไม่สำเร็จ" : "โหมดออฟไลน์ — แต่งตัวได้ แต่ยังไม่เห็นเพื่อน";
+  const statusText=onlineState.phase==="online"
+    ? onlineState.presence?.error ? "เชื่อมบัญชีแล้ว • พื้นที่ออนไลน์ขัดข้อง" : "เชื่อมต่อ Firebase แล้ว"
+    : onlineState.phase==="connecting" ? "กำลังเชื่อม Firebase" : onlineState.phase==="error" ? "เชื่อมต่อไม่สำเร็จ" : "โหมดออฟไลน์ — แต่งตัวได้ แต่ยังไม่เห็นเพื่อน";
   const setupNotice=!onlineState.configured
     ? `<div class="online-alert"><strong>เหลือผูก Firebase Project ฟรีหนึ่งครั้ง</strong><br>โค้ดระบบออนไลน์พร้อมแล้ว เมื่อใส่ Web App Config ผู้เล่นจะเข้าสู่ระบบด้วย Google และพบกันในแผนที่</div>`
+    : onlineState.presence?.error ? `<div class="online-alert error"><strong>ตัวละครออนไลน์ยังไม่ซิงก์</strong><br>${esc(onlineState.presence.error)}</div>`
     : onlineState.error ? `<div class="online-alert error">${esc(onlineState.error)}</div>` : "";
   const googleConnected=onlineState.user && !onlineState.user.isAnonymous;
   const retryButton=googleConnected && onlineState.phase==="error" ? '<button class="btn small sky" type="button" id="retryOnline">ลองเชื่อมต่อใหม่</button>' : "";
@@ -1784,9 +1798,9 @@ function openOnlineDialog(){
     const button=event.currentTarget;
     const panel=$("#firebaseDiagnostic");
     button.disabled=true;
-    button.textContent="กำลังตรวจ 5 จุด…";
+    button.textContent="กำลังตรวจ 7 จุด…";
     panel.hidden=false;
-    panel.innerHTML='<div class="firebase-diagnostic-loading">กำลังทดสอบโปรไฟล์ Cloud สถานะออนไลน์ แชตใกล้ตัว และการสร้าง Raid ชั่วคราว…</div>';
+    panel.innerHTML='<div class="firebase-diagnostic-loading">กำลังทดสอบโปรไฟล์ Cloud สถานะออนไลน์ World Presence แชตใกล้ตัว และการสร้าง Raid ชั่วคราว…</div>';
     try{
       const report=await api.diagnosePermissions();
       panel.innerHTML=firebaseDiagnosticMarkup(report);

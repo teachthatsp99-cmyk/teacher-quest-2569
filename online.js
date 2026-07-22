@@ -27,7 +27,8 @@ const RAID_CODE_LENGTH = 6;
 const RAID_MAX_PLAYERS = 8;
 const RAID_BOSS_HP = 480;
 const RAID_HEARTBEAT = 25000;
-const RAID_RULES_REVISION = "2026-07-18.6";
+const FIREBASE_RULES_REVISION = "2026-07-22.1";
+const RAID_RULES_REVISION = FIREBASE_RULES_REVISION;
 const RAID_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RAID_EMOTES = Object.freeze(["","hi","go","help","wow","gg"]);
 const RAID_MODULES = Object.freeze(["all","learn","curriculum","measure","research","psych","media","classroom","profession","eduact","child","disability","civil","ksp","voclaw","culture","english","policy","student","admin","quality","current"]);
@@ -50,10 +51,11 @@ const AVATAR_OPTIONS = Object.freeze({
 const DEFAULT_AVATAR = Object.freeze({skin:AVATAR_OPTIONS.skin[1],hair:AVATAR_OPTIONS.hair[0],shirt:AVATAR_OPTIONS.shirt[0],accent:AVATAR_OPTIONS.accent[0],style:"short",accessory:"none"});
 const ZONE_KEYS = Object.freeze({
   "ลานสถาบันครูเควสต์":"plaza",
-  "หมู่บ้านครูนักคิด":"district-0",
-  "นครนวัตกรรม":"district-1",
-  "ป่าคัมภีร์กฎหมาย":"district-2",
-  "ป้อมอนาคตการศึกษา":"district-3",
+  "หมู่บ้านครูนักคิด":"plaza",
+  "นครนวัตกรรม":"plaza",
+  "ป่าคัมภีร์กฎหมาย":"plaza",
+  "ป้อมอนาคตการศึกษา":"plaza",
+  "academy-plaza":"plaza",
   "ป่าฝึกเอาตัวรอด":"training-grove",
   "นครคัมภีร์กฎหมาย":"law-archive",
   "มหานครอนาคตการศึกษา":"future-campus"
@@ -239,6 +241,7 @@ const state = {
   zone:null,
   zonePlayers:[],
   zoneMessages:[],
+  presence:{zone:null,read:"idle",write:"idle",error:"",lastSyncedAt:0},
   voice:{
     supported:Boolean(globalThis.RTCPeerConnection && navigator.mediaDevices?.getUserMedia),
     enabled:false,permission:"idle",talking:false,nearby:0,peerCount:0,peers:[],error:""
@@ -307,6 +310,21 @@ function setPhase(phase,error=""){
   emit();
 }
 
+function setPresenceHealth(part,status,error=""){
+  if(!state.presence || typeof state.presence!=="object") state.presence={zone:currentZone,read:"idle",write:"idle",error:"",lastSyncedAt:0};
+  if(part==="read" || part==="write") state.presence[part]=status;
+  state.presence.zone=currentZone;
+  if(error) state.presence.error=error;
+  else if(state.presence.read!=="error" && state.presence.write!=="error") state.presence.error="";
+  if(status==="ready") state.presence.lastSyncedAt=Date.now();
+  emit();
+}
+
+function resetPresenceHealth(zone=null,status="idle"){
+  state.presence={zone,read:status,write:status,error:"",lastSyncedAt:0};
+  emit();
+}
+
 function avatarMarkup(profile=state.profile,className=""){
   const avatar=normalizeAvatar(profile?.avatar || profile);
   return `<span class="pixel-avatar ${String(className).replace(/[^a-zA-Z0-9 _-]/g,"")}" data-hair-style="${avatar.style}" data-accessory="${avatar.accessory}" style="--avatar-skin:${avatar.skin};--avatar-hair:${avatar.hair};--avatar-shirt:${avatar.shirt};--avatar-accent:${avatar.accent}" aria-hidden="true"><i class="pixel-avatar-hair"></i><i class="pixel-avatar-face"></i><i class="pixel-avatar-body"></i><i class="pixel-avatar-accent"></i><i class="pixel-avatar-feet"></i></span>`;
@@ -315,6 +333,9 @@ function avatarMarkup(profile=state.profile,className=""){
 function friendlyError(error,context=""){
   const rawError=`${String(error?.code || "")} ${String(error?.message || "")}`;
   if(/permission[_\s-]*denied/i.test(rawError)){
+    if(context==="world-read" || context==="world-write"){
+      return `Firebase ปฏิเสธ World Presence (${context==="world-read"?"อ่านผู้เล่นในพื้นที่":"ส่งตำแหน่งตัวละคร"}) กรุณา Publish Realtime Database Rules รุ่น ${FIREBASE_RULES_REVISION}`;
+    }
     if(context==="raid-create"){
       return "Firebase ปฏิเสธการสร้างห้อง Raid โดยเฉพาะ กฎออนไลน์ส่วนอื่นอาจยังทำงานได้ กรุณาใช้ Rules ชุดล่าสุดแล้วกด Publish จากนั้นเปิด ‘บัญชีและตัวละคร’ > ‘ตรวจสิทธิ์ Firebase’";
     }
@@ -442,15 +463,21 @@ function subscribeZone(zone){
   clearZoneSubscription();
   if(!database || !databaseModule || !state.user) return;
   const zoneQuery=databaseModule.query(databaseModule.ref(database,`world/${zone}`),databaseModule.limitToLast(MAX_ZONE_PLAYERS));
+  const onWorldReadError=error=>{
+    remotePlayers.clear();
+    state.zonePlayers=[];
+    setPresenceHealth("read","error",friendlyError(error,"world-read"));
+  };
   const apply=snapshot=>{
     const player=remoteFromSnapshot(snapshot);
     if(player) remotePlayers.set(player.uid,player);
     refreshRemoteState();
   };
   zoneUnsubscribers.push(
-    databaseModule.onChildAdded(zoneQuery,apply),
-    databaseModule.onChildChanged(zoneQuery,apply),
-    databaseModule.onChildRemoved(zoneQuery,snapshot=>{remotePlayers.delete(String(snapshot.key||""));refreshRemoteState();})
+    databaseModule.onValue(zoneQuery,()=>setPresenceHealth("read","ready"),onWorldReadError),
+    databaseModule.onChildAdded(zoneQuery,apply,onWorldReadError),
+    databaseModule.onChildChanged(zoneQuery,apply,onWorldReadError),
+    databaseModule.onChildRemoved(zoneQuery,snapshot=>{remotePlayers.delete(String(snapshot.key||""));refreshRemoteState();},onWorldReadError)
   );
   const chatQuery=databaseModule.query(databaseModule.ref(database,`zoneChat/${zone}`),databaseModule.limitToLast(MAX_ZONE_MESSAGES));
   const applyMessage=snapshot=>{
@@ -485,7 +512,7 @@ async function removePresence(){
   lastPresenceFingerprint="";
   clearZoneSubscription();
   state.zone=null;
-  emit();
+  resetPresenceHealth();
 }
 
 async function switchZone(zone){
@@ -504,6 +531,7 @@ async function switchZone(zone){
   }
   currentZone=zone;
   state.zone=zone;
+  resetPresenceHealth(zone,"connecting");
   currentPresenceRef=databaseModule.ref(database,`world/${zone}/${state.user.uid}`);
   currentChatRef=databaseModule.ref(database,`zoneChat/${zone}/${state.user.uid}`);
   try{await databaseModule.onDisconnect(currentPresenceRef).remove();}catch(error){console.warn("Could not register world disconnect",error);}
@@ -535,10 +563,10 @@ async function flushPresence(force=false){
       voice:Boolean(state.voice.enabled),
       lastSeen:databaseModule.serverTimestamp()
     });
+    setPresenceHealth("write","ready");
     if(state.voice.enabled) startVoiceInbox(world.zone);
   }catch(error){
-    state.error=friendlyError(error);
-    emit();
+    setPresenceHealth("write","error",friendlyError(error,"world-write"));
   }
 }
 
@@ -1118,7 +1146,7 @@ function claimSummary(tokenResult){
     emailVerified:tokenResult?.claims?.email_verified===true,
     signInProvider:String(firebaseClaims.sign_in_provider || "unknown").slice(0,40),
     googleLinked:Array.isArray(googleIdentity) ? googleIdentity.length>0 : Boolean(googleIdentity),
-    rulesRevision:RAID_RULES_REVISION
+    rulesRevision:FIREBASE_RULES_REVISION
   };
 }
 
@@ -1146,6 +1174,20 @@ async function diagnosePermissions(){
     await databaseModule.set(connectionRef,{connectedAt:databaseModule.serverTimestamp()});
     await databaseModule.remove(connectionRef);
   }));
+  const worldQuery=databaseModule.query(databaseModule.ref(database,"world/plaza"),databaseModule.limitToLast(MAX_ZONE_PLAYERS));
+  steps.push(await diagnosticStep("world-read","อ่านผู้เล่นในพื้นที่",()=>databaseModule.get(worldQuery)));
+  const diagnosticWorldZone=currentZone==="future-campus"?"law-archive":"future-campus";
+  const worldRef=databaseModule.ref(database,`world/${diagnosticWorldZone}/${user.uid}`);
+  let worldWritten=false;
+  steps.push(await diagnosticStep("world-write","ส่งและลบตำแหน่งตัวละครทดสอบ",async()=>{
+    await databaseModule.set(worldRef,{
+      nickname:state.profile.nickname,avatar:state.profile.avatar,x:1024,y:812,direction:"down",moving:false,
+      action:"",actionAt:0,voice:false,lastSeen:databaseModule.serverTimestamp()
+    });
+    worldWritten=true;
+    await databaseModule.remove(worldRef);
+    worldWritten=false;
+  }));
   const chatRef=databaseModule.ref(database,`zoneChat/plaza/${user.uid}`);
   steps.push(await diagnosticStep("chat-write","ส่งและลบข้อความใกล้ตัวทดสอบ",async()=>{
     await databaseModule.set(chatRef,{nickname:state.profile.nickname,text:"ทดสอบสิทธิ์แชต",x:1024,y:812,sentAt:databaseModule.serverTimestamp()});
@@ -1162,6 +1204,9 @@ async function diagnosePermissions(){
   }));
   if(raidCreated){
     try{await databaseModule.remove(roomRef);}catch(error){console.warn("Could not clean up diagnostic Raid",error);}
+  }
+  if(worldWritten){
+    try{await databaseModule.remove(worldRef);}catch(error){console.warn("Could not clean up diagnostic World Presence",error);}
   }
   return {ok:steps.every(step=>step.ok),checkedAt:Date.now(),claims:claimSummary(tokenResult),steps};
 }

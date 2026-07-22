@@ -1319,7 +1319,7 @@ function createTeacherQuestAdventure(options={}){
     if(typeof options.onPlayerState!=="function") return;
     const district=locationNameAt(activeMap.id,player.x,player.y);
     const action=Date.now()-player.actionAt<1400?player.action:"";
-    const snapshot={mapId:activeMap.id,zone:activeMap.id===ACADEMY_MAP_ID?district:activeMap.id,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district,action,actionAt:action?player.actionAt:0};
+    const snapshot={mapId:activeMap.id,zone:activeMap.id===ACADEMY_MAP_ID?"plaza":activeMap.id,x:Math.round(player.x),y:Math.round(player.y),direction:player.direction,moving:player.moving,district,action,actionAt:action?player.actionAt:0};
     const fingerprint=`${snapshot.mapId}|${snapshot.zone}|${snapshot.x}|${snapshot.y}|${snapshot.direction}|${Number(snapshot.moving)}|${snapshot.district}|${snapshot.action}|${snapshot.actionAt}`;
     if(force || (fingerprint!==lastPresenceFingerprint && time-lastPresenceTime>=250) || time-lastPresenceTime>=20000){
       lastPresenceTime=time;
