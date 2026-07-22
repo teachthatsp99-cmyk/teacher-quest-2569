@@ -127,7 +127,7 @@ if(data?.questionBankAudit?.timeSensitiveCount !== 48 || data?.questionBankAudit
 if(data?.questionBankAudit?.reviewPolicy?.['time-sensitive']?.days !== 30 || data?.questionBankAudit?.reviewPolicy?.['law-watch']?.days !== 120 || data?.questionBankAudit?.reviewPolicy?.stable?.days !== 365) fail('review cadence is incomplete');
 
 const html = fs.readFileSync('index.html','utf8');
-for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','economy.css','citations.css','citation-index.js','data.js','economy-core.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
+for(const asset of ['favicon.svg','fonts.css','styles.css','polish.css','v4.css','adventure.css','online.css','raid.css','economy.css','citations.css','content-review.css','citation-index.js','data.js','economy-core.js','content-review-core.js','online-config.js','online.js','world-core.js','adventure.js','app.js','v4.js']){
   if(!html.includes(asset)) fail(`index.html does not reference ${asset}`);
   if(!fs.existsSync(asset)) fail(`${asset} does not exist`);
 }
@@ -141,8 +141,9 @@ const app = fs.readFileSync('app.js','utf8');
 const adventure = fs.readFileSync('adventure.js','utf8');
 const online = fs.readFileSync('online.js','utf8');
 const economy = fs.readFileSync('economy-core.js','utf8');
+const contentReview = fs.readFileSync('content-review-core.js','utf8');
 const v4 = fs.readFileSync('v4.js','utf8');
-for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES','renderShop','teacherQuestEconomyDebug','ECONOMY.consume','openAdminTestPanel','adminTestBtn','adventureChatForm','openVoiceConsent','adventureVoiceTalk','updateVoiceHud']){
+for(const feature of ['startBattle','beginExam','renderReview','renderAdventure','modalFocusables','teacherquest:local-state','MODULE_PIXEL_ART','data-battle-action','ROUND_COUNTS','returnView','updateAuthGate','authGateGoogle','renderRaid','submitRaidAnswer','teacherQuestRaidDebug','RAID_EMOTES','renderShop','teacherQuestEconomyDebug','ECONOMY.consume','openAdminTestPanel','adminTestBtn','adventureChatForm','openVoiceConsent','adventureVoiceTalk','updateVoiceHud','renderContentReview','openContentReviewDraft','teacherQuestContentReviewDebug']){
   if(!app.includes(feature)) fail(`app.js is missing ${feature}`);
 }
 for(const feature of ['createTeacherQuestAdventure','requestAnimationFrame','data-move','data-jump','data-emote','teacherQuestAdventureDebug','collides','onStartModule','teacherquest:cloud-progress','setTapTarget','tapTarget','MAP_REGISTRY','treeOpacity','drawWorldLabels','drawMiniAvatar','drawFog','startJump','startAction','switchMap','training-grove','law-archive','future-campus','MODULE_MAPS','active-choice','setZoneMessages','drawChatBubble','revealCurrentMap']){
@@ -152,7 +153,7 @@ for(const feature of ['signInWithPopup','GoogleAuthProvider','visitorClaims','on
   if(!online.includes(feature)) fail(`online.js is missing ${feature}`);
 }
 if(online.includes('signInAnonymously')) fail('online.js must not create anonymous accounts when Google login is required');
-if(!(html.indexOf('citation-index.js') < html.indexOf('data.js') && html.indexOf('data.js') < html.indexOf('economy-core.js') && html.indexOf('economy-core.js') < html.indexOf('online.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('citation/economy/online/world/adventure scripts are not loaded in dependency order');
+if(!(html.indexOf('citation-index.js') < html.indexOf('data.js') && html.indexOf('data.js') < html.indexOf('economy-core.js') && html.indexOf('economy-core.js') < html.indexOf('content-review-core.js') && html.indexOf('content-review-core.js') < html.indexOf('online.js') && html.indexOf('online-config.js') < html.indexOf('online.js') && html.indexOf('online.js') < html.indexOf('world-core.js') && html.indexOf('world-core.js') < html.indexOf('adventure.js') && html.indexOf('adventure.js') < html.indexOf('app.js'))) fail('citation/economy/content-review/online/world/adventure scripts are not loaded in dependency order');
 try{
   const economyContext={window:{}};
   vm.createContext(economyContext);
@@ -167,6 +168,20 @@ try{
   if(!bought?.ok || bought.coins!==82 || used?.economy?.inventory?.fifty!==2) fail('economy purchase/consume flow is invalid');
   if(!emote?.ok || !equipped?.ok || equipped.economy.equipped.emote!=='cheer') fail('economy permanent unlock/equip flow is invalid');
 }catch(error){ fail(`economy-core.js is invalid: ${error.message}`); }
+try{
+  const reviewContext={window:{}};
+  vm.createContext(reviewContext);
+  vm.runInContext(contentReview,reviewContext,{filename:'content-review-core.js'});
+  const core=reviewContext.window.TeacherQuestContentReview;
+  const summary=core?.summarize?.(questions,'2026-07-18');
+  const currentQueue=core?.buildQueue?.(questions,{freshness:'time-sensitive'},'2026-07-18');
+  const draft=core?.validateDraft?.({questionId:351,status:'confirmed-current',sourceUrl:'https://example.go.th/source',reviewedOn:'2026-07-18'});
+  const pack=core?.buildUpdatePack?.({351:draft?.draft},{bankVersion:data.version,evidenceReviewedOn:data.questionBankAudit.evidenceReviewedOn});
+  if(summary?.total!==400 || summary?.timeSensitive!==48 || summary?.evidenceGap!==109) fail('content review summary is invalid');
+  if(currentQueue?.length!==48 || currentQueue[0]?.freshnessClass!=='time-sensitive') fail('content review priority queue is invalid');
+  if(!draft?.ok || pack?.drafts?.length!==1 || pack?.containsPlayerData!==false || pack?.policy!=='human-approval-required') fail('content review draft/export flow is invalid');
+  if(/api[_-]?key|private[_-]?key|client[_-]?secret/i.test(contentReview)) fail('content review client must not contain service secrets');
+}catch(error){ fail(`content-review-core.js is invalid: ${error.message}`); }
 try{
   const worldContext={window:{}};
   vm.createContext(worldContext);

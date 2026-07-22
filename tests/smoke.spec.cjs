@@ -188,6 +188,61 @@ test('source audit separates pinpoint, topic, applied and time-sensitive evidenc
   await expect(page.locator('#completePoolText')).toContainText('20 ข้อ');
 });
 
+test('Admin content center prioritizes review, saves human-approved drafts and exports no player data',async({page})=>{
+  const pageErrors=[];
+  page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto(url,{waitUntil:'networkidle'});
+  await expect(page.locator('#adminReviewNav')).toHaveCount(0);
+  const core=await page.evaluate(()=>{
+    const api=window.TeacherQuestContentReview;
+    const data=window.GAME_DATA;
+    const summary=api.summarize(data.questions,'2026-07-18');
+    const queue=api.buildQueue(data.questions,{freshness:'time-sensitive'},'2026-07-18');
+    const brief=api.buildAIBrief(data.questions.find(question=>question.id===351),{reviewedOn:'2026-07-18'});
+    return {summary,count:queue.length,firstClass:queue[0].freshnessClass,brief};
+  });
+  expect(core.summary.total).toBe(400);
+  expect(core.summary.timeSensitive).toBe(48);
+  expect(core.summary.evidenceGap).toBe(109);
+  expect(core.count).toBe(48);
+  expect(core.firstClass).toBe('time-sensitive');
+  expect(core.brief).toContain('ห้ามแก้หรือเผยแพร่คำถามอัตโนมัติ');
+
+  await page.evaluate(()=>window.teacherQuestOnlineDebug.simulate({
+    configured:true,phase:'online',connected:true,isAdmin:true,onlineCount:1,totalPlayers:1,
+    user:{uid:'admin-content',isAnonymous:false,provider:'google'},profile:{nickname:'ผู้ดูแลเนื้อหา',avatar:{}}
+  }));
+  await expect(page.locator('#adminReviewNav')).toBeVisible();
+  await page.locator('#adminReviewNav').click();
+  await expect(page.getByRole('heading',{name:'ศูนย์อัปเดตเนื้อหา'})).toBeVisible();
+  await expect(page.locator('.admin-review-summary')).toContainText('48');
+  await expect(page.locator('.admin-review-card')).toHaveCount(40);
+  await page.locator('#reviewQueryFilter').fill('351');
+  await page.locator('#reviewQueryFilter').press('Enter');
+  await expect(page.locator('[data-review-question="351"]')).toBeVisible();
+  await page.locator('[data-review-open="351"]').click();
+  await page.locator('#reviewDraftStatus').selectOption('needs-change');
+  await page.locator('#reviewDraftFinding').fill('ต้องตรวจตัวเลขและวันที่จากประกาศล่าสุดก่อนเสนอแก้');
+  await page.locator('#reviewDraftSource').fill('https://www.moe.go.th/official-review');
+  await page.locator('#reviewDraftDate').fill('2026-07-18');
+  await page.locator('#reviewDraftNotes').fill('ร่างนี้ยังไม่แก้คลังจริง');
+  await page.locator('#reviewDraftForm button[type="submit"]').click();
+  await expect(page.locator('[data-review-question="351"]')).toHaveClass(/has-draft/);
+  const saved=await page.evaluate(()=>({
+    drafts:window.teacherQuestContentReviewDebug.getDrafts(),
+    pack:window.teacherQuestContentReviewDebug.buildPack(),
+    storage:localStorage.getItem('teacherQuestContentReview_v1')
+  }));
+  expect(saved.drafts['351'].status).toBe('needs-change');
+  expect(saved.pack.containsPlayerData).toBe(false);
+  expect(saved.pack.policy).toBe('human-approval-required');
+  expect(saved.pack.drafts).toHaveLength(1);
+  expect(saved.storage).not.toContain('admin-content');
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
+  expect(pageErrors).toEqual([]);
+});
+
 test('soundtrack raises the tempo for a boss encounter and exposes the current theme',async({page})=>{
   await page.goto(url,{waitUntil:'networkidle'});
   await page.locator('[data-view="exam"]').click();
@@ -201,6 +256,7 @@ test('soundtrack raises the tempo for a boss encounter and exposes the current t
 });
 
 test('all 21 zones show complete-bank and optional short modes with unique pixel icons',async({page})=>{
+  test.setTimeout(30000);
   await page.goto(url,{waitUntil:'networkidle'});
   const modules = await page.evaluate(()=>window.GAME_DATA.modules.map(module=>{
     const questions=window.GAME_DATA.questions.filter(question=>question.module===module.id);
@@ -367,6 +423,7 @@ test('mobile navigation keeps all ten destinations usable without horizontal ove
 });
 
 test('pixel adventure supports held movement, map, portal interaction and complete quest entry',async({page})=>{
+  test.setTimeout(30000);
   const pageErrors=[];
   page.on('pageerror',error=>pageErrors.push(error.message));
   await page.goto(url,{waitUntil:'networkidle'});
@@ -389,10 +446,9 @@ test('pixel adventure supports held movement, map, portal interaction and comple
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(350);
   await page.keyboard.up('ArrowRight');
-  await page.waitForTimeout(50);
+  await expect.poll(()=>page.evaluate(()=>window.teacherQuestAdventureDebug.getState().moving)).toBe(false);
   const moved=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
   expect(moved.x-initial.x).toBeGreaterThan(35);
-  expect(moved.moving).toBe(false);
 
   expect(await page.evaluate(()=>window.teacherQuestAdventureDebug.teleportToModule('measure'))).toBe(true);
   const beforePortalMove=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
@@ -603,10 +659,11 @@ test('touch d-pad holds movement and adventure position survives navigation',asy
   expect(tapped.x-after.x).toBeGreaterThan(20);
   expect(tapped.tapTarget).not.toBeNull();
   await page.locator('[data-view="home"]').first().click();
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
   await page.locator('[data-view="adventure"]').first().click();
   const restored=await page.evaluate(()=>window.teacherQuestAdventureDebug.getState());
-  expect(Math.abs(restored.x-tapped.x)).toBeLessThan(25);
-  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('teacherQuestAdventure_v1')));
+  expect(Math.abs(restored.x-stored.x)).toBeLessThan(2);
+  expect(Math.abs(restored.y-stored.y)).toBeLessThan(2);
   expect(stored.version).toBe(4);
   expect(stored.mapId).toBe('academy-plaza');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth)).toBe(false);
